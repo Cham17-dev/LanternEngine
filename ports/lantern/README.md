@@ -49,6 +49,8 @@ reports the requirement on unsupported GPUs; Native/Expand use their original 12
 Lantern's point-sampler fallback to an 8-bit guest image is disabled in mode 5 to avoid clipping
 HDR values. This may affect the appearance/cost of some effects at reduced presets. Composite
 pipelines with an HDR companion compile together; other pipeline compilation remains asynchronous.
+PsychoV30 uses a separate `-psychov30-v1` shader/driver cache. Cached composites rebuild their
+HDR companion when loaded, so restarting does not drop the HDR pass.
 
 ## Validation still required
 

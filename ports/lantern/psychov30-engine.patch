@@ -223,6 +223,37 @@ index 0315431..2692bec 100644
                "PushData size is greater than minimum size guaranteed by Vulkan spec");
  
  } // namespace Shader
+diff --git a/gpu/shadps4/video_core/cache_storage.cpp b/gpu/shadps4/video_core/cache_storage.cpp
+index 310bda9..581dc9d 100644
+--- a/gpu/shadps4/video_core/cache_storage.cpp
++++ b/gpu/shadps4/video_core/cache_storage.cpp
+@@ -90,6 +90,8 @@ void DataBase::Open() {
+     }
+ 
+     const auto& game_info = Common::ElfInfo::Instance();
++    const std::string cache_serial = std::string{game_info.GameSerial()} +
++        (EmulatorSettings.GetHdrTonemapMode() == 5 ? "-psychov30-v1" : "");
+ 
+     using namespace Common::FS;
+     if (EmulatorSettings.IsPipelineCacheArchived()) {
+@@ -98,7 +100,7 @@ void DataBase::Open() {
+         mz_zip_zero_struct(&zip_ar);
+ 
+         cache_path = GetUserPath(PathType::CacheDir) /
+-                     std::filesystem::path{game_info.GameSerial()}.replace_extension(".zip");
++                     std::filesystem::path{cache_serial}.replace_extension(".zip");
+ 
+         if (!mz_zip_reader_init_file(&zip_ar, cache_path.string().c_str(),
+                                      MZ_ZIP_FLAG_READ_ALLOW_WRITING) ||
+@@ -120,7 +122,7 @@ void DataBase::Open() {
+             }
+         }
+     } else {
+-        cache_path = GetUserPath(PathType::CacheDir) / game_info.GameSerial();
++        cache_path = GetUserPath(PathType::CacheDir) / cache_serial;
+         if (!std::filesystem::exists(cache_path)) {
+             std::filesystem::create_directories(cache_path);
+         }
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag
 new file mode 100644
 index 0000000..581353f
@@ -5119,7 +5150,7 @@ index 571167a..ded4e3b 100644
      return s.hdr_output.load(std::memory_order_relaxed) != BbSettings::HdrOutputOff &&
             s.hdr_mode.load(std::memory_order_relaxed) == BbSettings::HdrModeNative;
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index d8713f2..a06a639 100644
+index d8713f2..4ba6241 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 @@ -11,6 +11,8 @@
@@ -5131,7 +5162,17 @@ index d8713f2..a06a639 100644
  #include "common/elf_info.h"
  #include "common/io_file.h"
  #include "common/path_util.h"
-@@ -389,6 +391,9 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
+@@ -56,7 +58,8 @@ DriverCache::Identity DriverIdentity(const Instance& instance) {
+ 
+ std::filesystem::path DriverCachePath() {
+     return Common::FS::GetUserPath(Common::FS::PathType::CacheDir) /
+-           (std::string{Common::ElfInfo::Instance().GameSerial()} + ".vkcache");
++           (std::string{Common::ElfInfo::Instance().GameSerial()} +
++            (HdrChannel::Native16() ? "-psychov30-v1" : "") + ".vkcache");
+ }
+ } // namespace
+ 
+@@ -389,6 +392,9 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
                               AmdGpu::Liverpool* liverpool_, u32 sparse_page_shift)
      : instance{instance_}, scheduler{scheduler_}, liverpool{liverpool_},
        desc_heap{instance, scheduler.GetWorkSemaphore(), DescriptorHeapSizes} {
@@ -5141,7 +5182,7 @@ index d8713f2..a06a639 100644
      sel.regs = &liverpool->regs;
      const auto& vk12_props = instance.GetVk12Properties();
      profile = Shader::Profile{
-@@ -640,6 +645,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
+@@ -640,6 +646,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
          color_buffer.data_format = col_buf.GetDataFmt();
          color_buffer.num_format = col_buf.GetNumberFmt();
          color_buffer.num_conversion = col_buf.GetNumberConversion();
@@ -5158,7 +5199,7 @@ index d8713f2..a06a639 100644
          color_buffer.export_format = regs.color_export_format.GetFormat(cb);
          color_buffer.swizzle = col_buf.Swizzle();
  
-@@ -909,6 +924,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
+@@ -909,6 +925,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
      auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, runtime_info, ir_program, binding);
      DumpShader(spv, info.pgm_hash, info.hw_stage, perm_idx, "spv");
  
@@ -5189,6 +5230,29 @@ index 6bba722..b73e00d 100644
      });
  
      // Bind descriptor set.
+diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_serialization.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
+index 21188ff..9b444e8 100644
+--- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
++++ b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
+@@ -12,6 +12,7 @@
+ #include "video_core/cache_storage.h"
+ #include "video_core/renderer_vulkan/vk_instance.h"
+ #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
++#include "video_core/renderer_vulkan/vk_hdr_channel.h"
+ #include "video_core/renderer_vulkan/vk_shader_util.h"
+ 
+ namespace Serialization {
+@@ -341,6 +342,10 @@ bool PipelineCache::LoadPipelineStage(Serialization::Archive& ar, size_t stage,
+     }
+ 
+     auto it = program_cache.find(program->info.pgm_hash);
++    // Cached composites need the same companion preparation as freshly translated shaders.
++    if (HdrChannel::Native16() && program->info.sw_stage == Shader::SwStage::Fragment) {
++        HdrChannel::NoteGameShader(program->info.pgm_hash, spv);
++    }
+     Program* target = it == program_cache.end() ? program.get() : it->second.get();
+     vk::ShaderModule module;
+     if (perm_idx < target->modules.size() && target->modules[perm_idx].module) {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
 index 9529089..33bff9b 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
@@ -5898,7 +5962,7 @@ index e5a656b..37e10b8 100644
      mutable std::unordered_map<vk::Format, vk::FormatFeatureFlags> format_features;
      mutable std::array<vk::FormatFeatureFlags, 256> format_table{};
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
-index fc2e3c4..aae5621 100644
+index fc2e3c4..33a84af 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
 @@ -1,3 +1,5 @@
@@ -6169,7 +6233,32 @@ index fc2e3c4..aae5621 100644
      // Diagnostic capture of the actual completed display buffer, including native UI.
      // BB_PRESENT_DUMP_COUNT=N: the trigger dumps N consecutive frames (temporal stability).
      static const char* dump = std::getenv("BB_PRESENT_DUMP_TRIGGER");
-@@ -2419,3 +2479,556 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image
+@@ -2315,9 +2375,10 @@ bool TemporalUpscaler::DisplayOverride(VAddr address, Display& display) {
+         scheduler.EndRendering();
+         const bool bgra = display.format == vk::Format::eB8G8R8A8Unorm ||
+                           display.format == vk::Format::eB8G8R8A8Srgb;
++        const bool fp16 = display.format == HdrChannel::Native16Format;
+         DumpImages(instance, scheduler, scheduler.CommandBuffer(), dump_index++,
+-                   {{display.image, display.width, display.height, 4, "present",
+-                     bgra ? "bgra" : "rgba"}});
++                   {{display.image, display.width, display.height, fp16 ? 8u : 4u, "present",
++                     fp16 ? "rgba16f" : bgra ? "bgra" : "rgba"}});
+     }
+     return true;
+ }
+@@ -2343,8 +2404,10 @@ bool TemporalUpscaler::PresentDumpDue() {
+ void TemporalUpscaler::DumpPresented(vk::Image image, u32 width, u32 height, vk::Format format) {
+     scheduler.EndRendering();
+     const bool bgra = format == vk::Format::eB8G8R8A8Unorm || format == vk::Format::eB8G8R8A8Srgb;
++    const bool fp16 = format == HdrChannel::Native16Format;
+     DumpImages(instance, scheduler, scheduler.CommandBuffer(), present_dump_index++,
+-               {{image, width, height, 4, "present", bgra ? "bgra" : "rgba"}});
++               {{image, width, height, fp16 ? 8u : 4u, "present",
++                 fp16 ? "rgba16f" : bgra ? "bgra" : "rgba"}});
+ }
+ 
+ } // namespace Vulkan
+@@ -2419,3 +2482,556 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image
  }
  
  } // namespace Vulkan
