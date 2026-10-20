@@ -7199,10 +7199,10 @@ index 435d5d5..f127dde 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 6a75445..2e523ad 100644
+index 6a75445..cfb8e8a 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
-@@ -272,6 +272,286 @@ void CheatStats() {
+@@ -272,6 +272,284 @@ void CheatStats() {
      CheatUnavailable(BbEngine::Cheats::Echoes);
  }
  
@@ -7410,10 +7410,8 @@ index 6a75445..2e523ad 100644
 +    SliderReset("Game Brightness", s.hdr_paper_white, 80.0f, 500.0f, BbSettings::DefaultGameNits(),
 +                "%.0f nits",
 +                BbSettings::MenuText(
-+                    "Brightness of the game's white: by default the HDR reference white for your "
-+                    "display's peak (203 nits at 1000).",
-+                    "Яркость белого в игре: по умолчанию опорный белый HDR для пика вашего "
-+                    "дисплея (203 нит при 1000)."));
++                    "Brightness of the game's white: 203 nits by default (the HDR reference white).",
++                    "Яркость белого в игре: 203 нит по умолчанию (опорный белый HDR)."));
 +    SliderReset("UI Brightness", s.hdr_ui_brightness, BbSettings::HdrUiBrightnessMin,
 +                BbSettings::HdrUiBrightnessMax, 1.0f, "%.2f x",
 +                BbSettings::MenuText("Brightness of the HUD and menus, times Game Brightness.",
@@ -7489,7 +7487,7 @@ index 6a75445..2e523ad 100644
  // HDR output (bbport.ini hdr*): on/off on restart; paper white, peak and boost live.
  void HdrSection() {
      auto& s = BbSettings::Get();
-@@ -306,11 +586,26 @@ void HdrSection() {
+@@ -306,11 +584,26 @@ void HdrSection() {
      const char* modes[BbSettings::HdrModeCount] = {
          BbSettings::MenuText("Native (from the game's HDR scene)", "Нативный (из HDR-сцены игры)"),
          BbSettings::MenuText("Expand (from the SDR picture)", "Расширение (из SDR-картинки)"),
@@ -7516,7 +7514,7 @@ index 6a75445..2e523ad 100644
      Hint(BbSettings::MenuText(
          "Native: the brightness of lamps, fire, the moon and other highlights comes from the "
          "game's own HDR scene, before its tonemap clipped it to SDR white. Midtones, colours and "
-@@ -372,13 +667,20 @@ void PictureSection() {
+@@ -372,13 +665,20 @@ void PictureSection() {
      // A moved setting turns Picture tuning on: it gates them all.
      const bool vignette = s.graphics_vignette;
      // The useful range on the slider; Ctrl+click types any value (bbport_settings.cpp keeps it
@@ -7542,7 +7540,7 @@ index 6a75445..2e523ad 100644
      Checkbox(BbSettings::MenuText("Vignette", "Виньетка"), s.graphics_vignette);
      moved |= vignette != s.graphics_vignette;
      moved |= Slider(BbSettings::MenuText("Ambient occlusion strength", "Сила затенения (AO)"), s.graphics_ao_strength,
-@@ -399,6 +701,16 @@ void PictureSection() {
+@@ -399,6 +699,16 @@ void PictureSection() {
          Store(s.graphics_shadow_scale, 1.0f, true);
      }
      ImGui::EndDisabled();
@@ -7559,7 +7557,7 @@ index 6a75445..2e523ad 100644
      Hint(BbSettings::MenuText(
          "Changes apply live, Picture tuning too, to the game's own colour, fog and lighting of each area "
          "(the HUD and menus keep theirs). Moving one turns Picture tuning on; off: the game's own picture. 1.00 and Hue 0 are the game's. Fog 0 clears the haze over distant streets. The "
-@@ -739,6 +1051,7 @@ void Menu() {
+@@ -739,6 +1049,7 @@ void Menu() {
      bool restart =
          s.object_motion != s.startup_object_motion || s.model_lod != s.startup_model_lod ||
          s.live_resolution != s.startup_live_resolution || s.hdr != s.startup_hdr ||
@@ -7567,7 +7565,7 @@ index 6a75445..2e523ad 100644
          BbSettings::ResolutionNeedsRestart();
      for (int e = 0; e < BbSettings::EffectCount; ++e) {
          restart |= s.effects[e] != s.startup_effects[e];
-@@ -1045,6 +1358,11 @@ bool HandleEvent(const SDL_Event& event) {
+@@ -1045,6 +1356,11 @@ bool HandleEvent(const SDL_Event& event) {
      case SDL_EVENT_KEY_DOWN:
      case SDL_EVENT_KEY_UP: {
          const bool down = event.type == SDL_EVENT_KEY_DOWN;
@@ -7580,7 +7578,7 @@ index 6a75445..2e523ad 100644
              (event.key.key == SDLK_INSERT || (is_open && event.key.key == SDLK_ESCAPE))) {
              SetOpen(event.key.key == SDLK_INSERT ? !is_open : false);
 diff --git a/gpu/shim/bbport_settings.cpp b/gpu/shim/bbport_settings.cpp
-index 8f47700..f823cfb 100644
+index 8f47700..2ff4097 100644
 --- a/gpu/shim/bbport_settings.cpp
 +++ b/gpu/shim/bbport_settings.cpp
 @@ -10,11 +10,14 @@
@@ -7607,18 +7605,15 @@ index 8f47700..f823cfb 100644
 +std::mutex hdr_slot_mutex;
 +std::array<std::string, HdrPresetCount - 1> hdr_slots;
 +bool loaded_hdr_preset = false;
-+// The display's peak (SetDisplayPeak), and whether bbport.ini set the peak and the game's white.
++// The display's peak (SetDisplayPeak), and whether bbport.ini set the peak.
 +std::atomic<float> display_peak{0.0f};
-+bool loaded_peak = false, loaded_paper_white = false;
++bool loaded_peak = false;
 +
  const char* Path() {
      const char* env = std::getenv("BB_CONFIG");
      return env && env[0] ? env : "bbport.ini";
-@@ -222,8 +234,19 @@ void Set(Values& v, const std::string& key, const std::string& value) {
-     } else if (key == "hdr_paper_white") {
-         v.hdr_paper_white = Clamp(std::isfinite(f) ? f : HdrPaperWhiteDefault, HdrPaperWhiteMin,
+@@ -224,6 +236,16 @@ void Set(Values& v, const std::string& key, const std::string& value) {
                                    HdrPaperWhiteMax);
-+        loaded_paper_white = loaded_paper_white || !value.empty();
      } else if (key == "hdr_peak") {
          v.hdr_peak = Clamp(std::isfinite(f) ? f : HdrPeakDefault, HdrPeakMin, HdrPeakMax);
 +        loaded_peak = loaded_peak || !value.empty();
@@ -7634,7 +7629,7 @@ index 8f47700..f823cfb 100644
      } else if (key == "hdr_boost") {
          v.hdr_boost = Clamp(std::isfinite(f) ? f : HdrBoostDefault, 0.0f, 1.0f);
      } else if (key == "hdr_ui_brightness") {
-@@ -242,6 +265,34 @@ void Set(Values& v, const std::string& key, const std::string& value) {
+@@ -242,6 +264,34 @@ void Set(Values& v, const std::string& key, const std::string& value) {
                          value.c_str());
          }
          v.hdr_mode = mode < 0 ? HdrModeNative : mode;
@@ -7669,7 +7664,7 @@ index 8f47700..f823cfb 100644
      } else if (key == "live_resolution") {
          v.live_resolution = value == "auto" ? -1 : std::clamp(i, 0, 1);
      } else if (key == "cheat_vials") {
-@@ -301,8 +352,131 @@ MenuLanguage LanguageOfLocale(const char* lang) {
+@@ -301,8 +351,123 @@ MenuLanguage LanguageOfLocale(const char* lang) {
      return MenuLanguage::English;
  }
  
@@ -7774,13 +7769,8 @@ index 8f47700..f823cfb 100644
 +}
 +
 +float DefaultGameNits() {
-+    // RenoDX (utils/swapchain.hpp ComputeReferenceWhite): BT.2100 HLG reference white, 75 % HLG
-+    // through the HLG OOTF for this peak (203 nits at 1000), here at most 203 as RenoDX's default.
-+    const double peak = DefaultPeakNits();
-+    const double hlg_at_75_percent = 0.26496256042100718;
-+    const double gamma = 1.2 + 0.42 * std::log10(peak / 1000.0);
-+    const double white = peak * std::pow(hlg_at_75_percent, gamma - 1.0) * hlg_at_75_percent;
-+    return std::min(std::clamp(std::round(float(white)), 100.0f, 300.0f), 203.0f);
++    // BT.2408's HDR reference white, whatever the display's peak.
++    return HdrPaperWhiteDefault;
 +}
 +
 +void SetDisplayPeak(float nits) {
@@ -7790,9 +7780,6 @@ index 8f47700..f823cfb 100644
 +    if (!loaded_peak) {
 +        v.hdr_peak = DefaultPeakNits();
 +    }
-+    if (!loaded_paper_white) {
-+        v.hdr_paper_white = DefaultGameNits();
-+    }
 +    std::printf("HDR: the display reports a peak of %.0f nits (Windows); defaults: peak %.0f, game "
 +                "brightness %.0f nits\n",
 +                display_peak.load(), DefaultPeakNits(), DefaultGameNits());
@@ -7801,12 +7788,12 @@ index 8f47700..f823cfb 100644
  // The display's size for output_res = auto: BB_DISPLAY_SIZE ("WxH", from run_windows.py), even
  // (the game has half-resolution buffers); 1920x1080 without it.
  static std::pair<int, int> DisplaySize() {
-@@ -360,8 +534,14 @@ void Load() {
+@@ -360,8 +525,14 @@ void Load() {
          }
          v.menu_language = LanguageOfLocale(lang);
      }
 +    loaded_hdr_preset = false;
-+    loaded_peak = loaded_paper_white = false;
++    loaded_peak = false;
 +    {
 +        std::scoped_lock lock{hdr_slot_mutex};
 +        hdr_slots = {};
@@ -7817,7 +7804,7 @@ index 8f47700..f823cfb 100644
          while (std::fgets(line, sizeof(line), file)) {
              std::string text{line};
              text.erase(text.find_last_not_of(" \t\r\n") + 1);
-@@ -374,6 +554,14 @@ void Load() {
+@@ -374,6 +545,14 @@ void Load() {
          std::fclose(file);
          std::printf("Settings: %s\n", Path());
      }
@@ -7832,7 +7819,7 @@ index 8f47700..f823cfb 100644
      // Environment overrides (scripts, A/B tests).
      if (const char* env = std::getenv("BB_UPSCALER")) {
          v.upscaler = UpscalerOff;
-@@ -405,6 +593,7 @@ void Load() {
+@@ -405,6 +584,7 @@ void Load() {
      v.startup_output_res = v.output_res;
      v.startup_live_resolution = v.live_resolution;
      v.startup_hdr = v.hdr;
@@ -7840,7 +7827,7 @@ index 8f47700..f823cfb 100644
  }
  
  void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss) {
-@@ -496,7 +685,35 @@ void Save() {
+@@ -496,7 +676,35 @@ void Save() {
      put("hdr_boost", fixed(v.hdr_boost, 2));
      put("hdr_ui_brightness", fixed(v.hdr_ui_brightness, 2));
      put("hdr_ui_color", fixed(v.hdr_ui_color, 2));
@@ -7876,7 +7863,7 @@ index 8f47700..f823cfb 100644
      put("graphics_controls",flag(v.graphics_controls));
      put("graphics_vignette",flag(v.graphics_vignette));
      put("graphics_ao_strength",fixed(v.graphics_ao_strength,2));
-@@ -547,7 +764,7 @@ void Save() {
+@@ -547,7 +755,7 @@ void Save() {
      bool had_lines = false;
      std::vector<bool> written(keys.size());
      if (FILE* file = std::fopen(Path(), "r")) {
@@ -7886,7 +7873,7 @@ index 8f47700..f823cfb 100644
              had_lines = true;
              std::string text{line};
 diff --git a/gpu/shim/bbport_settings.h b/gpu/shim/bbport_settings.h
-index 14e01ef..cdf3f43 100644
+index 14e01ef..a192b8f 100644
 --- a/gpu/shim/bbport_settings.h
 +++ b/gpu/shim/bbport_settings.h
 @@ -8,6 +8,15 @@
@@ -7997,7 +7984,7 @@ index 14e01ef..cdf3f43 100644
 +float DisplayPeak();
 +/// Peak Brightness default: the display's peak, else 1000 nits.
 +float DefaultPeakNits();
-+/// Game Brightness default: RenoDX's reference white for that peak (BT.2100 HLG, at most 203).
++/// Game Brightness default: 203 nits (BT.2408's reference white), for every display.
 +float DefaultGameNits();
 +
  /// Render resolution divisor of a preset (1.0 native, 1.5 quality, ...).
@@ -8156,7 +8143,7 @@ index 7091ebf..205ccd0 100644
                     '--patches', out / 'patches.bin', '--app0', merged,
                     '--user', os.environ.get('BB_USER_DIR', data / 'user'),
 diff --git a/tests/test_settings.cpp b/tests/test_settings.cpp
-index 8501ba0..3b05c13 100644
+index 8501ba0..dcc9dfe 100644
 --- a/tests/test_settings.cpp
 +++ b/tests/test_settings.cpp
 @@ -154,7 +154,7 @@ int main() {
@@ -8168,7 +8155,7 @@ index 8501ba0..3b05c13 100644
      assert(Read(path).find("hdr_peak=1000\n") != std::string::npos);
      assert(Read(path).find("hdr_boost=0.25\n") != std::string::npos);
      // hdr_mode: native (the default: highlights from the game's HDR scene) or expand (from the
-@@ -207,6 +207,88 @@ int main() {
+@@ -207,6 +207,93 @@ int main() {
  #endif
      BbSettings::Load();
      assert(s.hdr_mode == BbSettings::HdrModeNative);
@@ -8210,6 +8197,11 @@ index 8501ba0..3b05c13 100644
 +    assert(s.hdr_saturation == 65.0f && s.hdr_exposure == 1.0f);
 +    BbSettings::ResetHdr();
 +    assert(s.hdr_saturation == 50.0f && s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoPure);
++    // Game Brightness: 203 whatever the display's peak; the peak follows the display's.
++    BbSettings::SetDisplayPeak(600.0f);
++    BbSettings::ResetHdr();
++    assert(s.hdr_paper_white == 203.0f && s.hdr_peak == 600.0f);
++    BbSettings::SetDisplayPeak(0.0f);
 +    BbSettings::SelectHdrPreset(0); // Off keeps the values; the renderer shows the game's look
 +    assert(s.hdr_preset == 0 && s.hdr_saturation == 50.0f);
 +    // PsychoV30's target gamut: BT.2020 by default, saved by name, kept per preset.

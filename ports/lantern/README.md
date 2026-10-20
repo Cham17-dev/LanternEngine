@@ -37,7 +37,7 @@ tools last for the session only.
 | Gamut Compression *(Intermediate)* | 0 to 1 (1) | How far colors outside the target gamut are brought into it. |
 | Compression *(Intermediate)* | 0 to 2, 0 = auto (1) | How fast lights reach the peak: higher is brighter and harder, lower softer. |
 | Peak Brightness | 400 to 4000 nits (your display's) | The peak Windows reports for the display, 1000 if it reports none. |
-| Game Brightness | 80 to 500 nits (203 at 1000) | The brightness of the game's white. |
+| Game Brightness | 80 to 500 nits (203) | The brightness of the game's white (the launcher's Paper white). |
 | UI Brightness | ratio (1.00 x) | HUD and menus, times Game Brightness. |
 | **Color Grading** | | |
 | Exposure, Highlights, Shadows, Contrast, Saturation | (1.00, 50, 50, 50, 50) | PsychoV30's own grading, as in RenoDX's mods. |
@@ -49,7 +49,8 @@ tools last for the session only.
 | Debug *(Advanced)* | | Compare (F9: HDR / SDR / split), 16-bit chain probes, chain log. |
 
 The launcher's Display page shows Tone mapper, Target gamut and Peak brightness, with the same
-defaults; its Peak brightness reads the peak of the monitor chosen there and has a reset button.
+defaults; its Peak brightness and Paper white follow the monitor chosen there and each have a
+reset button.
 In PsychoV30 mode, the game's own Brightness, Contrast, Saturation and Bloom (Picture section, and
 the game's PC Colour menu) are left as the game draws them: the HDR grading above replaces them.
 Hue, Fog, Vignette, ambient occlusion and shadow distance stay. Gamma 2.2 is always on.

@@ -99,12 +99,17 @@ namespace BloodborneLauncher.Views
             ComboRow(SymbolRegular.Lightbulb24, "HDR source",
                 "PsychoV30: HDR tone mapping with dark tones matched to the game's SDR rendering. Native: highlights derived from the game's HDR scene. Expanded: bright SDR pixels expanded towards the peak. Entering or leaving PsychoV30 requires restarting the game.",
                 Choices.HdrMode, () => Ini.Get("hdr_mode", "native"), v => Ini.Set("hdr_mode", v), changed: RefreshHdrRows);
-            SliderRow(SymbolRegular.BrightnessHigh24, "Paper white", "How bright the game's white is, in nits. Default: 203. Range: 10–500",
-                10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", "203"), 203),
+            // Defaults, as the engine's: paper white 203 (BT.2408's reference white), the peak
+            // Windows reports for the chosen display (in HDR).
+            const double DefaultPaperWhite = 203;
+            double DetectedPeak() => DisplayPeak.Default(S.Str("display_device"));
+            var paperWhite = SliderRow(SymbolRegular.BrightnessHigh24, "Paper white", "How bright the game's white is, in nits. Default: 203. Range: 10–500",
+                10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", ""), DefaultPaperWhite),
                 v => Ini.Set("hdr_paper_white", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
                 format: "0' nits'", valueWidth: 82, inputUnit: "nits");
-            // Default: the peak Windows reports for the chosen display (in HDR), as the engine's.
-            double DetectedPeak() => DisplayPeak.Default(S.Str("display_device"));
+            if (paperWhite.Parent is Panel paperWhiteRow)
+                paperWhiteRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24, "Reset to 203 nits",
+                    (_, _) => paperWhite.Value = DefaultPaperWhite));
             var detected = DisplayPeak.Nits(S.Str("display_device"));
             var peakHint = detected > 0
                 ? $"Your display's peak brightness, in nits. Windows reports {detected:0} nits for it: the default. Range: 10–4000"
