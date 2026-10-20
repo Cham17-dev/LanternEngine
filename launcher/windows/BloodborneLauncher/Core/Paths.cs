@@ -12,7 +12,7 @@ namespace BloodborneLauncher.Core
     public static class Paths
     {
         public static readonly string ConfigDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "bbport-launcher");
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "bbport-launcher-psychov30");
 
         public static readonly string ConfigFile = Path.Combine(ConfigDir, "settings.json");
 

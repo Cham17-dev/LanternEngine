@@ -93,7 +93,7 @@ jobs:
           BB_JOBS: '2'
         run: |
           export CFLAGS=-Wno-error=unused-but-set-global
-          export CXXFLAGS="-include $PWD/gpu/win_compat.h"
+          export CXXFLAGS="-include $(cygpath -m "$PWD/gpu/win_compat.h")"
           bash build.sh
       - name: Apply separate PsychoV30 patches
         run: python ports/lantern/prepare.py port engine-src upstream-lantern
@@ -106,7 +106,7 @@ jobs:
           BB_JOBS: '2'
         run: |
           export CFLAGS=-Wno-error=unused-but-set-global
-          export CXXFLAGS="-include $PWD/gpu/win_compat.h"
+          export CXXFLAGS="-include $(cygpath -m "$PWD/gpu/win_compat.h")"
           bash build.sh
           ninja -C out/gpu -j2 settings-test
           out/gpu/settings-test.exe
@@ -115,7 +115,7 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Build launcher with PsychoV30 selector
         run: >-
-          dotnet publish upstream-lantern/launcher/windows/BloodborneLauncher/BloodborneLauncher.csproj
+          dotnet publish launcher/windows/BloodborneLauncher/BloodborneLauncher.csproj
           -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
           -o launcher-port

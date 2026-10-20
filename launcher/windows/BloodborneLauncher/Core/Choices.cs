@@ -163,7 +163,8 @@
 
         public static readonly Choice[] HdrMode =
         {
-            new("Native (default)", "native"), new("Expanded", "expand"),
+            new("Native", "native"), new("Expanded", "expand"),
+            new("PsychoV30 (16-bit, restart)", "psychov30"),
         };
 
         public static readonly Choice[] HdrBoost =

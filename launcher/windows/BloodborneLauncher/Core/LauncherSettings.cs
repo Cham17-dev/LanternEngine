@@ -46,7 +46,7 @@ namespace BloodborneLauncher.Core
             ["custom_command"] = "",
             ["custom_args"] = "",
             ["switch_to_output"] = true,
-            ["check_updates"] = true,
+            ["check_updates"] = false,
             ["save_backups"] = true,
             ["safe_mode_next"] = false,
             ["memory_check_off"] = false,
