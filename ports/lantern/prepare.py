@@ -16,7 +16,7 @@ def apply(root, patch):
     # Lantern's published patch contains CRLF source. Normalize only files touched by our
     # patch; matching and output are then identical on Windows and Linux.
     if args.stage == 'port':
-        for line in patch.read_text().splitlines():
+        for line in patch.read_text(encoding='utf-8').splitlines():
             if line.startswith('+++ b/'):
                 path = root / line[6:]
                 if path.is_file():
