@@ -6988,10 +6988,10 @@ index 435d5d5..f127dde 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 6a75445..7ca2abf 100644
+index 6a75445..e06a0fe 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
-@@ -272,6 +272,239 @@ void CheatStats() {
+@@ -272,6 +272,242 @@ void CheatStats() {
      CheatUnavailable(BbEngine::Cheats::Echoes);
  }
  
@@ -7069,16 +7069,19 @@ index 6a75445..7ca2abf 100644
 +    return chosen;
 +}
 +
-+// A choice shown as a slider with the choice's name, as RenoDX's Preset and Settings Mode, with
-+// the reset button (back to `reset`). True when it changed `value`.
-+bool NamedSlider(const char* label, int& value, const char* const* names, int count, int reset) {
++// A choice shown as a slider with the choice's name, as RenoDX's Preset and Settings Mode; with
++// `reset` (an index), the reset button back to it. True when it changed `value`.
++bool NamedSlider(const char* label, int& value, const char* const* names, int count,
++                 int reset = -1) {
 +    int v = std::clamp(value, 0, count - 1);
 +    ImGui::PushID(label);
 +    bool changed = ImGui::SliderInt(label, &v, 0, count - 1, names[v], ImGuiSliderFlags_AlwaysClamp);
-+    ImGui::SameLine();
-+    if (ResetIcon(value == reset)) {
-+        v = reset;
-+        changed = true;
++    if (reset >= 0) {
++        ImGui::SameLine();
++        if (ResetIcon(value == reset)) {
++            v = reset;
++            changed = true;
++        }
 +    }
 +    ImGui::PopID();
 +    changed = changed && v != value;
@@ -7107,7 +7110,7 @@ index 6a75445..7ca2abf 100644
 +    static_assert(std::size(presets) == BbSettings::HdrPresetCount);
 +    int preset = std::clamp(s.hdr_preset.load(), 0, BbSettings::HdrPresetCount - 1);
 +    // "##hdr": the upscaler's Preset has the same label (same ImGui ID otherwise).
-+    if (NamedSlider("Preset##hdr", preset, presets, BbSettings::HdrPresetCount, 1)) {
++    if (NamedSlider("Preset##hdr", preset, presets, BbSettings::HdrPresetCount)) {
 +        BbSettings::SelectHdrPreset(preset);
 +        dirty = true;
 +    }
@@ -7231,7 +7234,7 @@ index 6a75445..7ca2abf 100644
  // HDR output (bbport.ini hdr*): on/off on restart; paper white, peak and boost live.
  void HdrSection() {
      auto& s = BbSettings::Get();
-@@ -306,11 +539,26 @@ void HdrSection() {
+@@ -306,11 +542,26 @@ void HdrSection() {
      const char* modes[BbSettings::HdrModeCount] = {
          BbSettings::MenuText("Native (from the game's HDR scene)", "Нативный (из HDR-сцены игры)"),
          BbSettings::MenuText("Expand (from the SDR picture)", "Расширение (из SDR-картинки)"),
@@ -7258,7 +7261,7 @@ index 6a75445..7ca2abf 100644
      Hint(BbSettings::MenuText(
          "Native: the brightness of lamps, fire, the moon and other highlights comes from the "
          "game's own HDR scene, before its tonemap clipped it to SDR white. Midtones, colours and "
-@@ -372,13 +620,20 @@ void PictureSection() {
+@@ -372,13 +623,20 @@ void PictureSection() {
      // A moved setting turns Picture tuning on: it gates them all.
      const bool vignette = s.graphics_vignette;
      // The useful range on the slider; Ctrl+click types any value (bbport_settings.cpp keeps it
@@ -7284,7 +7287,7 @@ index 6a75445..7ca2abf 100644
      Checkbox(BbSettings::MenuText("Vignette", "Виньетка"), s.graphics_vignette);
      moved |= vignette != s.graphics_vignette;
      moved |= Slider(BbSettings::MenuText("Ambient occlusion strength", "Сила затенения (AO)"), s.graphics_ao_strength,
-@@ -399,6 +654,16 @@ void PictureSection() {
+@@ -399,6 +657,16 @@ void PictureSection() {
          Store(s.graphics_shadow_scale, 1.0f, true);
      }
      ImGui::EndDisabled();
@@ -7301,7 +7304,7 @@ index 6a75445..7ca2abf 100644
      Hint(BbSettings::MenuText(
          "Changes apply live, Picture tuning too, to the game's own colour, fog and lighting of each area "
          "(the HUD and menus keep theirs). Moving one turns Picture tuning on; off: the game's own picture. 1.00 and Hue 0 are the game's. Fog 0 clears the haze over distant streets. The "
-@@ -739,6 +1004,7 @@ void Menu() {
+@@ -739,6 +1007,7 @@ void Menu() {
      bool restart =
          s.object_motion != s.startup_object_motion || s.model_lod != s.startup_model_lod ||
          s.live_resolution != s.startup_live_resolution || s.hdr != s.startup_hdr ||
@@ -7309,7 +7312,7 @@ index 6a75445..7ca2abf 100644
          BbSettings::ResolutionNeedsRestart();
      for (int e = 0; e < BbSettings::EffectCount; ++e) {
          restart |= s.effects[e] != s.startup_effects[e];
-@@ -1045,6 +1311,11 @@ bool HandleEvent(const SDL_Event& event) {
+@@ -1045,6 +1314,11 @@ bool HandleEvent(const SDL_Event& event) {
      case SDL_EVENT_KEY_DOWN:
      case SDL_EVENT_KEY_UP: {
          const bool down = event.type == SDL_EVENT_KEY_DOWN;
