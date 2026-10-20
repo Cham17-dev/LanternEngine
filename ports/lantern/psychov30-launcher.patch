@@ -1,5 +1,5 @@
 diff --git a/launcher/windows/BloodborneLauncher/Core/Choices.cs b/launcher/windows/BloodborneLauncher/Core/Choices.cs
-index acabd6b..0090c32 100644
+index acabd6b..3cb5f37 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Choices.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Choices.cs
 @@ -139,7 +139,7 @@
@@ -11,13 +11,14 @@ index acabd6b..0090c32 100644
              new("250 nits", "250"), new("300 nits", "300"), new("400 nits", "400"),
          };
  
-@@ -163,7 +163,8 @@
+@@ -163,7 +163,9 @@
  
          public static readonly Choice[] HdrMode =
          {
 -            new("Native (default)", "native"), new("Expanded", "expand"),
 +            new("Native", "native"), new("Expanded", "expand"),
-+            new("PsychoV30 (16-bit, restart)", "psychov30"),
++            new("PsychoV30 (16-bit, restart)", "psychov30",
++                "PsychoV30 — RenoDX · © 2026 Carlos Lopez · MIT License. GLSL adaptation for bbport. github.com/clshortfuse/renodx"),
          };
  
          public static readonly Choice[] HdrBoost =

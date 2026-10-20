@@ -6901,10 +6901,10 @@ index 435d5d5..f127dde 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 6a75445..e3f397b 100644
+index 6a75445..1dccaed 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
-@@ -306,11 +306,35 @@ void HdrSection() {
+@@ -306,11 +306,36 @@ void HdrSection() {
      const char* modes[BbSettings::HdrModeCount] = {
          BbSettings::MenuText("Native (from the game's HDR scene)", "Нативный (из HDR-сцены игры)"),
          BbSettings::MenuText("Expand (from the SDR picture)", "Расширение (из SDR-картинки)"),
@@ -6915,6 +6915,7 @@ index 6a75445..e3f397b 100644
                                             modes, BbSettings::HdrModeCount);
      Store(s.hdr_mode, mode, mode_changed);
 +    if (mode == BbSettings::HdrModePsychoV30 || s.startup_psychov30) {
++        Hint("PsychoV30 - RenoDX | Copyright (C) 2026 Carlos Lopez | MIT License. GLSL adaptation for bbport.");
 +        Hint("PsychoV30 uses the 16-bit scene/composite chain. Entering or leaving this mode requires a restart.");
 +        int tone = s.hdr_tonemapper == BbSettings::HdrToneMapperVanilla ? 0 : 1;
 +        const char* tones[] = {"Vanilla (SDR reference)", "PsychoV30"};
@@ -6940,7 +6941,7 @@ index 6a75445..e3f397b 100644
      Hint(BbSettings::MenuText(
          "Native: the brightness of lamps, fire, the moon and other highlights comes from the "
          "game's own HDR scene, before its tonemap clipped it to SDR white. Midtones, colours and "
-@@ -320,14 +344,17 @@ void HdrSection() {
+@@ -320,14 +345,17 @@ void HdrSection() {
          "HDR-сцены игры, до того как тонмаппинг обрезал её до белого SDR. Средние тона, цвета и "
          "интерфейс остаются как в SDR-картинке. В меню, на загрузках и в видеороликах (без сцены) "
          "работает «Расширение». Расширение: самые яркие места SDR-картинки растягиваются к пику."));
@@ -6958,7 +6959,7 @@ index 6a75445..e3f397b 100644
      if (mode == BbSettings::HdrModeNative) {
          Slider(BbSettings::MenuText("UI brightness", "Яркость интерфейса"), s.hdr_ui_brightness,
                 BbSettings::HdrUiBrightnessMin, BbSettings::HdrUiBrightnessMax, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-@@ -343,6 +370,10 @@ void HdrSection() {
+@@ -343,6 +371,10 @@ void HdrSection() {
              "1 — более насыщенные, как на мониторе с широким охватом в SDR (привычный вид; точный sRGB "
              "рядом с ним может казаться блёклым). Меняются сразу."));
      }
@@ -6969,7 +6970,7 @@ index 6a75445..e3f397b 100644
      Hint(BbSettings::MenuText(
          "Paper white: how bright the game's white (and this menu) is; about 200 suits a dim room. "
          "Peak: your display's peak brightness (its HDR specs, or the Windows HDR Calibration app). "
-@@ -356,6 +387,7 @@ void HdrSection() {
+@@ -356,6 +388,7 @@ void HdrSection() {
          "самые яркие места (лампы, огонь, луна) поднимаются к пику. В нативном режиме — какая "
          "доля собственного диапазона светлых мест сцены показывается: 0.25 — около половины, "
          "1 — весь (до пика). Меняются сразу. Ctrl+клик по ползунку — ввести точное значение."));
@@ -6977,7 +6978,7 @@ index 6a75445..e3f397b 100644
  }
  
  // The game's own picture for each area (engine/graphics.cpp), live: Picture tuning too.
-@@ -739,6 +771,7 @@ void Menu() {
+@@ -739,6 +772,7 @@ void Menu() {
      bool restart =
          s.object_motion != s.startup_object_motion || s.model_lod != s.startup_model_lod ||
          s.live_resolution != s.startup_live_resolution || s.hdr != s.startup_hdr ||
@@ -6985,7 +6986,7 @@ index 6a75445..e3f397b 100644
          BbSettings::ResolutionNeedsRestart();
      for (int e = 0; e < BbSettings::EffectCount; ++e) {
          restart |= s.effects[e] != s.startup_effects[e];
-@@ -1045,6 +1078,11 @@ bool HandleEvent(const SDL_Event& event) {
+@@ -1045,6 +1079,11 @@ bool HandleEvent(const SDL_Event& event) {
      case SDL_EVENT_KEY_DOWN:
      case SDL_EVENT_KEY_UP: {
          const bool down = event.type == SDL_EVENT_KEY_DOWN;

@@ -41,6 +41,8 @@ for src in launcher.iterdir():
     if src.is_file():
         shutil.copy2(src, stage / src.name)
 shutil.copy2(Path(__file__).with_name('README.md'), stage / 'README-PsychoV30.md')
+notices = Path(__file__).with_name('licenses')
+shutil.copytree(notices, stage / 'licenses', dirs_exist_ok=True)
 (stage / 'psychov30-example.ini').write_text(
     'hdr=1\nhdr_mode=psychov30\nhdr_paper_white=203\nhdr_peak=1000\n'
     'hdr_tonemapper=3\nhdr_exposure=1\nhdr_grade_highlights=50\nhdr_shadows=50\n'

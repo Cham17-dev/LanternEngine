@@ -164,7 +164,8 @@
         public static readonly Choice[] HdrMode =
         {
             new("Native", "native"), new("Expanded", "expand"),
-            new("PsychoV30 (16-bit, restart)", "psychov30"),
+            new("PsychoV30 (16-bit, restart)", "psychov30",
+                "PsychoV30 — RenoDX · © 2026 Carlos Lopez · MIT License. GLSL adaptation for bbport. github.com/clshortfuse/renodx"),
         };
 
         public static readonly Choice[] HdrBoost =

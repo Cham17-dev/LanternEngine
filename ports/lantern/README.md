@@ -72,4 +72,6 @@ No FPS or visual-quality improvement is claimed before those measurements.
 Lantern's engine and the combined port are GPL-3.0-or-later. Preserve the upstream package's
 licenses when installing the overlay. The PsychoV30 port retains its RenoDX MIT notices; the
 shader variant data and integration retain their bbport/shadPS4 notices. No game data is included.
+The package includes `licenses/RenoDX-MIT.txt` with the upstream MIT license and copyright
+notices. Selecting PsychoV30 also displays its RenoDX attribution in the launcher and game menu.
 
