@@ -1,0 +1,40 @@
+diff --git a/launcher/windows/BloodborneLauncher/Core/Choices.cs b/launcher/windows/BloodborneLauncher/Core/Choices.cs
+index acabd6b..4df2975 100644
+--- a/launcher/windows/BloodborneLauncher/Core/Choices.cs
++++ b/launcher/windows/BloodborneLauncher/Core/Choices.cs
+@@ -163,7 +163,8 @@
+ 
+         public static readonly Choice[] HdrMode =
+         {
+-            new("Native (default)", "native"), new("Expanded", "expand"),
++            new("Native", "native"), new("Expanded", "expand"),
++            new("PsychoV30 (16-bit, restart)", "psychov30"),
+         };
+ 
+         public static readonly Choice[] HdrBoost =
+diff --git a/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs b/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
+index bffc31d..82755db 100644
+--- a/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
++++ b/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
+@@ -46,7 +46,7 @@ namespace BloodborneLauncher.Core
+             ["custom_command"] = "",
+             ["custom_args"] = "",
+             ["switch_to_output"] = true,
+-            ["check_updates"] = true,
++            ["check_updates"] = false,
+             ["save_backups"] = true,
+             ["safe_mode_next"] = false,
+             ["memory_check_off"] = false,
+diff --git a/launcher/windows/BloodborneLauncher/Core/Paths.cs b/launcher/windows/BloodborneLauncher/Core/Paths.cs
+index 73c3cf4..e7b2df4 100644
+--- a/launcher/windows/BloodborneLauncher/Core/Paths.cs
++++ b/launcher/windows/BloodborneLauncher/Core/Paths.cs
+@@ -12,7 +12,7 @@ namespace BloodborneLauncher.Core
+     public static class Paths
+     {
+         public static readonly string ConfigDir = Path.Combine(
+-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "bbport-launcher");
++            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "bbport-launcher-psychov30");
+ 
+         public static readonly string ConfigFile = Path.Combine(ConfigDir, "settings.json");
+ 

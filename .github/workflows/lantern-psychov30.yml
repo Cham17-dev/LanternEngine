@@ -1,0 +1,136 @@
+name: Lantern PsychoV30 port
+
+on:
+  push:
+    branches: [lantern-psychov30]
+    paths: ['ports/lantern/**', '.github/workflows/lantern-psychov30.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shaders:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Awakenchan/LanternEngine
+          ref: 6c2fbf48d0a84dd6e3fc88fee240e326b66a4e4f
+          path: upstream-lantern
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: DarkIzuku/bloodborne_pc
+          ref: 8ecba9a4abdd54747e31d7fee54982e422b5f8e2
+          path: engine-src
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: KhronosGroup/SPIRV-Cross
+          ref: 300681bbcb8365a8d1eacdacdbdd0249bbf1d6b1
+          path: .ci/spirv-cross
+          sparse-checkout: include
+          persist-credentials: false
+      - name: Reconstruct and patch
+        run: |
+          python3 ports/lantern/prepare.py baseline engine-src upstream-lantern
+          python3 ports/lantern/prepare.py port engine-src upstream-lantern
+      - name: Install shader tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq glslang-tools spirv-tools spirv-cross libglm-dev g++
+      - name: Compile and validate registered shaders
+        run: python3 ports/lantern/shader_check.py engine-src
+      - name: Linear-light numerical regression
+        working-directory: engine-src
+        env:
+          SPIRV_CROSS_INCLUDE: ${{ github.workspace }}/.ci/spirv-cross/include
+        run: python3 -I docs/hdr-tools/upscale_transfer_check/run.py
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Awakenchan/LanternEngine
+          ref: 6c2fbf48d0a84dd6e3fc88fee240e326b66a4e4f
+          path: upstream-lantern
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: DarkIzuku/bloodborne_pc
+          ref: 8ecba9a4abdd54747e31d7fee54982e422b5f8e2
+          path: engine-src
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reconstruct Lantern baseline
+        run: python ports/lantern/prepare.py baseline engine-src upstream-lantern
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: true
+          install: git patch binutils
+          pacboy: >-
+            toolchain:p cmake:p ninja:p pkgconf:p python:p
+            vulkan-headers:p vulkan-loader:p vulkan-memory-allocator:p glslang:p
+            sdl3:p fmt:p boost:p robin-map:p xxhash:p ffmpeg:p zydis:p
+            spirv-tools:p spirv-headers:p spirv-cross:p
+            protobuf:p openssl:p zlib:p miniupnpc:p nlohmann-json:p
+      - name: Build unmodified Lantern baseline
+        shell: msys2 {0}
+        working-directory: engine-src
+        env:
+          BB_LTO: 'OFF'
+          BB_PGO: 'off'
+          BB_JOBS: '2'
+        run: |
+          export CFLAGS=-Wno-error=unused-but-set-global
+          export CXXFLAGS="-include $PWD/gpu/win_compat.h"
+          bash build.sh
+      - name: Apply separate PsychoV30 patches
+        run: python ports/lantern/prepare.py port engine-src upstream-lantern
+      - name: Build HDR engine and settings tests
+        shell: msys2 {0}
+        working-directory: engine-src
+        env:
+          BB_LTO: 'OFF'
+          BB_PGO: 'off'
+          BB_JOBS: '2'
+        run: |
+          export CFLAGS=-Wno-error=unused-but-set-global
+          export CXXFLAGS="-include $PWD/gpu/win_compat.h"
+          bash build.sh
+          ninja -C out/gpu -j2 settings-test
+          out/gpu/settings-test.exe
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build launcher with PsychoV30 selector
+        run: >-
+          dotnet publish upstream-lantern/launcher/windows/BloodborneLauncher/BloodborneLauncher.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -o launcher-port
+      - name: Package engine overlay and runtime DLLs
+        shell: msys2 {0}
+        run: |
+          export BB_CLANG_BIN="$(cygpath -w /clang64/bin)"
+          python ports/lantern/package_engine.py engine-src stage launcher-port
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lantern-psychov30-overlay
+          path: stage/
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lantern-build-log
+          path: engine-src/out/gpu-build.log
