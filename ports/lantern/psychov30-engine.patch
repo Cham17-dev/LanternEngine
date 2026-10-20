@@ -224,19 +224,31 @@ index 0315431..2692bec 100644
  
  } // namespace Shader
 diff --git a/gpu/shadps4/video_core/cache_storage.cpp b/gpu/shadps4/video_core/cache_storage.cpp
-index 310bda9..581dc9d 100644
+index 310bda9..45278a1 100644
 --- a/gpu/shadps4/video_core/cache_storage.cpp
 +++ b/gpu/shadps4/video_core/cache_storage.cpp
-@@ -90,6 +90,8 @@ void DataBase::Open() {
+@@ -10,6 +10,7 @@
+ #include "video_core/cache_storage.h"
+ #include "video_core/cache_file.h"
+ #include "video_core/renderer_vulkan/vk_instance.h"
++#include "video_core/renderer_vulkan/vk_hdr_channel.h"
+ #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
+ 
+ #include <miniz.h>
+@@ -90,6 +91,12 @@ void DataBase::Open() {
      }
  
      const auto& game_info = Common::ElfInfo::Instance();
++    // PsychoV30 (mode 5): its own cache, named after the replacement shaders it holds swapped in
++    // (a cache of other versions of them gave a black screen).
 +    const std::string cache_serial = std::string{game_info.GameSerial()} +
-+        (EmulatorSettings.GetHdrTonemapMode() == 5 ? "-psychov30-v1" : "");
++        (EmulatorSettings.GetHdrTonemapMode() == 5
++             ? "-psychov30-" + Vulkan::HdrChannel::CacheTag()
++             : std::string{});
  
      using namespace Common::FS;
      if (EmulatorSettings.IsPipelineCacheArchived()) {
-@@ -98,7 +100,7 @@ void DataBase::Open() {
+@@ -98,7 +105,7 @@ void DataBase::Open() {
          mz_zip_zero_struct(&zip_ar);
  
          cache_path = GetUserPath(PathType::CacheDir) /
@@ -245,7 +257,7 @@ index 310bda9..581dc9d 100644
  
          if (!mz_zip_reader_init_file(&zip_ar, cache_path.string().c_str(),
                                       MZ_ZIP_FLAG_READ_ALLOW_WRITING) ||
-@@ -120,7 +122,7 @@ void DataBase::Open() {
+@@ -120,7 +127,7 @@ void DataBase::Open() {
              }
          }
      } else {
@@ -979,10 +991,10 @@ index 0000000..cc826a2
 +}
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_display_copy.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_display_copy.frag
 new file mode 100644
-index 0000000..ddc9349
+index 0000000..dd5b1c6
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_display_copy.frag
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,56 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -1012,18 +1024,19 @@ index 0000000..ddc9349
 +} push_data;
 +
 +layout(set = 0, binding = 0) uniform texture2D fs_img0;
-+// The brightness table (one row per channel): a 1D array image, which shadPS4 0.20.1 binds as a
-+// 2D array view of height 1 (sampled at y 0, as the recompiled shader does).
-+layout(set = 0, binding = 1) uniform texture2DArray fs_img1;
++// The brightness table (one row per channel): a 1D array image. Lantern's recompiler keeps 1D
++// image types (shadPS4 0.20.1, bbport's, binds it as a 2D array view instead): a 2D array
++// declaration read 0 here and the whole frame was black.
++layout(set = 0, binding = 1) uniform texture1DArray fs_img1;
 +layout(set = 0, binding = 2) uniform sampler fs_samp0;
 +
 +layout(location = 0) out vec4 frag_color0;
 +
 +float brightness(float v, float row) {
 +    if (v <= 1.0) {
-+        return texture(sampler2DArray(fs_img1, fs_samp0), vec3(v, 0.0, row)).x;
++        return texture(sampler1DArray(fs_img1, fs_samp0), vec2(v, row)).x;
 +    }
-+    return texture(sampler2DArray(fs_img1, fs_samp0), vec3(1.0, 0.0, row)).x * v;
++    return texture(sampler1DArray(fs_img1, fs_samp0), vec2(1.0, row)).x * v;
 +}
 +
 +void main() {
@@ -4430,10 +4443,10 @@ index 65fb22f..8e38232 100644
      std::optional<const Shader::Gcn::FetchShaderData> fetch_shader{};
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp
 new file mode 100644
-index 0000000..3e40a5f
+index 0000000..9384981
 --- /dev/null
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp
-@@ -0,0 +1,589 @@
+@@ -0,0 +1,609 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -4897,6 +4910,26 @@ index 0000000..3e40a5f
 +    return Native16() && FixedRenderSize().first != 0;
 +}
 +
++std::string HdrChannel::CacheTag() {
++    // FNV-1a over bbport's replacement shaders: the shader cache stores them already swapped in,
++    // so a cache made with other versions of them must not be loaded.
++    static const std::string tag = [] {
++        u64 h = 0xcbf29ce484222325ull;
++        const auto add = [&h](const auto& words) {
++            for (const u32 w : words) {
++                h = (h ^ w) * 0x100000001b3ull;
++            }
++        };
++        add(BB_COMPOSITE_HDR_FRAG);
++        add(BB_GLOW_SOURCE_FRAG);
++        add(BB_COPY_FRAG);
++        add(BB_COLOR_GRADING_FRAG);
++        add(BB_DISPLAY_COPY_FRAG);
++        return fmt::format("{:08x}", u32(h ^ (h >> 32)));
++    }();
++    return tag;
++}
++
 +bool HdrChannel::Native16() {
 +    static const bool native =
 +        EmulatorSettings.GetHdrTonemapMode() == 5 && EmulatorSettings.IsHdrAllowed();
@@ -5025,10 +5058,10 @@ index 0000000..3e40a5f
 +} // namespace Vulkan
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.h b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.h
 new file mode 100644
-index 0000000..b63a714
+index 0000000..e4aae02
 --- /dev/null
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.h
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,113 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -5045,6 +5078,7 @@ index 0000000..b63a714
 +#include <mutex>
 +#include <optional>
 +#include <span>
++#include <string>
 +#include <vector>
 +
 +#include "common/types.h"
@@ -5073,6 +5107,9 @@ index 0000000..b63a714
 +    // followed by bbport's, which adds the HDR part (hdr/bb_composite_hdr.frag, BB_OUTPUT_DELTA),
 +    // so the frame carries light above the game's white to the final pass.
 +    static bool Native16();
++    /// A tag of bbport's replacement shaders (hex): part of the mode 5 shader cache's name, so a
++    /// cache made with other versions of them is not loaded.
++    static std::string CacheTag();
 +    /// Mode 5 with the startup-patched render size (BB_RENDER_RES, "Live resolution changes"
 +    /// off): the game's targets are already at the render size and the scene has no proxies, so
 +    /// the chain's targets get same-size RGBA16F proxies of their own (SceneTargets::OwnSize).
@@ -5159,7 +5196,7 @@ index 571167a..ded4e3b 100644
      return s.hdr_output.load(std::memory_order_relaxed) != BbSettings::HdrOutputOff &&
             s.hdr_mode.load(std::memory_order_relaxed) == BbSettings::HdrModeNative;
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index d8713f2..4ba6241 100644
+index d8713f2..5a4abfd 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 @@ -11,6 +11,8 @@
@@ -5171,17 +5208,18 @@ index d8713f2..4ba6241 100644
  #include "common/elf_info.h"
  #include "common/io_file.h"
  #include "common/path_util.h"
-@@ -56,7 +58,8 @@ DriverCache::Identity DriverIdentity(const Instance& instance) {
+@@ -56,7 +58,9 @@ DriverCache::Identity DriverIdentity(const Instance& instance) {
  
  std::filesystem::path DriverCachePath() {
      return Common::FS::GetUserPath(Common::FS::PathType::CacheDir) /
 -           (std::string{Common::ElfInfo::Instance().GameSerial()} + ".vkcache");
 +           (std::string{Common::ElfInfo::Instance().GameSerial()} +
-+            (HdrChannel::Native16() ? "-psychov30-v1" : "") + ".vkcache");
++            (HdrChannel::Native16() ? "-psychov30-" + HdrChannel::CacheTag() : std::string{}) +
++            ".vkcache");
  }
  } // namespace
  
-@@ -389,6 +392,9 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
+@@ -389,6 +393,9 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
                               AmdGpu::Liverpool* liverpool_, u32 sparse_page_shift)
      : instance{instance_}, scheduler{scheduler_}, liverpool{liverpool_},
        desc_heap{instance, scheduler.GetWorkSemaphore(), DescriptorHeapSizes} {
@@ -5191,7 +5229,7 @@ index d8713f2..4ba6241 100644
      sel.regs = &liverpool->regs;
      const auto& vk12_props = instance.GetVk12Properties();
      profile = Shader::Profile{
-@@ -640,6 +646,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
+@@ -640,6 +647,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
          color_buffer.data_format = col_buf.GetDataFmt();
          color_buffer.num_format = col_buf.GetNumberFmt();
          color_buffer.num_conversion = col_buf.GetNumberConversion();
@@ -5208,7 +5246,7 @@ index d8713f2..4ba6241 100644
          color_buffer.export_format = regs.color_export_format.GetFormat(cb);
          color_buffer.swizzle = col_buf.Swizzle();
  
-@@ -909,6 +925,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
+@@ -909,6 +926,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
      auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, runtime_info, ir_program, binding);
      DumpShader(spv, info.pgm_hash, info.hw_stage, perm_idx, "spv");
  

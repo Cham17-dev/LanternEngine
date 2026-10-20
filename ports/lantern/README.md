@@ -74,8 +74,15 @@ reports the requirement on unsupported GPUs; Native/Expand use their original 12
 Lantern's point-sampler fallback to an 8-bit guest image is disabled in mode 5 to avoid clipping
 HDR values. This may affect the appearance/cost of some effects at reduced presets. Composite
 pipelines with an HDR companion compile together; other pipeline compilation remains asynchronous.
-PsychoV30 uses a separate `-psychov30-v1` shader/driver cache. Cached composites rebuild their
-HDR companion when loaded, so restarting does not drop the HDR pass.
+PsychoV30 uses a separate `-psychov30-<tag>` shader/driver cache (in `%APPDATA%\shadPS4\cache`),
+where the tag is a hash of bbport's replacement shaders: the cache stores them already swapped in,
+so a build with other versions of them starts a new cache instead of loading stale ones (a cache
+from the first build of this port gave a black screen). Cached composites rebuild their HDR
+companion when loaded, so restarting does not drop the HDR pass.
+
+The display copy reads its brightness table as a 1D array: Lantern's recompiler keeps 1D image
+types, unlike shadPS4 0.20.1 (bbport), which binds it as a 2D array view. The 2D array version
+read 0 there and the whole frame was black.
 
 ## Validation still required
 
