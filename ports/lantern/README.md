@@ -33,6 +33,13 @@ Saturation, Bloom, Color Grade Strength, Black Floor and HUD brightness. Neutral
 listed there. F9 cycles HDR / SDR reference / approximate split. Changing into or out of the
 16-bit mode requires a restart; its grading and reference switches are live.
 
+Paper white defaults to 203 nits in the engine and launcher. Explicit values already saved in
+`bbport.ini` are preserved; change an existing 200-nit setting to 203 once if desired.
+The launcher hides Highlight boost and UI colour for PsychoV30 because they do not affect this
+mode. HUD brightness remains available. Switching back to Native/Expand restores applicable rows.
+The in-game menu exposes the source PsychoV30 scene controls, with their original neutral values;
+its layout is simplified. Gamma 2.2 is fixed on, and HUD brightness is relative to paper white.
+
 ## Rendering contract
 
 - PsychoV30 runs in the composite on scene-linear color. It retains the Bloodborne mid-grey

@@ -139,7 +139,7 @@
 
         public static readonly Choice[] HdrPaperWhite =
         {
-            new("100 nits", "100"), new("150 nits", "150"), new("200 nits (default)", "200"),
+            new("100 nits", "100"), new("150 nits", "150"), new("203 nits (default)", "203"),
             new("250 nits", "250"), new("300 nits", "300"), new("400 nits", "400"),
         };
 

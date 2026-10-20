@@ -4231,9 +4231,18 @@ index a263cce..855d239 100644
  
      const vk::RenderingAttachmentInfo attachment{
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/host_passes/hdr_pass.h b/gpu/shadps4/video_core/renderer_vulkan/host_passes/hdr_pass.h
-index db4f57f..79b5382 100644
+index db4f57f..a964204 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/host_passes/hdr_pass.h
 +++ b/gpu/shadps4/video_core/renderer_vulkan/host_passes/hdr_pass.h
+@@ -17,7 +17,7 @@ class HdrOutputPass {
+ public:
+     /// Push constants of hdr_output.frag.
+     struct Settings {
+-        float paper_white = 200.0f; ///< nits of SDR white
++        float paper_white = 203.0f; ///< nits of SDR white
+         float peak = 1000.0f;       ///< nits the display reaches
+         float boost = 0.5f;         ///< highlight expansion, 0..1 (expand mode and fallback)
+         u32 flags = 0;              ///< FlagScRgb | FlagOverlay | FlagNative | FlagDebug
 @@ -28,7 +28,11 @@ public:
          /// Native mode: the UI's white (times paper white) and colours (0 sRGB .. 1 DCI-P3).
          float ui_white = 1.0f;
@@ -6892,10 +6901,10 @@ index 435d5d5..f127dde 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 6a75445..36dfbc7 100644
+index 6a75445..e3f397b 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
-@@ -306,11 +306,34 @@ void HdrSection() {
+@@ -306,11 +306,35 @@ void HdrSection() {
      const char* modes[BbSettings::HdrModeCount] = {
          BbSettings::MenuText("Native (from the game's HDR scene)", "Нативный (из HDR-сцены игры)"),
          BbSettings::MenuText("Expand (from the SDR picture)", "Расширение (из SDR-картинки)"),
@@ -6927,18 +6936,48 @@ index 6a75445..36dfbc7 100644
 +        Slider("HUD brightness", s.hdr_ui_brightness, 0.5f, 2.0f, "%.2f");
 +        Hint("Neutral grading: Exposure 1; Highlights, Shadows, Contrast, Saturation and Bloom 50; Color Grade Strength 100; Black Floor 0.");
 +    }
++    if (mode != BbSettings::HdrModePsychoV30) {
      Hint(BbSettings::MenuText(
          "Native: the brightness of lamps, fire, the moon and other highlights comes from the "
          "game's own HDR scene, before its tonemap clipped it to SDR white. Midtones, colours and "
-@@ -326,6 +349,7 @@ void HdrSection() {
+@@ -320,14 +344,17 @@ void HdrSection() {
+         "HDR-сцены игры, до того как тонмаппинг обрезал её до белого SDR. Средние тона, цвета и "
+         "интерфейс остаются как в SDR-картинке. В меню, на загрузках и в видеороликах (без сцены) "
+         "работает «Расширение». Расширение: самые яркие места SDR-картинки растягиваются к пику."));
++    }
+     Slider(BbSettings::MenuText("Paper white (nits)", "Белый SDR (нит)"), s.hdr_paper_white,
+            BbSettings::HdrPaperWhiteMin, BbSettings::HdrPaperWhiteMax, "%.0f",
+            ImGuiSliderFlags_AlwaysClamp);
      Slider(BbSettings::MenuText("Peak brightness (nits)", "Пиковая яркость (нит)"), s.hdr_peak,
             BbSettings::HdrPeakMin, BbSettings::HdrPeakMax, "%.0f",
             ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic);
-+    if (mode != BbSettings::HdrModePsychoV30)
++    if (mode != BbSettings::HdrModePsychoV30) {
      Slider(BbSettings::MenuText("Highlight boost", "Усиление светлых участков"), s.hdr_boost, 0.0f,
             1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
++    }
      if (mode == BbSettings::HdrModeNative) {
-@@ -739,6 +763,7 @@ void Menu() {
+         Slider(BbSettings::MenuText("UI brightness", "Яркость интерфейса"), s.hdr_ui_brightness,
+                BbSettings::HdrUiBrightnessMin, BbSettings::HdrUiBrightnessMax, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+@@ -343,6 +370,10 @@ void HdrSection() {
+             "1 — более насыщенные, как на мониторе с широким охватом в SDR (привычный вид; точный sRGB "
+             "рядом с ним может казаться блёклым). Меняются сразу."));
+     }
++    if (mode == BbSettings::HdrModePsychoV30) {
++        Hint("Paper white: the game's reference white, 203 nits by default. Peak: your display's "
++             "peak brightness. Ctrl+click a slider to type an exact value. Grading changes apply live.");
++    } else {
+     Hint(BbSettings::MenuText(
+         "Paper white: how bright the game's white (and this menu) is; about 200 suits a dim room. "
+         "Peak: your display's peak brightness (its HDR specs, or the Windows HDR Calibration app). "
+@@ -356,6 +387,7 @@ void HdrSection() {
+         "самые яркие места (лампы, огонь, луна) поднимаются к пику. В нативном режиме — какая "
+         "доля собственного диапазона светлых мест сцены показывается: 0.25 — около половины, "
+         "1 — весь (до пика). Меняются сразу. Ctrl+клик по ползунку — ввести точное значение."));
++    }
+ }
+ 
+ // The game's own picture for each area (engine/graphics.cpp), live: Picture tuning too.
+@@ -739,6 +771,7 @@ void Menu() {
      bool restart =
          s.object_motion != s.startup_object_motion || s.model_lod != s.startup_model_lod ||
          s.live_resolution != s.startup_live_resolution || s.hdr != s.startup_hdr ||
@@ -6946,7 +6985,7 @@ index 6a75445..36dfbc7 100644
          BbSettings::ResolutionNeedsRestart();
      for (int e = 0; e < BbSettings::EffectCount; ++e) {
          restart |= s.effects[e] != s.startup_effects[e];
-@@ -1045,6 +1070,11 @@ bool HandleEvent(const SDL_Event& event) {
+@@ -1045,6 +1078,11 @@ bool HandleEvent(const SDL_Event& event) {
      case SDL_EVENT_KEY_DOWN:
      case SDL_EVENT_KEY_UP: {
          const bool down = event.type == SDL_EVENT_KEY_DOWN;
@@ -7014,7 +7053,7 @@ index 8f47700..0297eae 100644
      put("graphics_controls",flag(v.graphics_controls));
      put("graphics_vignette",flag(v.graphics_vignette));
 diff --git a/gpu/shim/bbport_settings.h b/gpu/shim/bbport_settings.h
-index 14e01ef..1b1efd8 100644
+index 14e01ef..2544ffa 100644
 --- a/gpu/shim/bbport_settings.h
 +++ b/gpu/shim/bbport_settings.h
 @@ -8,6 +8,8 @@
@@ -7026,6 +7065,15 @@ index 14e01ef..1b1efd8 100644
  
  enum Upscaler : int { UpscalerOff = 0, UpscalerFsr3 = 1, UpscalerFsr4 = 2, UpscalerFsr411 = 3,
                        UpscalerTaa = 4, UpscalerDlss = 5, UpscalerCount };
+@@ -74,7 +76,7 @@ inline constexpr int CheatGunRanges[] = {0, 150, 200, 300};
+ /// cheat_echo_multiplier: Blood Echoes from kills times this (1: the game's own).
+ inline constexpr int CheatEchoMultipliers[] = {1, 2, 5, 10};
+ /// HDR output (hdr_paper_white / hdr_peak in nits, hdr_boost 0..1): defaults and ranges.
+-inline constexpr float HdrPaperWhiteDefault = 200.0f, HdrPaperWhiteMin = 10.0f, HdrPaperWhiteMax = 500.0f;
++inline constexpr float HdrPaperWhiteDefault = 203.0f, HdrPaperWhiteMin = 10.0f, HdrPaperWhiteMax = 500.0f;
+ inline constexpr float HdrPeakDefault = 1000.0f, HdrPeakMin = 10.0f, HdrPeakMax = 4000.0f;
+ inline constexpr float HdrBoostDefault = 0.25f;
+ /// Native mode: the game's UI at hdr_ui_brightness times paper white, and hdr_ui_color of the way
 @@ -85,8 +87,8 @@ enum HdrOutput : int { HdrOutputOff = 0, HdrOutputHdr10 = 1, HdrOutputScRgb = 2
  /// hdr_mode in bbport.ini (docs/hdr.md). Native: the highlights' brightness from the game's own
  /// HDR scene (vk_hdr_native.h), expand where a frame has none (menus, loading, movies). Expand:
@@ -7099,9 +7147,18 @@ index cee7291..c2c103d 100644
      u32 GetInternalScreenWidth() { static const auto value = u32(Number("BB_INTERNAL_WIDTH", 1920)); return value; }
      u32 GetInternalScreenHeight() { static const auto value = u32(Number("BB_INTERNAL_HEIGHT", 1080)); return value; }
 diff --git a/tests/test_settings.cpp b/tests/test_settings.cpp
-index 8501ba0..62f1b76 100644
+index 8501ba0..dda080a 100644
 --- a/tests/test_settings.cpp
 +++ b/tests/test_settings.cpp
+@@ -154,7 +154,7 @@ int main() {
+     // HDR output: hdr 0/1 (applied at start), paper white 10-500 and peak 10-4000 nits, boost
+     // 0-1; written back as read; anything else clamped or the default.
+     assert(Read(path).find("hdr=0\n") != std::string::npos);
+-    assert(Read(path).find("hdr_paper_white=200\n") != std::string::npos);
++    assert(Read(path).find("hdr_paper_white=203\n") != std::string::npos);
+     assert(Read(path).find("hdr_peak=1000\n") != std::string::npos);
+     assert(Read(path).find("hdr_boost=0.25\n") != std::string::npos);
+     // hdr_mode: native (the default: highlights from the game's HDR scene) or expand (from the
 @@ -207,6 +207,21 @@ int main() {
  #endif
      BbSettings::Load();

@@ -10,8 +10,28 @@ namespace BloodborneLauncher.Views
     {
         private readonly ComboBox _monitor = new() { Width = 360, VerticalAlignment = VerticalAlignment.Center };
         private bool _refreshingMonitors;
+        private FrameworkElement? _hdrBoostRow;
+        private FrameworkElement? _hdrBrightnessRow;
+        private FrameworkElement? _hdrColourRow;
 
-        public override void OnShown() => RefreshMonitors();
+        public override void OnShown()
+        {
+            RefreshMonitors();
+            RefreshHdrRows();
+        }
+
+        private void RefreshHdrRows()
+        {
+            var mode = Ini.Get("hdr_mode", "native");
+            var psycho = mode == "psychov30";
+            var native = mode == "native";
+            if (_hdrBoostRow != null)
+                _hdrBoostRow.Visibility = psycho ? Visibility.Collapsed : Visibility.Visible;
+            if (_hdrBrightnessRow != null)
+                _hdrBrightnessRow.Visibility = native || psycho ? Visibility.Visible : Visibility.Collapsed;
+            if (_hdrColourRow != null)
+                _hdrColourRow.Visibility = native ? Visibility.Visible : Visibility.Collapsed;
+        }
 
         private void RefreshMonitors()
         {
@@ -71,10 +91,10 @@ namespace BloodborneLauncher.Views
                     : "This display shows no HDR";
             IniToggle(SymbolRegular.Hdr24, "HDR output", hdrHint, "hdr");
             ComboRow(SymbolRegular.Lightbulb24, "HDR source",
-                "Native: highlights as bright as they are in the game's scene. Expanded: the SDR picture's bright parts made brighter",
-                Choices.HdrMode, () => Ini.Get("hdr_mode", "native"), v => Ini.Set("hdr_mode", v));
-            SliderRow(SymbolRegular.BrightnessHigh24, "Paper white", "How bright the game's white is, in nits. Range: 10–500",
-                10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", "200"), 200),
+                "PsychoV30: HDR tone mapping with dark tones matched to the game's SDR rendering. Native: highlights derived from the game's HDR scene. Expanded: bright SDR pixels expanded towards the peak. Entering or leaving PsychoV30 requires restarting the game.",
+                Choices.HdrMode, () => Ini.Get("hdr_mode", "native"), v => Ini.Set("hdr_mode", v), changed: RefreshHdrRows);
+            SliderRow(SymbolRegular.BrightnessHigh24, "Paper white", "How bright the game's white is, in nits. Default: 203. Range: 10–500",
+                10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", "203"), 203),
                 v => Ini.Set("hdr_paper_white", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
                 format: "0' nits'", valueWidth: 82);
             SliderRow(SymbolRegular.WeatherSunny24, "Peak brightness", "Your display's peak brightness, in nits. Range: 10–4000",
@@ -83,10 +103,14 @@ namespace BloodborneLauncher.Views
                 format: "0' nits'", valueWidth: 82);
             ComboRow(SymbolRegular.Sparkle24, "Highlight boost", "Off keeps the game's own look; higher makes lamps, fire and the sky brighter",
                 Choices.HdrBoost, () => Ini.Get("hdr_boost", "0.25"), v => Ini.Set("hdr_boost", v));
-            ComboRow(SymbolRegular.TextFont24, "UI brightness", "Native source only: how bright the HUD, menus and subtitles are, against paper white",
+            _hdrBoostRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
+            ComboRow(SymbolRegular.TextFont24, "UI brightness", "Native and PsychoV30: HUD brightness relative to paper white. Paper white is 1x; Brighter is 1.25x; Much brighter is 1.5x.",
                 Choices.HdrUiBrightness, () => Ini.Get("hdr_ui_brightness", "1"), v => Ini.Set("hdr_ui_brightness", v));
+            _hdrBrightnessRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
             ComboRow(SymbolRegular.Color24, "UI colour", "Native source only: Vivid shows the HUD and menus with the colours a wide-gamut monitor gives SDR; Exact keeps sRGB's",
                 Choices.HdrUiColor, () => Ini.Get("hdr_ui_color", "1"), v => Ini.Set("hdr_ui_color", v));
+            _hdrColourRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
+            RefreshHdrRows();
 
             Group("Frame rate");
             SettingCombo(SymbolRegular.Gauge24, "Frame rate", "30, 60, 90, 120 and 144 are the game's frame-rate patches for that rate; Uncapped uses the community uncapped patch", Choices.FpsModes, "fps_mode");
