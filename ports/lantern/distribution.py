@@ -77,8 +77,10 @@ def assemble(engine, overlay, destination, cache):
     ini = destination / 'bbport.ini'
     defaults = dict(line.split('=', 1) for line in (overlay / 'psychov30-example.ini').read_text().splitlines())
     defaults.pop('hdr')  # HDR output remains opt-in; Windows HDR must be enabled too.
+    # Peak and paper white come from the display's peak unless the player sets them.
+    unset = {'hdr_peak', 'hdr_paper_white'}
     lines = [line for line in ini.read_text(encoding='utf-8-sig').splitlines()
-             if line.split('=', 1)[0].strip() not in defaults]
+             if line.split('=', 1)[0].strip() not in defaults.keys() | unset]
     ini.write_text('\n'.join(lines + [f'{k}={v}' for k, v in defaults.items()]) + '\n', encoding='utf-8')
     required = ['Lantern Engine.exe', 'Bloodborne.exe', 'engine/out/bb-probe.exe',
                 'engine/out/bb-engine-assets.exe', 'engine/out/bb-gpu-capabilities.exe',

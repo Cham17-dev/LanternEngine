@@ -168,11 +168,11 @@
                 "PsychoV30 — RenoDX · © 2026 Carlos Lopez · MIT License. GLSL adaptation for bbport. github.com/clshortfuse/renodx"),
         };
 
-        /// <summary>hdr_tonemapper with PsychoV30 (bbport_settings.h): 3 PsychoV30 (its shadows matched to the game's), 4 PsychoV30 (pure), 2 Vanilla.</summary>
+        /// <summary>hdr_tonemapper with PsychoV30 (bbport_settings.h): 4 PsychoV-30 (as RenoDX's mods), 3 Hybrid (its shadows matched to the game's), 2 Vanilla.</summary>
         public static readonly Choice[] HdrToneMapper =
         {
-            // The segmented buttons show the label up to " (": the two PsychoV30 names differ before it.
-            new("PsychoV30 Matched (default)", "3"), new("PsychoV30 Pure", "4"), new("Vanilla (the game's own look)", "2"),
+            // The segmented buttons show the label up to " (".
+            new("PsychoV-30 (default)", "4"), new("Hybrid (the game's shadows)", "3"), new("Vanilla (the game's own look)", "2"),
         };
 
         /// <summary>hdr_gamut: the color volume PsychoV30 fits the picture into (its gamut_compression_mode).</summary>

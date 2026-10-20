@@ -19,6 +19,8 @@ with tempfile.TemporaryDirectory() as data:
     print(result.stderr)
     if result.returncode != 1 or 'No eboot.bin' not in result.stderr:
         raise RuntimeError('Packaged preparation entry point did not reach game detection')
-assert 'hdr_mode=psychov30' in (root / 'bbport.ini').read_text()
-assert 'hdr_paper_white=203' in (root / 'bbport.ini').read_text()
+ini = (root / 'bbport.ini').read_text()
+assert 'hdr_mode=psychov30' in ini and 'hdr_tonemapper=4' in ini
+# Left to the display's peak (DXGI), as RenoDX's defaults.
+assert not any(line.split('=', 1)[0] in ('hdr_peak', 'hdr_paper_white') for line in ini.splitlines())
 print('Packaged Python and game-detection smoke check passed; an in-game launch is still required.')

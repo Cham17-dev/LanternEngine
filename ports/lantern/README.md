@@ -1,164 +1,151 @@
-# Lantern Engine + PsychoV30 (experimental port)
+# Lantern Engine + PsychoV30 (experimental)
 
-This branch carries a reproducible HDR patch, not a copy of Lantern's entire engine.
+HDR for Bloodborne on Lantern Engine, with RenoDX's PsychoV30 tone mapper and a menu laid out
+like a RenoDX mod. This branch carries a reproducible patch over Lantern, not a copy of its
+engine. A successful build is not an in-game validation: see [Validation](#validation-still-required).
+
+## Install
+
+1. Download `lantern-psychov30-package` and extract it into a **new, empty folder**. It is a
+   complete package: do not merge it into another Lantern release or a previous overlay.
+2. Start **Lantern Engine.exe** (or `Bloodborne.exe`, its shortcut). The window title is
+   **Lantern Engine + PsychoV30**. Select your game dump (the folder with `eboot.bin`); game
+   data is not included.
+3. Turn Windows HDR on, then HDR output in the launcher. The HDR source defaults to
+   **PsychoV30 (16-bit, restart)**. Restart the game after changing the HDR source.
+4. Saves stay in your old installation. Select your existing user/save folder in the
+   launcher's profile settings, or copy the saves with the game closed (keep a backup). Do not
+   copy an old engine, executables or a complete INI into this package.
+
+The launcher keeps its settings in `%APPDATA%\bbport-launcher-psychov30`, and its updates point
+at this fork. Binaries and resources are under `engine/`; player data and `bbport.ini` are at
+the root.
+
+## Settings
+
+The in-game menu opens with **Insert** (or L3+R3). Every setting is live and saved in
+`bbport.ini`; each preset keeps its own, except Preset and Settings Mode themselves. The Debug
+tools last for the session only.
+
+| Setting | Values (default) | What it does |
+|---|---|---|
+| Preset | Off, #1 to #3 (#1) | Off is the game's own look. Each numbered preset keeps its own settings. |
+| Settings Mode | Simple, Intermediate, Advanced (Simple) | How many settings the menu shows. |
+| **Tone Mapping** | | |
+| Tone Mapper | PsychoV-30, Hybrid, Vanilla (PsychoV-30) | See [Tone mappers](#tone-mappers). |
+| Target gamut | BT.2020, BT.709 (BT.2020) | The color volume PsychoV30 fits the picture into. |
+| Gamut Compression *(Intermediate)* | 0 to 1 (1) | How far colors outside the target gamut are brought into it. |
+| Compression *(Intermediate)* | 0 to 2, 0 = auto (1) | How fast lights reach the peak: higher is brighter and harder, lower softer. |
+| Peak Brightness | 400 to 4000 nits (your display's) | The peak Windows reports for the display, 1000 if it reports none. |
+| Game Brightness | 80 to 500 nits (203 at 1000) | The brightness of the game's white. |
+| UI Brightness | ratio (1.00 x) | HUD and menus, times Game Brightness. |
+| **Color Grading** | | |
+| Exposure, Highlights, Shadows, Contrast, Saturation | (1.00, 50, 50, 50, 50) | PsychoV30's own grading, as in RenoDX's mods. |
+| Color Grade Strength *(Intermediate)* | 0 to 100 % (100) | The game's own color table: 100 is the game's look. |
+| Black Floor *(Intermediate)* | 0 to 2 nits (0) | Takes the game's darkest grey down to true black (OLED). |
+| **Effects** | | |
+| Bloom | 0 to 100 (50) | The glow around lights: 50 is the game's. |
+| Reset all | | Every setting of the preset back to its default. |
+| Debug *(Advanced)* | | Compare (F9: HDR / SDR / split), 16-bit chain probes, chain log. |
+
+The launcher's Display page shows Tone mapper, Target gamut and Peak brightness, with the same
+defaults; its Peak brightness reads the peak of the monitor chosen there and has a reset button.
+In PsychoV30 mode, the game's own Brightness, Contrast, Saturation and Bloom (Picture section, and
+the game's PC Colour menu) are left as the game draws them: the HDR grading above replaces them.
+Hue, Fog, Vignette, ambient occlusion and shadow distance stay. Gamma 2.2 is always on.
+
+### Tone mappers
+
+All PsychoV30 modes replace the game's tone curve on the scene itself, before the game's color
+table, and bring the lights up to your display's peak.
+
+- **PsychoV-30** (`hdr_tonemapper=4`, default): PsychoV30 as RenoDX's mods set it (Order of the
+  Sinking Star's Midgray Reference and Slope Reference): the game's mid grey kept at 0.18, the
+  game's contrast there, PsychoV30's own shadows.
+- **Hybrid** (`hdr_tonemapper=3`): the same, with the shadows below mid grey matched to the
+  game's. An addition of this port; compare the two in dark interiors and fog.
+- **Vanilla** (`hdr_tonemapper=2`): the game's own look in HDR10, without HDR highlights.
+
+## Technical notes
+
+### Build
 
 Pinned inputs:
 
 - LanternEngine `6c2fbf48d0a84dd6e3fc88fee240e326b66a4e4f`.
-- Its documented starting point, DarkIzuku/bloodborne_pc
-  `8ecba9a4abdd54747e31d7fee54982e422b5f8e2` (`v0.4.0-darkizuku-preview.1`).
-- The mode 5/PsychoV30 implementation from Cham17-dev/bloodborne_pc `hdr` at `0dce9f4`.
+- Its starting point, DarkIzuku/bloodborne_pc `8ecba9a4abdd54747e31d7fee54982e422b5f8e2`
+  (`v0.4.0-darkizuku-preview.1`).
+- The mode 5 / PsychoV30 implementation from Cham17-dev/bloodborne_pc `hdr` at `0dce9f4`.
 
-The Windows workflow reconstructs Lantern from those sources, applies the HDR patch, and builds
-the engine and launcher. Its manual `baseline_check` option also compiles stock Lantern first;
-that stock build was verified during the port. A successful build is not an in-game validation.
+`prepare.py` rebuilds the baseline (DarkIzuku plus Lantern's `engine/bbhost-changes.patch`),
+then applies `psychov30-engine.patch`; the launcher is built from `launcher/`
+(`psychov30-launcher.patch` is its diff against Lantern). The Windows workflow builds the engine
+and launcher and packages them; its manual `baseline_check` option compiles stock Lantern first.
+The package reuses the official beta 9.3 runtime resources, DLLs, notices and defaults with
+SHA-256 checks, and ships embedded Python 3.12.10 with the preparation scripts. CI checks both
+folder layouts and runs the shipped Python through imports and game detection.
 
-## Install for testing
+### Rendering
 
-1. Download `lantern-psychov30-package` and extract it into a **new, empty folder**.
-   This is now a complete package, rather than an overlay for an upstream installation.
-   Do not merge it into a newer Lantern release or reuse the previous overlay.
-2. Start **Lantern Engine.exe** from that new folder. Its title is
-   **Lantern Engine + PsychoV30**. Select your existing game dump (the folder with eboot.bin).
-   Game data is not included or copied into the package.
-3. Enable Windows HDR, then HDR output in the launcher. The HDR source defaults to
-   `PsychoV30 (16-bit, restart)`. Start the game. Restart the game after changing HDR source.
-4. Existing saves stay in the old installation. To use them here, select your existing user/save
-   folder under the launcher's profile/settings controls, or copy the saves with the game closed.
-   Keep a backup. Do not copy the old engine, executables or complete INI into this package.
-5. Compare native resolution/upscaler off, DLAA, then DLSS Quality. Keep sharpening off for the
-   initial comparison. Use the same camera, peak, paper white and grading settings.
+- **16-bit chain.** After the composite, the game's chain runs in RGBA16F (gamma 2.2, BT.709),
+  so values above white survive to the final pass (`hdr_output.frag`), which converts to HDR10 or
+  scRGB. Native, Expand and mode 4 are unchanged.
+- **PsychoV30** runs in the composite (`bb_composite_hdr.frag`) on scene-linear color, anchored
+  at the game's mid grey with the game's slope there as contrast. RenoDX takes that slope at the
+  curve's inflection; for Bloodborne's curve it gives 1.1369 instead of 1.1656 in interiors
+  (inflection 0.258, mid grey 0.195) and 1.0452 instead of 1.0459 outside.
+- **Color table.** Above white, the game's table is applied with RenoDX's max-channel
+  normalization, so highlights keep their hue.
+- **BT.2020.** A color outside BT.709 has BT.709 channels below 0. They are kept, signed, through
+  every pass to the final one, which converts to BT.2020 and only then drops what is still
+  negative, as RenoDX's mods:
+  - composite: no clip after PsychoV30 (BT.709 still clips), signed gamma encoding;
+  - color grading: the table grades the positive part, the negative part is added back ungraded;
+  - display copy: the brightness table is continued point-symmetric below 0;
+  - temporal reconstruction (DLSS / FSR / TAA, `upscale_transfer.glsl`): decoded to linear
+    BT.2020, where those colors are positive, and encoded back (exact inverses inside BT.2020,
+    checked by `docs/hdr-tools/upscale_transfer_check`);
+  - final pass: the negative part is decoded with its sign and added after Black Floor.
+  Debug probe 6 shows magenta where a channel reaches the final pass below 0. At neutral
+  settings the game produces almost no colors outside BT.709; they appear with more Saturation.
+- **Accuracy.** The GLSL PsychoV30 matches RenoDX's test30 within 5.3e-4 relative with every
+  setting this port uses (`docs/hdr-tools/psychov30_check`).
 
-The launcher uses its own `bbport-launcher-psychov30` settings folder. Updates point at this
-fork, rather than installing stock upstream releases over PsychoV30. The log prints the full
-path of the HDR engine. `Bloodborne.exe` is the packaged shortcut to this launcher.
+### Engine details
 
-The full package keeps binaries and supporting resources under `engine/`, with player data
-and bbport.ini at the root. It includes embedded Python 3.12.10 and the preparation scripts
-from the same public source snapshot as the compiled engine. The official beta 9.3 archive
-already uses a native start executable and does not contain those scripts or Python. Its
-released engine differs from that public source snapshot; only runtime resources, DLLs,
-notices and defaults are reused, with SHA-256 checks. Our build supplies the engine, helper
-programs, launcher and preparation scripts. This is not a port of all later upstream changes.
-CI checks both folder layouts and runs the shipped Python through imports and game detection;
-a successful smoke check still does not validate an actual game session.
-
-The in-game menu (Insert / L3+R3), HDR mode PsychoV30, is laid out as a RenoDX mod's, like
-bbport's: **Preset** (Off = the game's own look, #1 to #3 = the player's own settings, each saved
-in `bbport.ini` as `hdr_preset1..3`; a file from before the presets becomes Preset #1) and
-**Settings Mode** (Simple / Intermediate / Advanced) as named sliders, then Tone Mapping (Tone
-Mapper Vanilla / PsychoV30 Matched / PsychoV30 Pure, Target gamut BT.2020 / BT.709, Peak Brightness,
-Game Brightness, UI Brightness), Color Grading
-(Exposure, Highlights, Shadows, Contrast, Saturation; Intermediate: Color Grade Strength, Black
-Floor), Effects (Bloom), Reset all, and in Advanced a Debug section (Compare, 16-bit probe, chain
-trace). Every setting but Preset has RenoDX's reset button. Peak Brightness defaults to the peak Windows
-reports for the display (DXGI MaxLuminance, as RenoDX), Game Brightness to RenoDX's reference
-white for it (BT.2100 HLG, at most 203 nits); a value in `bbport.ini` is kept. The launcher's
-Peak brightness (Display page) reads the same value for the monitor chosen there (else the
-primary one), from its first start: it is the slider's value while `bbport.ini` has none, its
-hint names it, and the reset button beside the slider sets it (1000 when Windows reports none,
-for example with Windows HDR off). F9 cycles HDR /
-SDR reference / approximate split. Changing into or out of the 16-bit mode requires a restart;
-its grading and reference switches are live.
-
-Target gamut (`hdr_gamut` in `bbport.ini`, `bt2020` or `bt709`; live, kept per preset, also on
-the launcher's Display page when PsychoV30 is selected) is PsychoV30's gamut_compression_mode, the
-color volume it fits the picture into: BT.2020 by default, as RenoDX's HDR mods, or BT.709 (the
-earlier builds of this port). It reaches the composite in `bb_hdr2b.z` (the value plus one, 0 not
-set), and both PsychoV30 calls of the shadow match use it.
-
-With BT.2020, a color outside BT.709 has BT.709 channels below 0. The 16-bit chain keeps them,
-signed, to the final pass, which converts to BT.2020 and only then drops what is still negative
-(as RenoDX's mods); before, they were clipped right after PsychoV30 and BT.2020 changed almost
-nothing. Mode 5 only, every pass between the composite and the final one:
-
-- Composite (`bb_composite_hdr.frag`): no clip after PsychoV30 (BT.709 keeps it, exactly as
-  before); the target's gamma encoding keeps the sign (`bb_encode_signed`, the unsigned encoding
-  bit for bit on channels >= 0), and so does the delta (RGBA16F, additive blending).
-- Color grading (`bb_color_grading.frag`): the game's table grades the positive part (max-channel
-  normalization as before), the negative part is added back ungraded, as RenoDX's mods.
-- Display copy (`bb_display_copy.frag`): below 0 the brightness table is continued
-  point-symmetric about its value at 0 (the table alone read its value at 0 there).
-- Temporal reconstruction (`upscale_transfer.glsl`, DLSS / FSR / TAA): the decode is signed and
-  goes to linear BT.2020, where those colors are positive (the upscalers get no negative light);
-  the encode returns to signed gamma-2.2 BT.709. The two are exact inverses inside BT.2020
-  (`docs/hdr-tools/upscale_transfer_check`, now with signed cases).
-- Final pass (`hdr_output.frag`): the negative part is decoded with its sign and added after
-  Black Floor, which lowers the positive part only; the BT.2020 conversion then drops what is
-  still negative. The copies, the pre-HUD snapshot and the UI composition copy float to float.
-- 16-bit probe 6 (Advanced, Debug): magenta where a BT.709 channel reaches the final pass below
-  0, to check in game that the BT.2020 colors get to the end. Probes 1-5 are unchanged.
-
-Native, Expand and mode 4 are unchanged. Whether the game produces colors outside BT.709 at all
-is up to PsychoV30's response to its scene: see Validation.
-
-PsychoV30 Pure (`hdr_tonemapper=4`; live, kept per preset, also on the launcher's Display page
-as "Tone mapper" when PsychoV30 is selected) is PsychoV30 Matched (`hdr_tonemapper=3`, the
-default, its shadows matched to the game's) with the same automatic anchor (the
-game's mid grey to 0.18), the same starting contrast (the game's slope there) and the same target
-gamut, but without the match of the shadows to the game's luminance below mid grey: PsychoV30's
-own shadows. It reaches the composite in `bb_hdr2b.w` (1 plus one; 0 not set or 1 for
-PsychoV30, which stays exactly as before). The renderer otherwise treats it as PsychoV30 (scene).
-
-With PsychoV30, the Picture section no longer shows Brightness, Contrast, Saturation and Bloom:
-they duplicated the HDR grading (Exposure, Contrast, Saturation, Bloom) and both applied. The
-engine leaves the game's own values as drawn in this mode (also when set in the game's PC Colour
-menu); Hue, Fog, Vignette, ambient occlusion and shadow distance stay.
-
-Paper white defaults to 203 nits in the engine and launcher. Explicit values already saved in
-`bbport.ini` are preserved; change an existing 200-nit setting to 203 once if desired.
-Paper white and peak brightness have editable numeric values beside their sliders: type a
-value and press Enter or leave the field to apply it. Escape restores the current slider value.
-The launcher hides Highlight boost and UI colour for PsychoV30 because they do not affect this
-mode. HUD brightness remains available. Switching back to Native/Expand restores applicable rows.
-Gamma 2.2 is fixed on, and HUD brightness is relative to paper white. The final HDR pass
-(`hdr_output.frag`) sets every grading field it shares with bbport's final pass to a neutral
-value, so a tone mapper other than PsychoV30 (scene) cannot read uninitialized values.
-
-## Rendering contract
-
-- PsychoV30 runs in the composite on scene-linear color. It retains the Bloodborne mid-grey
-  anchor and the existing Vanilla-shadow match. The LUT uses max-channel normalization.
-- The post-composite chain, UI, display redirection and presentation intermediates retain
-  values above white in RGBA16F. Temporal reconstruction decodes to linear light and re-encodes.
-- This mode bypasses Lantern's native gain map and expansion. The final pass converts to HDR10
-  or scRGB, with the original mode 5 peak and black-floor behavior.
-- A pre-HUD snapshot belongs to its display buffer and follows that frame through presentation.
-- The legacy Native/Expand paths retain their original settings and formats.
-
-Lantern's user-data push constants remain intact. Mode 5 adds HDR parameters after the original
-128 bytes and requires at least **176 bytes** of Vulkan push-constant capacity. A startup check
-reports the requirement on unsupported GPUs; Native/Expand use their original 128-byte range.
-Lantern's point-sampler fallback to an 8-bit guest image is disabled in mode 5 to avoid clipping
-HDR values. This may affect the appearance/cost of some effects at reduced presets. Composite
-pipelines with an HDR companion compile together; other pipeline compilation remains asynchronous.
-PsychoV30 uses a separate `-psychov30-<tag>` shader/driver cache (in `%APPDATA%\shadPS4\cache`),
-where the tag is a hash of bbport's replacement shaders: the cache stores them already swapped in,
-so a build with other versions of them starts a new cache instead of loading stale ones (a cache
-from the first build of this port gave a black screen). Cached composites rebuild their HDR
-companion when loaded, so restarting does not drop the HDR pass.
-
-The display copy reads its brightness table as a 1D array: Lantern's recompiler keeps 1D image
-types, unlike shadPS4 0.20.1 (bbport), which binds it as a 2D array view. The 2D array version
-read 0 there and the whole frame was black.
+- Lantern's push constants are kept; mode 5 adds its HDR parameters after the original 128
+  bytes and needs **176 bytes** of Vulkan push constants (checked at startup). In the composite,
+  `bb_hdr2a` holds peak, exposure, highlights and shadows, `bb_hdr2b` contrast, saturation, the
+  gamut with the tone mapper, and the two compressions (see the shader for the encoding).
+- Lantern's point-sampler fallback to an 8-bit guest image is disabled in mode 5, so HDR values
+  are not clipped; this may change some effects at reduced presets. Composite pipelines with an
+  HDR companion compile together.
+- PsychoV30 uses its own shader cache, `CUSA03173-psychov30-<tag>` in `%APPDATA%\shadPS4\cache`.
+  The tag is a hash of the replacement shaders, so a build with other shaders starts a new cache
+  instead of loading stale ones (a stale cache gave a black screen in the first build).
+- The display copy reads its brightness table as a 1D array: Lantern's recompiler keeps 1D
+  images, unlike shadPS4 0.20.1. Reading it as a 2D array gave 0 and a black frame.
+- Peak detection uses DXGI (`IDXGIOutput6::GetDesc1` MaxLuminance), in the engine for the game's
+  display and in the launcher for the monitor chosen there. A value saved in `bbport.ini` wins.
+- With a file from before the presets, its settings become Preset #1.
 
 ## Validation still required
 
-Test dark interiors, fog, fire, saturated blue lights, menus, loading transitions and camera
-movement. Inspect HUD brightness, clipping, color order, borders and temporal stability. Capture
-repeated JXR pairs for comparison with the reference mod; those captures are not in this repo.
-No FPS or visual-quality improvement is claimed before those measurements.
+- Dark interiors, fog, fire, saturated blue lights, menus, loading transitions and camera
+  movement: HUD brightness, clipping, color order, borders and temporal stability.
+- PsychoV-30 against Hybrid in dark interiors and fog.
+- Compression 0.5 / 2 / auto on lanterns and fire; Gamut Compression 0 with Saturation 100.
+- Target gamut BT.2020 against BT.709 on saturated lights, with probe 6, with and without an
+  upscaler.
+- Native resolution / upscaler off, DLAA, then DLSS Quality, sharpening off, with the same camera
+  and settings. Repeated JXR captures against the reference mod (not in this repo).
 
-- Compare Target gamut BT.2020 and BT.709 on saturated lights (lanterns, fire, blue lights);
-  with probe 6, check where colors outside BT.709 reach the final pass, with and without an
-  upscaler (DLSS / FSR / TAA reconstruct in BT.2020 primaries).
-- Compare PsychoV30 Matched and PsychoV30 Pure in dark interiors and in fog.
+No FPS or image-quality improvement is claimed before those measurements.
 
 ## Sources and licenses
 
-Lantern's engine and the combined port are GPL-3.0-or-later. Preserve the upstream package's
-licenses when installing the overlay. The PsychoV30 port retains its RenoDX MIT notices; the
-shader variant data and integration retain their bbport/shadPS4 notices. No game data is included.
-The package includes `licenses/RenoDX-MIT.txt` with the upstream MIT license and copyright
-notices. Selecting PsychoV30 also displays its RenoDX attribution in the launcher and game menu.
-
+Lantern's engine and the combined port are GPL-3.0-or-later; keep the upstream package's licenses
+when installing. The PsychoV30 port keeps its RenoDX MIT notices
+(`licenses/RenoDX-MIT.txt`); the shader variants and integration keep their bbport / shadPS4
+notices. No game data is included. Selecting PsychoV30 shows its RenoDX attribution in the
+launcher and the game menu.
