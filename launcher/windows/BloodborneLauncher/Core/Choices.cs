@@ -168,6 +168,12 @@
                 "PsychoV30 — RenoDX · © 2026 Carlos Lopez · MIT License. GLSL adaptation for bbport. github.com/clshortfuse/renodx"),
         };
 
+        /// <summary>hdr_gamut: the color volume PsychoV30 fits the picture into (its gamut_compression_mode).</summary>
+        public static readonly Choice[] HdrGamut =
+        {
+            new("BT.2020 (default)", "bt2020"), new("BT.709", "bt709"),
+        };
+
         public static readonly Choice[] HdrBoost =
         {
             new("Off", "0"), new("Low (default)", "0.25"), new("Medium", "0.5"), new("High", "1"),

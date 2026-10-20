@@ -1,5 +1,5 @@
 diff --git a/launcher/windows/BloodborneLauncher/Core/Choices.cs b/launcher/windows/BloodborneLauncher/Core/Choices.cs
-index acabd6b..3cb5f37 100644
+index acabd6b..9ee58e1 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Choices.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Choices.cs
 @@ -139,7 +139,7 @@
@@ -11,7 +11,7 @@ index acabd6b..3cb5f37 100644
              new("250 nits", "250"), new("300 nits", "300"), new("400 nits", "400"),
          };
  
-@@ -163,7 +163,9 @@
+@@ -163,7 +163,15 @@
  
          public static readonly Choice[] HdrMode =
          {
@@ -19,6 +19,12 @@ index acabd6b..3cb5f37 100644
 +            new("Native", "native"), new("Expanded", "expand"),
 +            new("PsychoV30 (16-bit, restart)", "psychov30",
 +                "PsychoV30 — RenoDX · © 2026 Carlos Lopez · MIT License. GLSL adaptation for bbport. github.com/clshortfuse/renodx"),
++        };
++
++        /// <summary>hdr_gamut: the color volume PsychoV30 fits the picture into (its gamut_compression_mode).</summary>
++        public static readonly Choice[] HdrGamut =
++        {
++            new("BT.2020 (default)", "bt2020"), new("BT.709", "bt709"),
          };
  
          public static readonly Choice[] HdrBoost =
@@ -211,16 +217,17 @@ index 4d0e497..e41efb9 100644
                  </TextBlock>
  
 diff --git a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
-index 1539827..c8b98ac 100644
+index 1539827..20a4d79 100644
 --- a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 +++ b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
-@@ -10,8 +10,28 @@ namespace BloodborneLauncher.Views
+@@ -10,8 +10,31 @@ namespace BloodborneLauncher.Views
      {
          private readonly ComboBox _monitor = new() { Width = 360, VerticalAlignment = VerticalAlignment.Center };
          private bool _refreshingMonitors;
 +        private FrameworkElement? _hdrBoostRow;
 +        private FrameworkElement? _hdrBrightnessRow;
 +        private FrameworkElement? _hdrColourRow;
++        private FrameworkElement? _hdrGamutRow;
  
 -        public override void OnShown() => RefreshMonitors();
 +        public override void OnShown()
@@ -240,11 +247,13 @@ index 1539827..c8b98ac 100644
 +                _hdrBrightnessRow.Visibility = native || psycho ? Visibility.Visible : Visibility.Collapsed;
 +            if (_hdrColourRow != null)
 +                _hdrColourRow.Visibility = native ? Visibility.Visible : Visibility.Collapsed;
++            if (_hdrGamutRow != null)
++                _hdrGamutRow.Visibility = psycho ? Visibility.Visible : Visibility.Collapsed;
 +        }
  
          private void RefreshMonitors()
          {
-@@ -71,22 +91,26 @@ namespace BloodborneLauncher.Views
+@@ -71,22 +94,30 @@ namespace BloodborneLauncher.Views
                      : "This display shows no HDR";
              IniToggle(SymbolRegular.Hdr24, "HDR output", hdrHint, "hdr");
              ComboRow(SymbolRegular.Lightbulb24, "HDR source",
@@ -275,6 +284,10 @@ index 1539827..c8b98ac 100644
              ComboRow(SymbolRegular.Color24, "UI colour", "Native source only: Vivid shows the HUD and menus with the colours a wide-gamut monitor gives SDR; Exact keeps sRGB's",
                  Choices.HdrUiColor, () => Ini.Get("hdr_ui_color", "1"), v => Ini.Set("hdr_ui_color", v));
 +            _hdrColourRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
++            ComboRow(SymbolRegular.Color24, "Target gamut",
++                "PsychoV30 only: the color volume it fits the picture into. BT.2020 is RenoDX's HDR default; compare with BT.709 on saturated lights (lanterns, fire, blue lights). Also in the in-game menu, live",
++                Choices.HdrGamut, () => Ini.Get("hdr_gamut", "bt2020"), v => Ini.Set("hdr_gamut", v));
++            _hdrGamutRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
 +            RefreshHdrRows();
  
              Group("Frame rate");

@@ -47,14 +47,24 @@ The in-game menu (Insert / L3+R3), HDR mode PsychoV30, is laid out as a RenoDX m
 bbport's: **Preset** (Off = the game's own look, #1 to #3 = the player's own settings, each saved
 in `bbport.ini` as `hdr_preset1..3`; a file from before the presets becomes Preset #1) and
 **Settings Mode** (Simple / Intermediate / Advanced) as named sliders, then Tone Mapping (Tone
-Mapper Vanilla / PsychoV30, Peak Brightness, Game Brightness, UI Brightness), Color Grading
+Mapper Vanilla / PsychoV30, Target gamut BT.2020 / BT.709, Peak Brightness, Game Brightness, UI
+Brightness), Color Grading
 (Exposure, Highlights, Shadows, Contrast, Saturation; Intermediate: Color Grade Strength, Black
 Floor), Effects (Bloom), Reset all, and in Advanced a Debug section (Compare, 16-bit probe, chain
-trace). Every setting has RenoDX's reset button. Peak Brightness defaults to the peak Windows
+trace). Every setting but Preset has RenoDX's reset button. Peak Brightness defaults to the peak Windows
 reports for the display (DXGI MaxLuminance, as RenoDX), Game Brightness to RenoDX's reference
 white for it (BT.2100 HLG, at most 203 nits); a value in `bbport.ini` is kept. F9 cycles HDR /
 SDR reference / approximate split. Changing into or out of the 16-bit mode requires a restart;
 its grading and reference switches are live.
+
+Target gamut (`hdr_gamut` in `bbport.ini`, `bt2020` or `bt709`; live, kept per preset, also on
+the launcher's Display page when PsychoV30 is selected) is PsychoV30's gamut_compression_mode, the
+color volume it fits the picture into: BT.2020 by default, as RenoDX's HDR mods, or BT.709 (the
+earlier builds of this port). It reaches the composite in `bb_hdr2b.z` (the value plus one, 0 not
+set), and both PsychoV30 calls of the shadow match use it. The 16-bit chain after the composite
+carries gamma-encoded BT.709: the channels a BT.2020 color has below 0 there are clipped right
+after PsychoV30, so BT.2020 here is PsychoV30's BT.2020 compression followed by that clip, not a
+wide-gamut output.
 
 With PsychoV30, the Picture section no longer shows Brightness, Contrast, Saturation and Bloom:
 they duplicated the HDR grading (Exposure, Contrast, Saturation, Bloom) and both applied. The
@@ -104,6 +114,8 @@ Test dark interiors, fog, fire, saturated blue lights, menus, loading transition
 movement. Inspect HUD brightness, clipping, color order, borders and temporal stability. Capture
 repeated JXR pairs for comparison with the reference mod; those captures are not in this repo.
 No FPS or visual-quality improvement is claimed before those measurements.
+
+- Compare Target gamut BT.2020 and BT.709 on saturated lights (lanterns, fire, blue lights).
 
 ## Sources and licenses
 
