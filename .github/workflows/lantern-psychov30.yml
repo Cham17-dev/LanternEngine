@@ -129,15 +129,28 @@ jobs:
           -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
           -o launcher-port
+      - name: Verify launcher paths
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory launcher-paths-check | Out-Null
+          Copy-Item ports/lantern/launcher_paths_check.cs launcher-paths-check/Program.cs
+          Copy-Item launcher/windows/BloodborneLauncher/Core/Paths.cs launcher-paths-check/Paths.cs
+          Copy-Item launcher/windows/Shared/SourceStamp.cs launcher-paths-check/SourceStamp.cs
+          '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup></Project>' | Set-Content launcher-paths-check/Check.csproj
+          dotnet run --project launcher-paths-check/Check.csproj
       - name: Package engine overlay and runtime DLLs
         shell: msys2 {0}
         run: |
           export BB_CLANG_BIN="$(cygpath -w /clang64/bin)"
           python ports/lantern/package_engine.py engine-src stage launcher-port
+      - name: Assemble complete matching runtime
+        run: python ports/lantern/distribution.py engine-src stage distribution runtime-downloads
+      - name: Smoke check shipped preparation runtime
+        run: python ports/lantern/package_check.py distribution
       - uses: actions/upload-artifact@v4
         with:
-          name: lantern-psychov30-overlay
-          path: stage/
+          name: lantern-psychov30-package
+          path: distribution/
       - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v4

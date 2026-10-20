@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 
 namespace BloodborneLauncher.Core
 {
@@ -224,7 +224,7 @@ namespace BloodborneLauncher.Core
         {
             yield return ("SDL_JOYSTICK_HIDAPI_PS3", "1");
             yield return ("SDL_JOYSTICK_HIDAPI_PS3_SIXAXIS_DRIVER", "1");
-            var mappings = Path.Combine(Paths.PortDir, "gamecontrollerdb.txt");
+            var mappings = Path.Combine(Paths.EngineDir, "gamecontrollerdb.txt");
             if (File.Exists(mappings)) yield return ("SDL_GAMECONTROLLERCONFIG_FILE", mappings);
         }
     }

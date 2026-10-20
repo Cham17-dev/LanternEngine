@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows.Controls;
 using BloodborneLauncher.Core;
 using Wpf.Ui.Controls;
@@ -143,7 +143,7 @@ namespace BloodborneLauncher.Views
             var value = Ini.Get("upscaler");
             string? hint = value switch
             {
-                "fsr4" => Directory.Exists(Path.Combine(Paths.PortDir, "fsr4_shaders"))
+                "fsr4" => Directory.Exists(Path.Combine(Paths.EngineDir, "fsr4_shaders"))
                     ? "Assets found. GPUs without the needed shader features fall back to FSR 3.1"
                     : "fsr4_shaders is missing from the port folder: the game falls back to FSR 3.1",
                 "fsr411" when Fsr4VkFound() =>
@@ -171,13 +171,13 @@ namespace BloodborneLauncher.Views
 
         /// <summary>The fsr4vk provider the package ships (FSR 4.1.1 on any GPU, vk_fsr4vk.cpp).</summary>
         private static bool Fsr4VkFound() =>
-            File.Exists(Path.Combine(Paths.PortDir, "fsr4vk", "amd_fidelityfx_upscaler_vk.dll"));
+            File.Exists(Path.Combine(Paths.EngineDir, "fsr4vk", "amd_fidelityfx_upscaler_vk.dll"));
 
         private static string Fsr411Dir()
         {
             var env = Environment.GetEnvironmentVariable("BB_FSR411_DIR");
             if (!string.IsNullOrEmpty(env)) return env;
-            var local = Path.Combine(Paths.PortDir, "fsr4_411");
+            var local = Path.Combine(Paths.EngineDir, "fsr4_411");
             return Directory.Exists(local) ? local : Path.Combine(Paths.DataDir, "fsr4_411");
         }
 

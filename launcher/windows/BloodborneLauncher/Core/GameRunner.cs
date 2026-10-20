@@ -48,15 +48,19 @@ namespace BloodborneLauncher.Core
                 var python = File.Exists(Paths.Python) ? Paths.Python : "py";
                 info = new ProcessStartInfo(python);
                 if (python == "py") info.ArgumentList.Add("-3");
-                info.ArgumentList.Add(Path.Combine(Paths.PortDir, "scripts", "run_windows.py"));
+                info.ArgumentList.Add(Path.Combine(Paths.EngineDir, "scripts", "run_windows.py"));
                 info.ArgumentList.Add("--game-dir");
                 info.ArgumentList.Add(GameEnvironment.GameDir(s));
             }
 
-            info.WorkingDirectory = Paths.IsPortDir(Paths.PortDir) ? Paths.PortDir : Environment.CurrentDirectory;
+            info.WorkingDirectory = Paths.IsPortDir(Paths.PortDir) ? Paths.EngineDir : Environment.CurrentDirectory;
             foreach (var (key, value) in GameEnvironment.Build(s))
                 info.Environment[key] = value;
             info.Environment["PYTHONUNBUFFERED"] = "1";
+            info.Environment["PYTHONUTF8"] = "1";
+            info.Environment["PYTHONIOENCODING"] = "utf-8";
+            // Prepared game files live with user data, whereas the custom engine is in engine/out.
+            info.Environment["BB_PROBE"] = Path.Combine(Paths.BinariesDir, "bb-probe.exe");
             info.UseShellExecute = false;
             info.CreateNoWindow = true;
             info.RedirectStandardOutput = true;
@@ -69,7 +73,8 @@ namespace BloodborneLauncher.Core
                 var process = new Process { StartInfo = info, EnableRaisingEvents = true };
                 OpenLog();
                 // The first line of every log, the Output page's export included: which build ran.
-                Emit($"Bloodborne Launcher {Updater.CurrentLabel}, engine {Updater.LocalEngine() ?? "unknown"}, {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                Emit($"Lantern Engine + PsychoV30 {Updater.CurrentLabel}, engine {Updater.LocalEngine() ?? "unknown"}, {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                Emit($"HDR engine: {Path.Combine(Paths.BinariesDir, "bb-probe.exe")}");
                 process.OutputDataReceived += (_, e) => { if (e.Data != null) Emit(e.Data); };
                 process.ErrorDataReceived += (_, e) => { if (e.Data != null) Emit(e.Data); };
                 process.Exited += (_, _) =>

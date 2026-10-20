@@ -7147,6 +7147,37 @@ index cee7291..c2c103d 100644
      s32 GetGpuId() { static const auto value = s32(Number("BB_GPU_ID", -1)); return value; }
      u32 GetInternalScreenWidth() { static const auto value = u32(Number("BB_INTERNAL_WIDTH", 1920)); return value; }
      u32 GetInternalScreenHeight() { static const auto value = u32(Number("BB_INTERNAL_HEIGHT", 1080)); return value; }
+diff --git a/scripts/run_windows.py b/scripts/run_windows.py
+index 7091ebf..205ccd0 100644
+--- a/scripts/run_windows.py
++++ b/scripts/run_windows.py
+@@ -300,7 +300,7 @@ def main():
+                 from engine_assets import prepare_menu_assets
+                 try:
+                     menus = prepare_menu_assets(merged, out / 'eboot.elf', data / 'engine-assets',
+-                                                out / 'bb-engine-assets.exe', rebirth=settings_value(config, 'rebirth') == '1')
++                                                ROOT / 'out/bb-engine-assets.exe', rebirth=settings_value(config, 'rebirth') == '1')
+                     os.environ['BB_PC_MENU_ASSETS'] = str(menus)
+                     print(f'Engine: native PC menus prepared locally: {menus}', flush=True)
+                     if settings_value(config, 'rebirth') == '1':
+@@ -330,7 +330,7 @@ def main():
+         if scaled_output:
+             live = os.environ.get('BB_LIVE_RES') or settings_value(config, 'live_resolution') or '0'
+             if live == 'auto':
+-                caps = out / 'bb-gpu-capabilities.exe'
++                caps = ROOT / 'out/bb-gpu-capabilities.exe'
+                 live = run([caps, '--live-resolution'], capture=True, check=False) or '0'
+             live = '1' if live == '1' else '0'
+         if live == '1':
+@@ -369,7 +369,7 @@ def main():
+         if heaps and 'BB_DMEM_MB' not in os.environ:
+             os.environ['BB_DMEM_MB'] = '9152'
+             print("Patches: the game's heaps are enlarged; direct memory 9152 MiB", flush=True)
+-        probe = ROOT / os.environ.get('BB_PROBE', out / 'bb-probe.exe')
++        probe = Path(os.environ.get('BB_PROBE', ROOT / 'out/bb-probe.exe'))
+         command = [probe, out / 'boot-linked.bin', '--content-profile', out / 'content.bin',
+                    '--patches', out / 'patches.bin', '--app0', merged,
+                    '--user', os.environ.get('BB_USER_DIR', data / 'user'),
 diff --git a/tests/test_settings.cpp b/tests/test_settings.cpp
 index 8501ba0..dda080a 100644
 --- a/tests/test_settings.cpp

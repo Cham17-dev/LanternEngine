@@ -15,18 +15,33 @@ that stock build was verified during the port. A successful build is not an in-g
 
 ## Install for testing
 
-1. Make a separate copy of the matching Lantern Windows installation. Keep the original.
-2. Extract the `lantern-psychov30-overlay` artifact into that separate copy, retaining `out/`.
-3. Start the supplied `Bloodborne Launcher.exe`. It uses its own launcher settings folder
-   (`bbport-launcher-psychov30`) and has update checks off by default. Select the copied engine
-   folder and your existing game dump. Do not update this experimental engine from the upstream
-   launcher; that would replace it with the stock engine.
-4. Enable Windows HDR and HDR output. Select `PsychoV30 (16-bit, restart)` as HDR source, then
-   restart the game. The in-game HDR page also offers this mode. Paper white and peak use
-   Lantern's existing settings. Do not replace your complete INI with the example INI; the
-   example lists only HDR settings.
+1. Download `lantern-psychov30-package` and extract it into a **new, empty folder**.
+   This is now a complete package, rather than an overlay for an upstream installation.
+   Do not merge it into a newer Lantern release or reuse the previous overlay.
+2. Start **Lantern Engine.exe** from that new folder. Its title is
+   **Lantern Engine + PsychoV30**. Select your existing game dump (the folder with eboot.bin).
+   Game data is not included or copied into the package.
+3. Enable Windows HDR, then HDR output in the launcher. The HDR source defaults to
+   `PsychoV30 (16-bit, restart)`. Start the game. Restart the game after changing HDR source.
+4. Existing saves stay in the old installation. To use them here, select your existing user/save
+   folder under the launcher's profile/settings controls, or copy the saves with the game closed.
+   Keep a backup. Do not copy the old engine, executables or complete INI into this package.
 5. Compare native resolution/upscaler off, DLAA, then DLSS Quality. Keep sharpening off for the
    initial comparison. Use the same camera, peak, paper white and grading settings.
+
+The launcher uses its own `bbport-launcher-psychov30` settings folder. Updates point at this
+fork, rather than installing stock upstream releases over PsychoV30. The log prints the full
+path of the HDR engine. `Bloodborne.exe` is the packaged shortcut to this launcher.
+
+The full package keeps binaries and supporting resources under `engine/`, with player data
+and bbport.ini at the root. It includes embedded Python 3.12.10 and the preparation scripts
+from the same public source snapshot as the compiled engine. The official beta 9.3 archive
+already uses a native start executable and does not contain those scripts or Python. Its
+released engine differs from that public source snapshot; only runtime resources, DLLs,
+notices and defaults are reused, with SHA-256 checks. Our build supplies the engine, helper
+programs, launcher and preparation scripts. This is not a port of all later upstream changes.
+CI checks both folder layouts and runs the shipped Python through imports and game detection;
+a successful smoke check still does not validate an actual game session.
 
 The in-game mode provides Vanilla and PsychoV30, Exposure, Highlights, Shadows, Contrast,
 Saturation, Bloom, Color Grade Strength, Black Floor and HUD brightness. Neutral values are

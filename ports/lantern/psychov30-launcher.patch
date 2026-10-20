@@ -22,6 +22,61 @@ index acabd6b..3cb5f37 100644
          };
  
          public static readonly Choice[] HdrBoost =
+diff --git a/launcher/windows/BloodborneLauncher/Core/GameEnvironment.cs b/launcher/windows/BloodborneLauncher/Core/GameEnvironment.cs
+index 41cbda8..61d1595 100644
+--- a/launcher/windows/BloodborneLauncher/Core/GameEnvironment.cs
++++ b/launcher/windows/BloodborneLauncher/Core/GameEnvironment.cs
+@@ -1,4 +1,4 @@
+-﻿using System.IO;
++using System.IO;
+ 
+ namespace BloodborneLauncher.Core
+ {
+@@ -224,7 +224,7 @@ namespace BloodborneLauncher.Core
+         {
+             yield return ("SDL_JOYSTICK_HIDAPI_PS3", "1");
+             yield return ("SDL_JOYSTICK_HIDAPI_PS3_SIXAXIS_DRIVER", "1");
+-            var mappings = Path.Combine(Paths.PortDir, "gamecontrollerdb.txt");
++            var mappings = Path.Combine(Paths.EngineDir, "gamecontrollerdb.txt");
+             if (File.Exists(mappings)) yield return ("SDL_GAMECONTROLLERCONFIG_FILE", mappings);
+         }
+     }
+diff --git a/launcher/windows/BloodborneLauncher/Core/GameRunner.cs b/launcher/windows/BloodborneLauncher/Core/GameRunner.cs
+index 408d0ca..ee5e849 100644
+--- a/launcher/windows/BloodborneLauncher/Core/GameRunner.cs
++++ b/launcher/windows/BloodborneLauncher/Core/GameRunner.cs
+@@ -48,15 +48,19 @@ namespace BloodborneLauncher.Core
+                 var python = File.Exists(Paths.Python) ? Paths.Python : "py";
+                 info = new ProcessStartInfo(python);
+                 if (python == "py") info.ArgumentList.Add("-3");
+-                info.ArgumentList.Add(Path.Combine(Paths.PortDir, "scripts", "run_windows.py"));
++                info.ArgumentList.Add(Path.Combine(Paths.EngineDir, "scripts", "run_windows.py"));
+                 info.ArgumentList.Add("--game-dir");
+                 info.ArgumentList.Add(GameEnvironment.GameDir(s));
+             }
+ 
+-            info.WorkingDirectory = Paths.IsPortDir(Paths.PortDir) ? Paths.PortDir : Environment.CurrentDirectory;
++            info.WorkingDirectory = Paths.IsPortDir(Paths.PortDir) ? Paths.EngineDir : Environment.CurrentDirectory;
+             foreach (var (key, value) in GameEnvironment.Build(s))
+                 info.Environment[key] = value;
+             info.Environment["PYTHONUNBUFFERED"] = "1";
++            info.Environment["PYTHONUTF8"] = "1";
++            info.Environment["PYTHONIOENCODING"] = "utf-8";
++            // Prepared game files live with user data, whereas the custom engine is in engine/out.
++            info.Environment["BB_PROBE"] = Path.Combine(Paths.BinariesDir, "bb-probe.exe");
+             info.UseShellExecute = false;
+             info.CreateNoWindow = true;
+             info.RedirectStandardOutput = true;
+@@ -69,7 +73,8 @@ namespace BloodborneLauncher.Core
+                 var process = new Process { StartInfo = info, EnableRaisingEvents = true };
+                 OpenLog();
+                 // The first line of every log, the Output page's export included: which build ran.
+-                Emit($"Bloodborne Launcher {Updater.CurrentLabel}, engine {Updater.LocalEngine() ?? "unknown"}, {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
++                Emit($"Lantern Engine + PsychoV30 {Updater.CurrentLabel}, engine {Updater.LocalEngine() ?? "unknown"}, {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
++                Emit($"HDR engine: {Path.Combine(Paths.BinariesDir, "bb-probe.exe")}");
+                 process.OutputDataReceived += (_, e) => { if (e.Data != null) Emit(e.Data); };
+                 process.ErrorDataReceived += (_, e) => { if (e.Data != null) Emit(e.Data); };
+                 process.Exited += (_, _) =>
 diff --git a/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs b/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
 index bffc31d..82755db 100644
 --- a/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
@@ -35,11 +90,43 @@ index bffc31d..82755db 100644
              ["save_backups"] = true,
              ["safe_mode_next"] = false,
              ["memory_check_off"] = false,
+diff --git a/launcher/windows/BloodborneLauncher/Core/Mods.cs b/launcher/windows/BloodborneLauncher/Core/Mods.cs
+index 4161f1e..4451baa 100644
+--- a/launcher/windows/BloodborneLauncher/Core/Mods.cs
++++ b/launcher/windows/BloodborneLauncher/Core/Mods.cs
+@@ -158,7 +158,7 @@ namespace BloodborneLauncher.Core
+         {
+             try
+             {
+-                var xml = XDocument.Load(Path.Combine(Paths.PortDir, "patches", "Bloodborne.xml"));
++                var xml = XDocument.Load(Path.Combine(Paths.EngineDir, "patches", "Bloodborne.xml"));
+                 var template = xml.Descendants("Metadata").FirstOrDefault(m => (string?)m.Attribute("Name") == ResolutionTemplate);
+                 return template?.Descendants("Line").Select(Range).Where(r => r.HasValue).Select(r => r!.Value).ToList() ?? new();
+             }
+@@ -215,7 +215,7 @@ namespace BloodborneLauncher.Core
+             if (!Directory.Exists(directory))
+                 return found;
+ 
+-            var builtIn = Path.GetFullPath(Path.Combine(Paths.PortDir, "patches", "Bloodborne.xml"));
++            var builtIn = Path.GetFullPath(Path.Combine(Paths.EngineDir, "patches", "Bloodborne.xml"));
+             var footprint = ResolutionFootprint();
+             // The built-in file first (it lives in the package's patches folder; updates replace it):
+             // its optional patches, off until switched on here.
 diff --git a/launcher/windows/BloodborneLauncher/Core/Paths.cs b/launcher/windows/BloodborneLauncher/Core/Paths.cs
-index 73c3cf4..e7b2df4 100644
+index 73c3cf4..df45240 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Paths.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Paths.cs
-@@ -12,7 +12,7 @@ namespace BloodborneLauncher.Core
+@@ -4,15 +4,15 @@ using BloodborneLauncher.Build;
+ namespace BloodborneLauncher.Core
+ {
+     /// <summary>
+-    /// Where things live. The engine folder holds out\bb-probe.exe, scripts\run_windows.py and a
++    /// Where things live. The package holds the runtime under engine\: out\bb-probe.exe, scripts\run_windows.py and a
+     /// bundled Python; bbport.ini, mods.json and patches.json live in its data folder (BB_DATA_DIR,
+     /// by default the engine folder itself), as run_windows.py expects them.
+-    /// Launcher settings are per-user, in %APPDATA%\bbport-launcher\settings.json.
++    /// Launcher settings are per-user, in %APPDATA%\bbport-launcher-psychov30\settings.json.
+     /// </summary>
      public static class Paths
      {
          public static readonly string ConfigDir = Path.Combine(
@@ -47,6 +134,81 @@ index 73c3cf4..e7b2df4 100644
 +            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "bbport-launcher-psychov30");
  
          public static readonly string ConfigFile = Path.Combine(ConfigDir, "settings.json");
+ 
+@@ -28,15 +28,21 @@ namespace BloodborneLauncher.Core
+                 : Path.Combine(DataDir, "bbport.ini");
+ 
+         /// <summary>The engine and its DLLs.</summary>
+-        public static string BinariesDir => Path.Combine(PortDir, "out");
++        public static string EngineDirOf(string dir) =>
++            File.Exists(Path.Combine(dir, "engine", "out", "bb-probe.exe"))
++                ? Path.Combine(dir, "engine") : dir;
++
++        public static string EngineDir => EngineDirOf(PortDir);
++
++        public static string BinariesDir => Path.Combine(EngineDir, "out");
+ 
+         /// <summary>The Bloodborne PC engine: scripts\run_windows.py and out\bb-probe.exe.</summary>
+         public static bool IsPortDir(string? dir) =>
+             !string.IsNullOrWhiteSpace(dir) &&
+-            File.Exists(Path.Combine(dir, "scripts", "run_windows.py")) &&
+-            File.Exists(Path.Combine(dir, "out", "bb-probe.exe"));
++            File.Exists(Path.Combine(EngineDirOf(dir), "scripts", "run_windows.py")) &&
++            File.Exists(Path.Combine(EngineDirOf(dir), "out", "bb-probe.exe"));
+ 
+-        public static string Python => Path.Combine(PortDir, "tools", "python", "python.exe");
++        public static string Python => Path.Combine(EngineDir, "tools", "python", "python.exe");
+ 
+         /// <summary>The port next to the game folder (its usual layout: &lt;port&gt;\CUSA03173).</summary>
+         public static string? PortBesideGame(string gameDir)
+@@ -63,7 +69,7 @@ namespace BloodborneLauncher.Core
+                 return Directory.GetDirectories(parent)
+                     .Where(IsPortDir)
+                     .OrderByDescending(dir => new[] { "bin", "out" }
+-                        .Select(b => new FileInfo(Path.Combine(dir, b, "bb-probe.exe")))
++                        .Select(b => new FileInfo(Path.Combine(EngineDirOf(dir), b, "bb-probe.exe")))
+                         .Where(f => f.Exists).Select(f => f.LastWriteTimeUtc).DefaultIfEmpty(DateTime.MinValue).Max())
+                     .FirstOrDefault();
+             }
+diff --git a/launcher/windows/BloodborneLauncher/Core/Updater.cs b/launcher/windows/BloodborneLauncher/Core/Updater.cs
+index d9a42d4..ecdfede 100644
+--- a/launcher/windows/BloodborneLauncher/Core/Updater.cs
++++ b/launcher/windows/BloodborneLauncher/Core/Updater.cs
+@@ -22,11 +22,11 @@ namespace BloodborneLauncher.Core
+     /// </summary>
+     public static class Updater
+     {
+-        public const string Repository = "Awakenchan/BloodBorneButPc";
++        public const string Repository = "Cham17-dev/LanternEngine";
+         public static string ReleasesPage => $"https://github.com/{Repository}/releases";
+ 
+         /// <summary>The engine build this launcher is made for (package.json "engine").</summary>
+-        public const string EngineId = "bbhost-0.4.0-fps49";
++        public const string EngineId = "lantern-6c2fbf48-psychov30-v1";
+ 
+         private const string ExeName = "Bloodborne Launcher.exe";
+         private const string PackageFile = "package.json";
+diff --git a/launcher/windows/BloodborneLauncher/MainWindow.xaml b/launcher/windows/BloodborneLauncher/MainWindow.xaml
+index 4d0e497..e41efb9 100644
+--- a/launcher/windows/BloodborneLauncher/MainWindow.xaml
++++ b/launcher/windows/BloodborneLauncher/MainWindow.xaml
+@@ -4,7 +4,7 @@
+                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                  xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+                  xmlns:views="clr-namespace:BloodborneLauncher.Views"
+-                 Title="Bloodborne Launcher"
++                 Title="Lantern Engine + PsychoV30"
+                  Icon="app.ico"
+                  Height="780" Width="1040"
+                  MinHeight="560" MinWidth="820"
+@@ -195,7 +195,7 @@
+                 </StackPanel>
+ 
+                 <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" IsHitTestVisible="False">
+-                    <Run Text="Bloodborne Launcher" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
++                    <Run Text="Lantern Engine + PsychoV30" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                     <Run x:Name="TitlePage" Text="" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                 </TextBlock>
  
 diff --git a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 index 1539827..c8b98ac 100644
@@ -117,6 +279,41 @@ index 1539827..c8b98ac 100644
  
              Group("Frame rate");
              SettingCombo(SymbolRegular.Gauge24, "Frame rate", "30, 60, 90, 120 and 144 are the game's frame-rate patches for that rate; Uncapped uses the community uncapped patch", Choices.FpsModes, "fps_mode");
+diff --git a/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs b/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
+index 9feac0d..a3c4f0f 100644
+--- a/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
++++ b/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
+@@ -1,4 +1,4 @@
+-﻿using System.IO;
++using System.IO;
+ using System.Windows.Controls;
+ using BloodborneLauncher.Core;
+ using Wpf.Ui.Controls;
+@@ -143,7 +143,7 @@ namespace BloodborneLauncher.Views
+             var value = Ini.Get("upscaler");
+             string? hint = value switch
+             {
+-                "fsr4" => Directory.Exists(Path.Combine(Paths.PortDir, "fsr4_shaders"))
++                "fsr4" => Directory.Exists(Path.Combine(Paths.EngineDir, "fsr4_shaders"))
+                     ? "Assets found. GPUs without the needed shader features fall back to FSR 3.1"
+                     : "fsr4_shaders is missing from the port folder: the game falls back to FSR 3.1",
+                 "fsr411" when Fsr4VkFound() =>
+@@ -171,13 +171,13 @@ namespace BloodborneLauncher.Views
+ 
+         /// <summary>The fsr4vk provider the package ships (FSR 4.1.1 on any GPU, vk_fsr4vk.cpp).</summary>
+         private static bool Fsr4VkFound() =>
+-            File.Exists(Path.Combine(Paths.PortDir, "fsr4vk", "amd_fidelityfx_upscaler_vk.dll"));
++            File.Exists(Path.Combine(Paths.EngineDir, "fsr4vk", "amd_fidelityfx_upscaler_vk.dll"));
+ 
+         private static string Fsr411Dir()
+         {
+             var env = Environment.GetEnvironmentVariable("BB_FSR411_DIR");
+             if (!string.IsNullOrEmpty(env)) return env;
+-            var local = Path.Combine(Paths.PortDir, "fsr4_411");
++            var local = Path.Combine(Paths.EngineDir, "fsr4_411");
+             return Directory.Exists(local) ? local : Path.Combine(Paths.DataDir, "fsr4_411");
+         }
+ 
 diff --git a/launcher/windows/BloodborneLauncher/Views/LauncherPage.cs b/launcher/windows/BloodborneLauncher/Views/LauncherPage.cs
 index 36b0d24..dff3352 100644
 --- a/launcher/windows/BloodborneLauncher/Views/LauncherPage.cs

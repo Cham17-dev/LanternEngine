@@ -158,7 +158,7 @@ namespace BloodborneLauncher.Core
         {
             try
             {
-                var xml = XDocument.Load(Path.Combine(Paths.PortDir, "patches", "Bloodborne.xml"));
+                var xml = XDocument.Load(Path.Combine(Paths.EngineDir, "patches", "Bloodborne.xml"));
                 var template = xml.Descendants("Metadata").FirstOrDefault(m => (string?)m.Attribute("Name") == ResolutionTemplate);
                 return template?.Descendants("Line").Select(Range).Where(r => r.HasValue).Select(r => r!.Value).ToList() ?? new();
             }
@@ -215,7 +215,7 @@ namespace BloodborneLauncher.Core
             if (!Directory.Exists(directory))
                 return found;
 
-            var builtIn = Path.GetFullPath(Path.Combine(Paths.PortDir, "patches", "Bloodborne.xml"));
+            var builtIn = Path.GetFullPath(Path.Combine(Paths.EngineDir, "patches", "Bloodborne.xml"));
             var footprint = ResolutionFootprint();
             // The built-in file first (it lives in the package's patches folder; updates replace it):
             // its optional patches, off until switched on here.

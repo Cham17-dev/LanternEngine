@@ -4,10 +4,10 @@ using BloodborneLauncher.Build;
 namespace BloodborneLauncher.Core
 {
     /// <summary>
-    /// Where things live. The engine folder holds out\bb-probe.exe, scripts\run_windows.py and a
+    /// Where things live. The package holds the runtime under engine\: out\bb-probe.exe, scripts\run_windows.py and a
     /// bundled Python; bbport.ini, mods.json and patches.json live in its data folder (BB_DATA_DIR,
     /// by default the engine folder itself), as run_windows.py expects them.
-    /// Launcher settings are per-user, in %APPDATA%\bbport-launcher\settings.json.
+    /// Launcher settings are per-user, in %APPDATA%\bbport-launcher-psychov30\settings.json.
     /// </summary>
     public static class Paths
     {
@@ -28,15 +28,21 @@ namespace BloodborneLauncher.Core
                 : Path.Combine(DataDir, "bbport.ini");
 
         /// <summary>The engine and its DLLs.</summary>
-        public static string BinariesDir => Path.Combine(PortDir, "out");
+        public static string EngineDirOf(string dir) =>
+            File.Exists(Path.Combine(dir, "engine", "out", "bb-probe.exe"))
+                ? Path.Combine(dir, "engine") : dir;
+
+        public static string EngineDir => EngineDirOf(PortDir);
+
+        public static string BinariesDir => Path.Combine(EngineDir, "out");
 
         /// <summary>The Bloodborne PC engine: scripts\run_windows.py and out\bb-probe.exe.</summary>
         public static bool IsPortDir(string? dir) =>
             !string.IsNullOrWhiteSpace(dir) &&
-            File.Exists(Path.Combine(dir, "scripts", "run_windows.py")) &&
-            File.Exists(Path.Combine(dir, "out", "bb-probe.exe"));
+            File.Exists(Path.Combine(EngineDirOf(dir), "scripts", "run_windows.py")) &&
+            File.Exists(Path.Combine(EngineDirOf(dir), "out", "bb-probe.exe"));
 
-        public static string Python => Path.Combine(PortDir, "tools", "python", "python.exe");
+        public static string Python => Path.Combine(EngineDir, "tools", "python", "python.exe");
 
         /// <summary>The port next to the game folder (its usual layout: &lt;port&gt;\CUSA03173).</summary>
         public static string? PortBesideGame(string gameDir)
@@ -63,7 +69,7 @@ namespace BloodborneLauncher.Core
                 return Directory.GetDirectories(parent)
                     .Where(IsPortDir)
                     .OrderByDescending(dir => new[] { "bin", "out" }
-                        .Select(b => new FileInfo(Path.Combine(dir, b, "bb-probe.exe")))
+                        .Select(b => new FileInfo(Path.Combine(EngineDirOf(dir), b, "bb-probe.exe")))
                         .Where(f => f.Exists).Select(f => f.LastWriteTimeUtc).DefaultIfEmpty(DateTime.MinValue).Max())
                     .FirstOrDefault();
             }
