@@ -9,8 +9,9 @@ Pinned inputs:
   `8ecba9a4abdd54747e31d7fee54982e422b5f8e2` (`v0.4.0-darkizuku-preview.1`).
 - The mode 5/PsychoV30 implementation from Cham17-dev/bloodborne_pc `hdr` at `0dce9f4`.
 
-The Windows workflow first builds unmodified Lantern from those sources, then applies the HDR
-patch and builds again. A successful build is not an in-game validation.
+The Windows workflow reconstructs Lantern from those sources, applies the HDR patch, and builds
+the engine and launcher. Its manual `baseline_check` option also compiles stock Lantern first;
+that stock build was verified during the port. A successful build is not an in-game validation.
 
 ## Install for testing
 

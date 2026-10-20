@@ -3,8 +3,17 @@ name: Lantern PsychoV30 port
 on:
   push:
     branches: [lantern-psychov30]
-    paths: ['ports/lantern/**', '.github/workflows/lantern-psychov30.yml']
+    paths: ['ports/lantern/**', 'launcher/**', 'engine/**', '.github/workflows/lantern-psychov30.yml']
   workflow_dispatch:
+    inputs:
+      baseline_check:
+        description: Also compile the unmodified pinned Lantern baseline first
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -85,6 +94,7 @@ jobs:
             spirv-tools:p spirv-headers:p spirv-cross:p
             protobuf:p openssl:p zlib:p miniupnpc:p nlohmann-json:p
       - name: Build unmodified Lantern baseline
+        if: github.event_name == 'workflow_dispatch' && inputs.baseline_check
         shell: msys2 {0}
         working-directory: engine-src
         env:
