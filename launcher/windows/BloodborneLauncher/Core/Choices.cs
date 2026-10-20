@@ -171,7 +171,8 @@
         /// <summary>hdr_tonemapper with PsychoV30 (bbport_settings.h): 3 PsychoV30 (its shadows matched to the game's), 4 PsychoV30 (pure), 2 Vanilla.</summary>
         public static readonly Choice[] HdrToneMapper =
         {
-            new("PsychoV30 (default)", "3"), new("PsychoV30 (pure)", "4"), new("Vanilla (the game's own look)", "2"),
+            // The segmented buttons show the label up to " (": the two PsychoV30 names differ before it.
+            new("PsychoV30 Matched (default)", "3"), new("PsychoV30 Pure", "4"), new("Vanilla (the game's own look)", "2"),
         };
 
         /// <summary>hdr_gamut: the color volume PsychoV30 fits the picture into (its gamut_compression_mode).</summary>

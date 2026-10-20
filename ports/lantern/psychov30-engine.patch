@@ -7010,7 +7010,7 @@ index 435d5d5..f127dde 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 6a75445..373d9a0 100644
+index 6a75445..5a02b9d 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
 @@ -272,6 +272,265 @@ void CheatStats() {
@@ -7149,7 +7149,7 @@ index 6a75445..373d9a0 100644
 +
 +    ImGui::BeginDisabled(preset == 0);
 +    ImGui::SeparatorText("Tone Mapping");
-+    static const char* tonemappers[] = {"Vanilla", "PsychoV30", "PsychoV30 (pure)"};
++    static const char* tonemappers[] = {"Vanilla", "PsychoV30 Matched", "PsychoV30 Pure"};
 +    static constexpr int stored[] = {BbSettings::HdrToneMapperVanilla,
 +                                     BbSettings::HdrToneMapperPsychoScene,
 +                                     BbSettings::HdrToneMapperPsychoPure};
@@ -7161,14 +7161,14 @@ index 6a75445..373d9a0 100644
 +        Store(s.hdr_tonemapper, stored[chosen], true);
 +    }
 +    Hint(BbSettings::MenuText(
-+        "Vanilla: the game's own look (no HDR highlights). PsychoV30: RenoDX's tone mapper on the "
-+        "game's scene in place of its curve: the game's mid tones, its shadows matched to the "
-+        "game's, its lights up to your display's peak. PsychoV30 (pure): the same without that "
++        "Vanilla: the game's own look (no HDR highlights). PsychoV30 Matched: RenoDX's tone mapper "
++        "on the game's scene in place of its curve: the game's mid tones, its shadows matched to "
++        "the game's, its lights up to your display's peak. PsychoV30 Pure: the same without that "
 +        "match, PsychoV30's own shadows (compare in dark interiors and fog). Live.",
-+        "Vanilla: собственная картинка игры (без HDR-бликов). PsychoV30: тонмаппер RenoDX вместо "
-+        "кривой игры: средние тона игры, тени подогнаны под игру, свет до пика вашего дисплея. "
-+        "PsychoV30 (pure): то же без подгонки теней, собственные тени PsychoV30 (сравните в тёмных "
-+        "помещениях и тумане). Сразу."));
++        "Vanilla: собственная картинка игры (без HDR-бликов). PsychoV30 Matched: тонмаппер RenoDX "
++        "вместо кривой игры: средние тона игры, тени подогнаны под игру, свет до пика вашего "
++        "дисплея. PsychoV30 Pure: то же без подгонки теней, собственные тени PsychoV30 (сравните в "
++        "тёмных помещениях и тумане). Сразу."));
 +    ImGui::BeginDisabled(s.hdr_tonemapper == BbSettings::HdrToneMapperVanilla);
 +    static const char* gamuts[] = {"BT.2020", "BT.709"};
 +    const int gamut = s.hdr_gamut == BbSettings::HdrGamutBt709 ? 1 : 0;

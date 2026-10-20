@@ -47,7 +47,7 @@ The in-game menu (Insert / L3+R3), HDR mode PsychoV30, is laid out as a RenoDX m
 bbport's: **Preset** (Off = the game's own look, #1 to #3 = the player's own settings, each saved
 in `bbport.ini` as `hdr_preset1..3`; a file from before the presets becomes Preset #1) and
 **Settings Mode** (Simple / Intermediate / Advanced) as named sliders, then Tone Mapping (Tone
-Mapper Vanilla / PsychoV30 / PsychoV30 (pure), Target gamut BT.2020 / BT.709, Peak Brightness,
+Mapper Vanilla / PsychoV30 Matched / PsychoV30 Pure, Target gamut BT.2020 / BT.709, Peak Brightness,
 Game Brightness, UI Brightness), Color Grading
 (Exposure, Highlights, Shadows, Contrast, Saturation; Intermediate: Color Grade Strength, Black
 Floor), Effects (Bloom), Reset all, and in Advanced a Debug section (Compare, 16-bit probe, chain
@@ -70,8 +70,9 @@ carries gamma-encoded BT.709: the channels a BT.2020 color has below 0 there are
 after PsychoV30, so BT.2020 here is PsychoV30's BT.2020 compression followed by that clip, not a
 wide-gamut output.
 
-PsychoV30 (pure) (`hdr_tonemapper=4`; live, kept per preset, also on the launcher's Display
-page as "Tone mapper" when PsychoV30 is selected) is PsychoV30 with the same automatic anchor (the
+PsychoV30 Pure (`hdr_tonemapper=4`; live, kept per preset, also on the launcher's Display page
+as "Tone mapper" when PsychoV30 is selected) is PsychoV30 Matched (`hdr_tonemapper=3`, the
+default, its shadows matched to the game's) with the same automatic anchor (the
 game's mid grey to 0.18), the same starting contrast (the game's slope there) and the same target
 gamut, but without the match of the shadows to the game's luminance below mid grey: PsychoV30's
 own shadows. It reaches the composite in `bb_hdr2b.w` (1 plus one; 0 not set or 1 for
@@ -127,7 +128,7 @@ repeated JXR pairs for comparison with the reference mod; those captures are not
 No FPS or visual-quality improvement is claimed before those measurements.
 
 - Compare Target gamut BT.2020 and BT.709 on saturated lights (lanterns, fire, blue lights).
-- Compare PsychoV30 and PsychoV30 (pure) in dark interiors and in fog.
+- Compare PsychoV30 Matched and PsychoV30 Pure in dark interiors and in fog.
 
 ## Sources and licenses
 

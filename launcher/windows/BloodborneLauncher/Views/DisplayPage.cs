@@ -127,7 +127,7 @@ namespace BloodborneLauncher.Views
                 Choices.HdrUiColor, () => Ini.Get("hdr_ui_color", "1"), v => Ini.Set("hdr_ui_color", v));
             _hdrColourRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
             ComboRow(SymbolRegular.Lightbulb24, "Tone mapper",
-                "PsychoV30 only. PsychoV30: the game's shadows kept below mid grey. PsychoV30 (pure): PsychoV30's own shadows; compare them in dark interiors and fog. Vanilla: the game's own look. Also in the in-game menu, live",
+                "PsychoV30 only. PsychoV30 Matched: its shadows matched to the game's below mid grey. PsychoV30 Pure: PsychoV30's own shadows; compare them in dark interiors and fog. Vanilla: the game's own look. Also in the in-game menu, live",
                 Choices.HdrToneMapper, () => Ini.Get("hdr_tonemapper", "3"), v => Ini.Set("hdr_tonemapper", v));
             _hdrToneMapperRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
             ComboRow(SymbolRegular.Color24, "Target gamut",
