@@ -53,7 +53,11 @@ Game Brightness, UI Brightness), Color Grading
 Floor), Effects (Bloom), Reset all, and in Advanced a Debug section (Compare, 16-bit probe, chain
 trace). Every setting but Preset has RenoDX's reset button. Peak Brightness defaults to the peak Windows
 reports for the display (DXGI MaxLuminance, as RenoDX), Game Brightness to RenoDX's reference
-white for it (BT.2100 HLG, at most 203 nits); a value in `bbport.ini` is kept. F9 cycles HDR /
+white for it (BT.2100 HLG, at most 203 nits); a value in `bbport.ini` is kept. The launcher's
+Peak brightness (Display page) reads the same value for the monitor chosen there (else the
+primary one), from its first start: it is the slider's value while `bbport.ini` has none, its
+hint names it, and the reset button beside the slider sets it (1000 when Windows reports none,
+for example with Windows HDR off). F9 cycles HDR /
 SDR reference / approximate split. Changing into or out of the 16-bit mode requires a restart;
 its grading and reference switches are live.
 

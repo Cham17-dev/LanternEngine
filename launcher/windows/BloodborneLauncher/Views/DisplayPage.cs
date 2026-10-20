@@ -103,10 +103,20 @@ namespace BloodborneLauncher.Views
                 10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", "203"), 203),
                 v => Ini.Set("hdr_paper_white", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
                 format: "0' nits'", valueWidth: 82, inputUnit: "nits");
-            SliderRow(SymbolRegular.WeatherSunny24, "Peak brightness", "Your display's peak brightness, in nits. Range: 10–4000",
-                10, 4000, 1, () => ParseDouble(Ini.Get("hdr_peak", "1000"), 1000),
+            // Default: the peak Windows reports for the chosen display (in HDR), as the engine's.
+            double DetectedPeak() => DisplayPeak.Default(S.Str("display_device"));
+            var detected = DisplayPeak.Nits(S.Str("display_device"));
+            var peakHint = detected > 0
+                ? $"Your display's peak brightness, in nits. Windows reports {detected:0} nits for it: the default. Range: 10–4000"
+                : "Your display's peak brightness, in nits. Windows reports none (is Windows HDR on?): 1000 by default. Range: 10–4000";
+            var peak = SliderRow(SymbolRegular.WeatherSunny24, "Peak brightness", peakHint,
+                10, 4000, 1, () => ParseDouble(Ini.Get("hdr_peak", ""), DetectedPeak()),
                 v => Ini.Set("hdr_peak", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
                 format: "0' nits'", valueWidth: 82, inputUnit: "nits");
+            if (peak.Parent is Panel peakRow)
+                peakRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24,
+                    "Reset to the peak Windows reports for this display (1000 when it reports none)",
+                    (_, _) => peak.Value = Math.Clamp(DetectedPeak(), peak.Minimum, peak.Maximum)));
             ComboRow(SymbolRegular.Sparkle24, "Highlight boost", "Off keeps the game's own look; higher makes lamps, fire and the sky brighter",
                 Choices.HdrBoost, () => Ini.Get("hdr_boost", "0.25"), v => Ini.Set("hdr_boost", v));
             _hdrBoostRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];

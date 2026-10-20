@@ -223,7 +223,7 @@ index 4d0e497..e41efb9 100644
                  </TextBlock>
  
 diff --git a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
-index 1539827..6dbd466 100644
+index 1539827..ba3f472 100644
 --- a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 +++ b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 @@ -10,8 +10,34 @@ namespace BloodborneLauncher.Views
@@ -262,7 +262,7 @@ index 1539827..6dbd466 100644
  
          private void RefreshMonitors()
          {
-@@ -71,22 +97,34 @@ namespace BloodborneLauncher.Views
+@@ -71,22 +97,44 @@ namespace BloodborneLauncher.Views
                      : "This display shows no HDR";
              IniToggle(SymbolRegular.Hdr24, "HDR output", hdrHint, "hdr");
              ComboRow(SymbolRegular.Lightbulb24, "HDR source",
@@ -276,13 +276,24 @@ index 1539827..6dbd466 100644
 +                10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", "203"), 203),
                  v => Ini.Set("hdr_paper_white", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
 -                format: "0' nits'", valueWidth: 82);
-+                format: "0' nits'", valueWidth: 82, inputUnit: "nits");
-             SliderRow(SymbolRegular.WeatherSunny24, "Peak brightness", "Your display's peak brightness, in nits. Range: 10–4000",
+-            SliderRow(SymbolRegular.WeatherSunny24, "Peak brightness", "Your display's peak brightness, in nits. Range: 10–4000",
 -                10, 4000, 10, () => ParseDouble(Ini.Get("hdr_peak", "1000"), 1000),
-+                10, 4000, 1, () => ParseDouble(Ini.Get("hdr_peak", "1000"), 1000),
++                format: "0' nits'", valueWidth: 82, inputUnit: "nits");
++            // Default: the peak Windows reports for the chosen display (in HDR), as the engine's.
++            double DetectedPeak() => DisplayPeak.Default(S.Str("display_device"));
++            var detected = DisplayPeak.Nits(S.Str("display_device"));
++            var peakHint = detected > 0
++                ? $"Your display's peak brightness, in nits. Windows reports {detected:0} nits for it: the default. Range: 10–4000"
++                : "Your display's peak brightness, in nits. Windows reports none (is Windows HDR on?): 1000 by default. Range: 10–4000";
++            var peak = SliderRow(SymbolRegular.WeatherSunny24, "Peak brightness", peakHint,
++                10, 4000, 1, () => ParseDouble(Ini.Get("hdr_peak", ""), DetectedPeak()),
                  v => Ini.Set("hdr_peak", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
 -                format: "0' nits'", valueWidth: 82);
 +                format: "0' nits'", valueWidth: 82, inputUnit: "nits");
++            if (peak.Parent is Panel peakRow)
++                peakRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24,
++                    "Reset to the peak Windows reports for this display (1000 when it reports none)",
++                    (_, _) => peak.Value = Math.Clamp(DetectedPeak(), peak.Minimum, peak.Maximum)));
              ComboRow(SymbolRegular.Sparkle24, "Highlight boost", "Off keeps the game's own look; higher makes lamps, fire and the sky brighter",
                  Choices.HdrBoost, () => Ini.Get("hdr_boost", "0.25"), v => Ini.Set("hdr_boost", v));
 -            ComboRow(SymbolRegular.TextFont24, "UI brightness", "Native source only: how bright the HUD, menus and subtitles are, against paper white",
