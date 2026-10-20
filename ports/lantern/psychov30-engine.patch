@@ -6059,7 +6059,7 @@ index e5a656b..37e10b8 100644
      mutable std::unordered_map<vk::Format, vk::FormatFeatureFlags> format_features;
      mutable std::array<vk::FormatFeatureFlags, 256> format_table{};
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_swapchain.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_swapchain.cpp
-index ca758d7..0cae15f 100644
+index d83ff0d..ab33a7f 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_swapchain.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_swapchain.cpp
 @@ -7,6 +7,7 @@
@@ -7876,7 +7876,7 @@ index 0000000..62aa694
 +
 +} // namespace BbDisplay
 diff --git a/gpu/shim/engine/graphics.cpp b/gpu/shim/engine/graphics.cpp
-index ddc8144..c10bc00 100644
+index 67c8822..69d91f8 100644
 --- a/gpu/shim/engine/graphics.cpp
 +++ b/gpu/shim/engine/graphics.cpp
 @@ -115,9 +115,14 @@ GUEST_ABI std::int64_t YebisRecord(std::uint64_t,const std::uint64_t* saved) {
