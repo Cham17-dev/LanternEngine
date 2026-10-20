@@ -14,6 +14,7 @@ namespace BloodborneLauncher.Views
         private FrameworkElement? _hdrBrightnessRow;
         private FrameworkElement? _hdrColourRow;
         private FrameworkElement? _hdrGamutRow;
+        private FrameworkElement? _hdrToneMapperRow;
 
         public override void OnShown()
         {
@@ -34,6 +35,8 @@ namespace BloodborneLauncher.Views
                 _hdrColourRow.Visibility = native ? Visibility.Visible : Visibility.Collapsed;
             if (_hdrGamutRow != null)
                 _hdrGamutRow.Visibility = psycho ? Visibility.Visible : Visibility.Collapsed;
+            if (_hdrToneMapperRow != null)
+                _hdrToneMapperRow.Visibility = psycho ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void RefreshMonitors()
@@ -113,6 +116,10 @@ namespace BloodborneLauncher.Views
             ComboRow(SymbolRegular.Color24, "UI colour", "Native source only: Vivid shows the HUD and menus with the colours a wide-gamut monitor gives SDR; Exact keeps sRGB's",
                 Choices.HdrUiColor, () => Ini.Get("hdr_ui_color", "1"), v => Ini.Set("hdr_ui_color", v));
             _hdrColourRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
+            ComboRow(SymbolRegular.Lightbulb24, "Tone mapper",
+                "PsychoV30 only. PsychoV30: the game's shadows kept below mid grey. PsychoV30 (pure): PsychoV30's own shadows; compare them in dark interiors and fog. Vanilla: the game's own look. Also in the in-game menu, live",
+                Choices.HdrToneMapper, () => Ini.Get("hdr_tonemapper", "3"), v => Ini.Set("hdr_tonemapper", v));
+            _hdrToneMapperRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
             ComboRow(SymbolRegular.Color24, "Target gamut",
                 "PsychoV30 only: the color volume it fits the picture into. BT.2020 is RenoDX's HDR default; compare with BT.709 on saturated lights (lanterns, fire, blue lights). Also in the in-game menu, live",
                 Choices.HdrGamut, () => Ini.Get("hdr_gamut", "bt2020"), v => Ini.Set("hdr_gamut", v));

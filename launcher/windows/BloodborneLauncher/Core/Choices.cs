@@ -168,6 +168,12 @@
                 "PsychoV30 — RenoDX · © 2026 Carlos Lopez · MIT License. GLSL adaptation for bbport. github.com/clshortfuse/renodx"),
         };
 
+        /// <summary>hdr_tonemapper with PsychoV30 (bbport_settings.h): 3 PsychoV30 (its shadows matched to the game's), 4 PsychoV30 (pure), 2 Vanilla.</summary>
+        public static readonly Choice[] HdrToneMapper =
+        {
+            new("PsychoV30 (default)", "3"), new("PsychoV30 (pure)", "4"), new("Vanilla (the game's own look)", "2"),
+        };
+
         /// <summary>hdr_gamut: the color volume PsychoV30 fits the picture into (its gamut_compression_mode).</summary>
         public static readonly Choice[] HdrGamut =
         {

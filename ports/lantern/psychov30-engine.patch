@@ -655,10 +655,10 @@ index 0000000..5bbaf8f
 +#endif // BBPORT_BB_COMPOSITE_GLSL
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag
 new file mode 100644
-index 0000000..0698b68
+index 0000000..b4f838d
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag
-@@ -0,0 +1,299 @@
+@@ -0,0 +1,305 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -724,8 +724,9 @@ index 0000000..0698b68
 +    layout(offset = 128) uvec4 bb_hdr;
 +    // Mode 5, PsychoV30 (scene): x the display's peak (game white units), y exposure,
 +    // z highlights, w shadows; bb_hdr2b: x contrast, y saturation (bits plus one, 0: not set),
-+    // z the target gamut (PsychoV30's gamut_compression_mode: 0 BT.709, 1 BT.2020; the value
-+    // plus one, 0: not set).
++    // z the target gamut (PsychoV30's gamut_compression_mode: 0 BT.709, 1 BT.2020), w the
++    // shadow match (0: the game's shadows below mid grey; 1, PsychoV30 (pure): none); z and w
++    // are the value plus one, 0: not set.
 +    layout(offset = 144) uvec4 bb_hdr2a;
 +    layout(offset = 160) uvec4 bb_hdr2b;
 +} push_data;
@@ -770,7 +771,8 @@ index 0000000..0698b68
 +// the game's curve, to the display's peak (the final pass then only encodes). Anchored at
 +// the game's mid grey, with its slope there as contrast. The menu's exposure, highlights,
 +// shadows, contrast and saturation are PsychoV30's own parameters, and its target gamut
-+// (BT.2020 by default, as RenoDX's HDR mods; BT.709).
++// (BT.2020 by default, as RenoDX's HDR mods; BT.709). PsychoV30 (pure): the same, without the
++// match of the shadows to the game's.
 +bool bb_curve_psychov_scene(BbComposite o, vec3 x, out vec3 t) {
 +    float grey_in, slope;
 +    if (!bb_knee(o.curve, 0.18, grey_in, slope)) {
@@ -787,6 +789,7 @@ index 0000000..0698b68
 +    float purity = bb_bits(push_data.bb_hdr2b.y, 1.0);
 +    // Both calls below take the same gamut: the shadow match's ratio compares them.
 +    int gamut = clamp(bb_choice(push_data.bb_hdr2b.z, 1), 0, 1);
++    bool pure = bb_choice(push_data.bb_hdr2b.w, 0) == 1;
 +    vec3 game = bb_curve(o, x);
 +    if (o.curve != 3) {
 +        x = max(x, BB_FLOOR); // PsychoV30 needs a positive input
@@ -796,6 +799,9 @@ index 0000000..0698b68
 +    // The chain after the composite carries BT.709 (gamma encoded): the channels a BT.2020
 +    // color has below 0 there are clipped here.
 +    t = max(t, 0.0);
++    if (pure) {
++        return true; // PsychoV30 (pure): its own shadows
++    }
 +    // Below mid grey, the game's own luminance (its curve's toe lifts the shadows, PsychoV30's
 +    // single power at mid grey does not), PsychoV30's color kept; up to mid grey, PsychoV30 alone.
 +    // The sliders still apply (the game's value scaled as they move PsychoV30's).
@@ -5508,7 +5514,7 @@ index f090799..5a88cb6 100644
  
  enum SchedulerType {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
-index 0cdc917..891fdc8 100644
+index 0cdc917..417064b 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
 @@ -1,3 +1,4 @@
@@ -5550,7 +5556,7 @@ index 0cdc917..891fdc8 100644
      pipeline->BindResources(set_writes, push_data, {image_infos.data(), image_infos.size()},
                              {buffer_infos.data(), buffer_infos.size()});
      if (pipeline->GetGraphicsKey().motion_vectors) {
-@@ -2058,6 +2079,77 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
+@@ -2058,6 +2079,79 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
              cmdbuf.endQuery(query.pool, query.index);
          }
      });
@@ -5570,7 +5576,8 @@ index 0cdc917..891fdc8 100644
 +        // (each a float's bits + 1; all 0 otherwise): the peak in units of the game's white, and
 +        // the color grading sliders as PsychoV30's own parameters, the way RenoDX's mods pass
 +        // them (0..100 sliders over 50: 1 neutral; exposure as it is); then the target gamut
-+        // (PsychoV30's gamut_compression_mode, the value + 1).
++        // (PsychoV30's gamut_compression_mode) and the shadow match (1: none, PsychoV30
++        // (pure), reported by Tonemapper() as PsychoV30 (scene)), each the value + 1.
 +        const auto bits = [](float f) { return std::bit_cast<u32>(f) + 1u; };
 +        std::array<u32, 8> scene{};
 +        if (HdrChannel::Tonemapper() == u32(BbSettings::HdrToneMapperPsychoScene)) {
@@ -5581,7 +5588,8 @@ index 0cdc917..891fdc8 100644
 +                     bits(std::clamp(bb.hdr_exposure.load(), 0.0f, 2.0f)),
 +                     bits(half(bb.hdr_grade_highlights)), bits(half(bb.hdr_shadows)),
 +                     bits(half(bb.hdr_contrast)), bits(half(bb.hdr_saturation)),
-+                     u32(std::clamp(bb.hdr_gamut.load(), 0, 1)) + 1u, 0u};
++                     u32(std::clamp(bb.hdr_gamut.load(), 0, 1)) + 1u,
++                     (bb.hdr_tonemapper == BbSettings::HdrToneMapperPsychoPure ? 1u : 0u) + 1u};
 +        }
 +        // bb_hdr.y .. bb_hdr2[7], contiguous: one push, then the game's values back.
 +        std::array<u32, 11> probe{bits(knee),
@@ -5628,7 +5636,7 @@ index 0cdc917..891fdc8 100644
      if (FrameCapture::Active()) {
          const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
          FrameCapture::Draw(vs_info.pgm_hash, ps ? ps->pgm_hash : 0, num_indices, num_instances);
-@@ -3126,6 +3218,32 @@ bool Rasterizer::IsComputeImageCopy(const Pipeline* pipeline) {
+@@ -3126,6 +3220,32 @@ bool Rasterizer::IsComputeImageCopy(const Pipeline* pipeline) {
      // Perform image copy
      VideoCore::Image& src_image = desc0.is_written ? image1 : image0;
      VideoCore::Image& dst_image = desc0.is_written ? image0 : image1;
@@ -5661,7 +5669,7 @@ index 0cdc917..891fdc8 100644
      runtime.CopyColorAndDepth(&src_image, &dst_image);
      return true;
  }
-@@ -4017,6 +4135,9 @@ vk::Sampler Rasterizer::CachedSampler(const AmdGpu::Sampler& sharp, bool is_dept
+@@ -4017,6 +4137,9 @@ vk::Sampler Rasterizer::CachedSampler(const AmdGpu::Sampler& sharp, bool is_dept
  // The sampler that reads each image is not known here: any point sampler counts.
  // BB_PROXY_POINT_NATIVE=0 (or experiment bit 0): proxies are read regardless, as before.
  bool Rasterizer::PointReadsNative(const Shader::Info& stage, const PreparedStage* prepared) const {
@@ -5671,7 +5679,7 @@ index 0cdc917..891fdc8 100644
      static const bool enabled = [] {
          const char* env = std::getenv("BB_PROXY_POINT_NATIVE");
          return !(env && env[0] == '0');
-@@ -4416,6 +4537,35 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
+@@ -4416,6 +4539,35 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
                            !same_size(texture_cache.GetImage(db_desc.first), 0))) {
          reduced = false;
      }
@@ -5707,7 +5715,7 @@ index 0cdc917..891fdc8 100644
      if (debug_pass) {
          if (db_desc.first) {
              const auto& depth = texture_cache.GetImage(db_desc.first);
-@@ -4425,7 +4575,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
+@@ -4425,7 +4577,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
          }
          std::printf("Scene pass: reduced %d %s\n", reduced, why.c_str());
      }
@@ -5716,7 +5724,7 @@ index 0cdc917..891fdc8 100644
      if (BbStats::enabled) {
          BbStats::reduced_draws.fetch_add(reduced, std::memory_order_relaxed);
          BbStats::scene_draws.fetch_add(scene_started, std::memory_order_relaxed);
-@@ -4662,13 +4812,13 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
+@@ -4662,13 +4814,13 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
          state.num_layers = 1;
      }
  
@@ -5732,7 +5740,7 @@ index 0cdc917..891fdc8 100644
      }
      if (FrameCapture::Active()) {
          std::array<const VideoCore::ImageInfo*, AmdGpu::NUM_COLOR_BUFFERS> colors{};
-@@ -4693,8 +4843,18 @@ void Rasterizer::Resolve() {
+@@ -4693,8 +4845,18 @@ void Rasterizer::Resolve() {
      const auto& mrt1_hint = CbExtent(1);
      VideoCore::TextureCache::ImageDesc mrt0_desc{Regs().color_buffers[0], mrt0_hint};
      VideoCore::TextureCache::ImageDesc mrt1_desc{Regs().color_buffers[1], mrt1_hint};
@@ -5753,7 +5761,7 @@ index 0cdc917..891fdc8 100644
  
      ScopeMarkerBegin(fmt::format("Resolve:MRT0={:#x}:MRT1={:#x}",
                                   Regs().color_buffers[0].Address(),
-@@ -5289,7 +5449,12 @@ void Rasterizer::UpdateRasterizationState() const {
+@@ -5289,7 +5451,12 @@ void Rasterizer::UpdateRasterizationState() const {
  void Rasterizer::UpdateColorBlendingState(const GraphicsPipeline* pipeline) const {
      const auto& regs = Regs();
      auto& dynamic_state = scheduler.GetDynamicState();
@@ -7002,10 +7010,10 @@ index 435d5d5..f127dde 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 6a75445..8dc8b02 100644
+index 6a75445..373d9a0 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
-@@ -272,6 +272,259 @@ void CheatStats() {
+@@ -272,6 +272,265 @@ void CheatStats() {
      CheatUnavailable(BbEngine::Cheats::Echoes);
  }
  
@@ -7141,20 +7149,26 @@ index 6a75445..8dc8b02 100644
 +
 +    ImGui::BeginDisabled(preset == 0);
 +    ImGui::SeparatorText("Tone Mapping");
-+    static const char* tonemappers[] = {"Vanilla", "PsychoV30"};
-+    const int tone = s.hdr_tonemapper == BbSettings::HdrToneMapperVanilla ? 0 : 1;
-+    if (const int chosen = ComboIndex("Tone Mapper", tone, tonemappers, 2, 1); chosen != tone) {
-+        Store(s.hdr_tonemapper,
-+              chosen == 0 ? int(BbSettings::HdrToneMapperVanilla)
-+                          : int(BbSettings::HdrToneMapperPsychoScene),
-+              true);
++    static const char* tonemappers[] = {"Vanilla", "PsychoV30", "PsychoV30 (pure)"};
++    static constexpr int stored[] = {BbSettings::HdrToneMapperVanilla,
++                                     BbSettings::HdrToneMapperPsychoScene,
++                                     BbSettings::HdrToneMapperPsychoPure};
++    int tone = 1;
++    for (int i = 0; i < 3; ++i) {
++        tone = stored[i] == s.hdr_tonemapper ? i : tone;
++    }
++    if (const int chosen = ComboIndex("Tone Mapper", tone, tonemappers, 3, 1); chosen != tone) {
++        Store(s.hdr_tonemapper, stored[chosen], true);
 +    }
 +    Hint(BbSettings::MenuText(
 +        "Vanilla: the game's own look (no HDR highlights). PsychoV30: RenoDX's tone mapper on the "
-+        "game's scene in place of its curve: the game's mid tones and shadows, its lights up to "
-+        "your display's peak.",
++        "game's scene in place of its curve: the game's mid tones, its shadows matched to the "
++        "game's, its lights up to your display's peak. PsychoV30 (pure): the same without that "
++        "match, PsychoV30's own shadows (compare in dark interiors and fog). Live.",
 +        "Vanilla: собственная картинка игры (без HDR-бликов). PsychoV30: тонмаппер RenoDX вместо "
-+        "кривой игры: средние тона и тени игры, свет до пика вашего дисплея."));
++        "кривой игры: средние тона игры, тени подогнаны под игру, свет до пика вашего дисплея. "
++        "PsychoV30 (pure): то же без подгонки теней, собственные тени PsychoV30 (сравните в тёмных "
++        "помещениях и тумане). Сразу."));
 +    ImGui::BeginDisabled(s.hdr_tonemapper == BbSettings::HdrToneMapperVanilla);
 +    static const char* gamuts[] = {"BT.2020", "BT.709"};
 +    const int gamut = s.hdr_gamut == BbSettings::HdrGamutBt709 ? 1 : 0;
@@ -7265,7 +7279,7 @@ index 6a75445..8dc8b02 100644
  // HDR output (bbport.ini hdr*): on/off on restart; paper white, peak and boost live.
  void HdrSection() {
      auto& s = BbSettings::Get();
-@@ -306,11 +559,26 @@ void HdrSection() {
+@@ -306,11 +565,26 @@ void HdrSection() {
      const char* modes[BbSettings::HdrModeCount] = {
          BbSettings::MenuText("Native (from the game's HDR scene)", "Нативный (из HDR-сцены игры)"),
          BbSettings::MenuText("Expand (from the SDR picture)", "Расширение (из SDR-картинки)"),
@@ -7292,7 +7306,7 @@ index 6a75445..8dc8b02 100644
      Hint(BbSettings::MenuText(
          "Native: the brightness of lamps, fire, the moon and other highlights comes from the "
          "game's own HDR scene, before its tonemap clipped it to SDR white. Midtones, colours and "
-@@ -372,13 +640,20 @@ void PictureSection() {
+@@ -372,13 +646,20 @@ void PictureSection() {
      // A moved setting turns Picture tuning on: it gates them all.
      const bool vignette = s.graphics_vignette;
      // The useful range on the slider; Ctrl+click types any value (bbport_settings.cpp keeps it
@@ -7318,7 +7332,7 @@ index 6a75445..8dc8b02 100644
      Checkbox(BbSettings::MenuText("Vignette", "Виньетка"), s.graphics_vignette);
      moved |= vignette != s.graphics_vignette;
      moved |= Slider(BbSettings::MenuText("Ambient occlusion strength", "Сила затенения (AO)"), s.graphics_ao_strength,
-@@ -399,6 +674,16 @@ void PictureSection() {
+@@ -399,6 +680,16 @@ void PictureSection() {
          Store(s.graphics_shadow_scale, 1.0f, true);
      }
      ImGui::EndDisabled();
@@ -7335,7 +7349,7 @@ index 6a75445..8dc8b02 100644
      Hint(BbSettings::MenuText(
          "Changes apply live, Picture tuning too, to the game's own colour, fog and lighting of each area "
          "(the HUD and menus keep theirs). Moving one turns Picture tuning on; off: the game's own picture. 1.00 and Hue 0 are the game's. Fog 0 clears the haze over distant streets. The "
-@@ -739,6 +1024,7 @@ void Menu() {
+@@ -739,6 +1030,7 @@ void Menu() {
      bool restart =
          s.object_motion != s.startup_object_motion || s.model_lod != s.startup_model_lod ||
          s.live_resolution != s.startup_live_resolution || s.hdr != s.startup_hdr ||
@@ -7343,7 +7357,7 @@ index 6a75445..8dc8b02 100644
          BbSettings::ResolutionNeedsRestart();
      for (int e = 0; e < BbSettings::EffectCount; ++e) {
          restart |= s.effects[e] != s.startup_effects[e];
-@@ -1045,6 +1331,11 @@ bool HandleEvent(const SDL_Event& event) {
+@@ -1045,6 +1337,11 @@ bool HandleEvent(const SDL_Event& event) {
      case SDL_EVENT_KEY_DOWN:
      case SDL_EVENT_KEY_UP: {
          const bool down = event.type == SDL_EVENT_KEY_DOWN;
@@ -7356,7 +7370,7 @@ index 6a75445..8dc8b02 100644
              (event.key.key == SDLK_INSERT || (is_open && event.key.key == SDLK_ESCAPE))) {
              SetOpen(event.key.key == SDLK_INSERT ? !is_open : false);
 diff --git a/gpu/shim/bbport_settings.cpp b/gpu/shim/bbport_settings.cpp
-index 8f47700..513d4a8 100644
+index 8f47700..8af067c 100644
 --- a/gpu/shim/bbport_settings.cpp
 +++ b/gpu/shim/bbport_settings.cpp
 @@ -10,11 +10,14 @@
@@ -7410,7 +7424,7 @@ index 8f47700..513d4a8 100644
      } else if (key == "hdr_boost") {
          v.hdr_boost = Clamp(std::isfinite(f) ? f : HdrBoostDefault, 0.0f, 1.0f);
      } else if (key == "hdr_ui_brightness") {
-@@ -242,6 +265,28 @@ void Set(Values& v, const std::string& key, const std::string& value) {
+@@ -242,6 +265,30 @@ void Set(Values& v, const std::string& key, const std::string& value) {
                          value.c_str());
          }
          v.hdr_mode = mode < 0 ? HdrModeNative : mode;
@@ -7431,7 +7445,9 @@ index 8f47700..513d4a8 100644
 +    } else if (key == "hdr_black_floor") {
 +        v.hdr_black_floor = Clamp(std::isfinite(f) ? f : 0.0f, 0.0f, 2.0f);
 +    } else if (key == "hdr_tonemapper") {
-+        v.hdr_tonemapper = i == HdrToneMapperVanilla ? HdrToneMapperVanilla : HdrToneMapperPsychoScene;
++        v.hdr_tonemapper = i == HdrToneMapperVanilla     ? HdrToneMapperVanilla
++                           : i == HdrToneMapperPsychoPure ? HdrToneMapperPsychoPure
++                                                          : HdrToneMapperPsychoScene;
 +    } else if (key == "hdr_gamut") {
 +        v.hdr_gamut = value == "bt709" ? HdrGamutBt709 : HdrGamutBt2020;
 +    } else if (key == "hdr_compare") {
@@ -7439,7 +7455,7 @@ index 8f47700..513d4a8 100644
      } else if (key == "live_resolution") {
          v.live_resolution = value == "auto" ? -1 : std::clamp(i, 0, 1);
      } else if (key == "cheat_vials") {
-@@ -301,8 +346,127 @@ MenuLanguage LanguageOfLocale(const char* lang) {
+@@ -301,8 +348,127 @@ MenuLanguage LanguageOfLocale(const char* lang) {
      return MenuLanguage::English;
  }
  
@@ -7567,7 +7583,7 @@ index 8f47700..513d4a8 100644
  // The display's size for output_res = auto: BB_DISPLAY_SIZE ("WxH", from run_windows.py), even
  // (the game has half-resolution buffers); 1920x1080 without it.
  static std::pair<int, int> DisplaySize() {
-@@ -360,8 +524,14 @@ void Load() {
+@@ -360,8 +526,14 @@ void Load() {
          }
          v.menu_language = LanguageOfLocale(lang);
      }
@@ -7583,7 +7599,7 @@ index 8f47700..513d4a8 100644
          while (std::fgets(line, sizeof(line), file)) {
              std::string text{line};
              text.erase(text.find_last_not_of(" \t\r\n") + 1);
-@@ -374,6 +544,14 @@ void Load() {
+@@ -374,6 +546,14 @@ void Load() {
          std::fclose(file);
          std::printf("Settings: %s\n", Path());
      }
@@ -7598,7 +7614,7 @@ index 8f47700..513d4a8 100644
      // Environment overrides (scripts, A/B tests).
      if (const char* env = std::getenv("BB_UPSCALER")) {
          v.upscaler = UpscalerOff;
-@@ -405,6 +583,7 @@ void Load() {
+@@ -405,6 +585,7 @@ void Load() {
      v.startup_output_res = v.output_res;
      v.startup_live_resolution = v.live_resolution;
      v.startup_hdr = v.hdr;
@@ -7606,7 +7622,7 @@ index 8f47700..513d4a8 100644
  }
  
  void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss) {
-@@ -496,7 +675,33 @@ void Save() {
+@@ -496,7 +677,33 @@ void Save() {
      put("hdr_boost", fixed(v.hdr_boost, 2));
      put("hdr_ui_brightness", fixed(v.hdr_ui_brightness, 2));
      put("hdr_ui_color", fixed(v.hdr_ui_color, 2));
@@ -7640,7 +7656,7 @@ index 8f47700..513d4a8 100644
      put("graphics_controls",flag(v.graphics_controls));
      put("graphics_vignette",flag(v.graphics_vignette));
      put("graphics_ao_strength",fixed(v.graphics_ao_strength,2));
-@@ -547,7 +752,7 @@ void Save() {
+@@ -547,7 +754,7 @@ void Save() {
      bool had_lines = false;
      std::vector<bool> written(keys.size());
      if (FILE* file = std::fopen(Path(), "r")) {
@@ -7650,14 +7666,17 @@ index 8f47700..513d4a8 100644
              had_lines = true;
              std::string text{line};
 diff --git a/gpu/shim/bbport_settings.h b/gpu/shim/bbport_settings.h
-index 14e01ef..cb70d33 100644
+index 14e01ef..cbadeb8 100644
 --- a/gpu/shim/bbport_settings.h
 +++ b/gpu/shim/bbport_settings.h
-@@ -8,6 +8,11 @@
+@@ -8,6 +8,14 @@
  #include <atomic>
  
  namespace BbSettings {
 +inline constexpr int HdrToneMapperVanilla = 2, HdrToneMapperPsychoScene = 3;
++/// hdr_tonemapper = 4: PsychoV30 (pure), PsychoV30 on the scene without the match of its shadows
++/// to the game's; otherwise the same (HdrChannel::Tonemapper reports HdrToneMapperPsychoScene).
++inline constexpr int HdrToneMapperPsychoPure = 4;
 +/// hdr_gamut (bbport.ini "bt2020" / "bt709"): PsychoV30's target gamut, its
 +/// gamut_compression_mode (1 BT.2020, RenoDX's HDR default; 0 BT.709).
 +inline constexpr int HdrGamutBt709 = 0, HdrGamutBt2020 = 1;
@@ -7665,7 +7684,7 @@ index 14e01ef..cb70d33 100644
  
  enum Upscaler : int { UpscalerOff = 0, UpscalerFsr3 = 1, UpscalerFsr4 = 2, UpscalerFsr411 = 3,
                        UpscalerTaa = 4, UpscalerDlss = 5, UpscalerCount };
-@@ -74,7 +79,7 @@ inline constexpr int CheatGunRanges[] = {0, 150, 200, 300};
+@@ -74,7 +82,7 @@ inline constexpr int CheatGunRanges[] = {0, 150, 200, 300};
  /// cheat_echo_multiplier: Blood Echoes from kills times this (1: the game's own).
  inline constexpr int CheatEchoMultipliers[] = {1, 2, 5, 10};
  /// HDR output (hdr_paper_white / hdr_peak in nits, hdr_boost 0..1): defaults and ranges.
@@ -7674,7 +7693,7 @@ index 14e01ef..cb70d33 100644
  inline constexpr float HdrPeakDefault = 1000.0f, HdrPeakMin = 10.0f, HdrPeakMax = 4000.0f;
  inline constexpr float HdrBoostDefault = 0.25f;
  /// Native mode: the game's UI at hdr_ui_brightness times paper white, and hdr_ui_color of the way
-@@ -85,8 +90,8 @@ enum HdrOutput : int { HdrOutputOff = 0, HdrOutputHdr10 = 1, HdrOutputScRgb = 2
+@@ -85,8 +93,8 @@ enum HdrOutput : int { HdrOutputOff = 0, HdrOutputHdr10 = 1, HdrOutputScRgb = 2
  /// hdr_mode in bbport.ini (docs/hdr.md). Native: the highlights' brightness from the game's own
  /// HDR scene (vk_hdr_native.h), expand where a frame has none (menus, loading, movies). Expand:
  /// the SDR picture's highlights stretched towards the peak.
@@ -7685,7 +7704,7 @@ index 14e01ef..cb70d33 100644
  static_assert(sizeof(HdrModeNames) / sizeof(HdrModeNames[0]) == HdrModeCount);
  
  /// button_prompts in bbport.ini: the game's button icons drawn as the bound keys while the keyboard
-@@ -184,6 +189,44 @@ struct Values {
+@@ -184,6 +192,44 @@ struct Values {
      int startup_model_lod = 0;
      int startup_output_res = OutputDefault;
      int startup_live_resolution = 0;
@@ -7730,7 +7749,7 @@ index 14e01ef..cb70d33 100644
      bool startup_hdr = false;
  };
  
-@@ -200,9 +243,25 @@ void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss = false);
+@@ -200,9 +246,25 @@ void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss = false);
  bool FixedRenderSession();
  int RenderPreset();
  bool ResolutionNeedsRestart();
@@ -7910,7 +7929,7 @@ index 7091ebf..205ccd0 100644
                     '--patches', out / 'patches.bin', '--app0', merged,
                     '--user', os.environ.get('BB_USER_DIR', data / 'user'),
 diff --git a/tests/test_settings.cpp b/tests/test_settings.cpp
-index 8501ba0..928af05 100644
+index 8501ba0..28322ca 100644
 --- a/tests/test_settings.cpp
 +++ b/tests/test_settings.cpp
 @@ -154,7 +154,7 @@ int main() {
@@ -7922,7 +7941,7 @@ index 8501ba0..928af05 100644
      assert(Read(path).find("hdr_peak=1000\n") != std::string::npos);
      assert(Read(path).find("hdr_boost=0.25\n") != std::string::npos);
      // hdr_mode: native (the default: highlights from the game's HDR scene) or expand (from the
-@@ -207,6 +207,59 @@ int main() {
+@@ -207,6 +207,69 @@ int main() {
  #endif
      BbSettings::Load();
      assert(s.hdr_mode == BbSettings::HdrModeNative);
@@ -7979,6 +7998,16 @@ index 8501ba0..928af05 100644
 +    assert(Read(path).find("hdr_gamut=bt709\n") != std::string::npos);
 +    BbSettings::Load();
 +    assert(s.hdr_gamut == BbSettings::HdrGamutBt709);
++    // PsychoV30 (pure): a tone mapper of its own, saved, kept per preset.
++    s.hdr_tonemapper = BbSettings::HdrToneMapperPsychoPure;
++    BbSettings::Save();
++    assert(Read(path).find("hdr_tonemapper=4\n") != std::string::npos);
++    BbSettings::Load();
++    assert(s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoPure);
++    BbSettings::SelectHdrPreset(2);
++    assert(s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoScene);
++    BbSettings::SelectHdrPreset(1);
++    assert(s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoPure);
      std::filesystem::remove(temporary);
      std::puts("PASS: settings save keeps other keys, menu position");
  }
