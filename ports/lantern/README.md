@@ -43,10 +43,23 @@ programs, launcher and preparation scripts. This is not a port of all later upst
 CI checks both folder layouts and runs the shipped Python through imports and game detection;
 a successful smoke check still does not validate an actual game session.
 
-The in-game mode provides Vanilla and PsychoV30, Exposure, Highlights, Shadows, Contrast,
-Saturation, Bloom, Color Grade Strength, Black Floor and HUD brightness. Neutral values are
-listed there. F9 cycles HDR / SDR reference / approximate split. Changing into or out of the
-16-bit mode requires a restart; its grading and reference switches are live.
+The in-game menu (Insert / L3+R3), HDR mode PsychoV30, is laid out as a RenoDX mod's, like
+bbport's: **Preset** (Off = the game's own look, #1 to #3 = the player's own settings, each saved
+in `bbport.ini` as `hdr_preset1..3`; a file from before the presets becomes Preset #1) and
+**Settings Mode** (Simple / Intermediate / Advanced) as named sliders, then Tone Mapping (Tone
+Mapper Vanilla / PsychoV30, Peak Brightness, Game Brightness, UI Brightness), Color Grading
+(Exposure, Highlights, Shadows, Contrast, Saturation; Intermediate: Color Grade Strength, Black
+Floor), Effects (Bloom), Reset all, and in Advanced a Debug section (Compare, 16-bit probe, chain
+trace). Every setting has RenoDX's reset button. Peak Brightness defaults to the peak Windows
+reports for the display (DXGI MaxLuminance, as RenoDX), Game Brightness to RenoDX's reference
+white for it (BT.2100 HLG, at most 203 nits); a value in `bbport.ini` is kept. F9 cycles HDR /
+SDR reference / approximate split. Changing into or out of the 16-bit mode requires a restart;
+its grading and reference switches are live.
+
+With PsychoV30, the Picture section no longer shows Brightness, Contrast, Saturation and Bloom:
+they duplicated the HDR grading (Exposure, Contrast, Saturation, Bloom) and both applied. The
+engine leaves the game's own values as drawn in this mode (also when set in the game's PC Colour
+menu); Hue, Fog, Vignette, ambient occlusion and shadow distance stay.
 
 Paper white defaults to 203 nits in the engine and launcher. Explicit values already saved in
 `bbport.ini` are preserved; change an existing 200-nit setting to 203 once if desired.
@@ -54,8 +67,9 @@ Paper white and peak brightness have editable numeric values beside their slider
 value and press Enter or leave the field to apply it. Escape restores the current slider value.
 The launcher hides Highlight boost and UI colour for PsychoV30 because they do not affect this
 mode. HUD brightness remains available. Switching back to Native/Expand restores applicable rows.
-The in-game menu exposes the source PsychoV30 scene controls, with their original neutral values;
-its layout is simplified. Gamma 2.2 is fixed on, and HUD brightness is relative to paper white.
+Gamma 2.2 is fixed on, and HUD brightness is relative to paper white. The final HDR pass
+(`hdr_output.frag`) sets every grading field it shares with bbport's final pass to a neutral
+value, so a tone mapper other than PsychoV30 (scene) cannot read uninitialized values.
 
 ## Rendering contract
 
