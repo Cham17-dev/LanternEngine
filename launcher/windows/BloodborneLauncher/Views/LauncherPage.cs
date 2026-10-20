@@ -422,7 +422,8 @@ namespace BloodborneLauncher.Views
 
         /// <summary>A slider with its value printed beside it.</summary>
         protected Slider SliderRow(SymbolRegular icon, string title, string? hint, double min, double max, double step,
-            Func<double> get, Action<double> set, string format = "0.00", Panel? into = null, double valueWidth = 44)
+            Func<double> get, Action<double> set, string format = "0.00", Panel? into = null, double valueWidth = 44,
+            string? inputUnit = null)
         {
             var slider = new Slider
             {
@@ -451,7 +452,49 @@ namespace BloodborneLauncher.Views
                 set(slider.Value);
                 Ws.SaveSoon();
             };
-            Add(Card(icon, title, hint, Row(value, slider), out _), into);
+            FrameworkElement valueControl = value;
+            if (inputUnit != null)
+            {
+                var input = new TextBox
+                {
+                    Width = valueWidth,
+                    TextAlignment = TextAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    ToolTip = "Type an exact value, then press Enter. Escape cancels the edit.",
+                };
+                input.SetResourceReference(TextBox.FontFamilyProperty, "MonoFont");
+                void RefreshValue() => input.Text = slider.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+                void CommitValue()
+                {
+                    var valid = double.TryParse(input.Text, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var number) ||
+                        double.TryParse(input.Text, System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.CurrentCulture, out number);
+                    if (valid && double.IsFinite(number))
+                    {
+                        number = Math.Clamp(number, min, max);
+                        slider.Value = Math.Clamp(min + Math.Round((number - min) / step,
+                            MidpointRounding.AwayFromZero) * step, min, max);
+                    }
+                    RefreshValue();
+                }
+                RefreshValue();
+                input.GotKeyboardFocus += (_, _) => input.SelectAll();
+                input.LostKeyboardFocus += (_, _) => CommitValue();
+                input.KeyDown += (_, e) =>
+                {
+                    if (e.Key == Key.Enter) { CommitValue(); e.Handled = true; }
+                    else if (e.Key == Key.Escape) { RefreshValue(); input.SelectAll(); e.Handled = true; }
+                };
+                slider.ValueChanged += (_, _) => RefreshValue();
+                valueControl = Row(input, new TextBlock
+                {
+                    Text = inputUnit,
+                    Margin = new Thickness(6, 0, 10, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+            }
+            Add(Card(icon, title, hint, Row(valueControl, slider), out _), into);
             return slider;
         }
 

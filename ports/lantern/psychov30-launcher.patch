@@ -49,7 +49,7 @@ index 73c3cf4..e7b2df4 100644
          public static readonly string ConfigFile = Path.Combine(ConfigDir, "settings.json");
  
 diff --git a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
-index 1539827..72a1f68 100644
+index 1539827..c8b98ac 100644
 --- a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 +++ b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 @@ -10,8 +10,28 @@ namespace BloodborneLauncher.Views
@@ -82,7 +82,7 @@ index 1539827..72a1f68 100644
  
          private void RefreshMonitors()
          {
-@@ -71,10 +91,10 @@ namespace BloodborneLauncher.Views
+@@ -71,22 +91,26 @@ namespace BloodborneLauncher.Views
                      : "This display shows no HDR";
              IniToggle(SymbolRegular.Hdr24, "HDR output", hdrHint, "hdr");
              ComboRow(SymbolRegular.Lightbulb24, "HDR source",
@@ -95,10 +95,14 @@ index 1539827..72a1f68 100644
 +            SliderRow(SymbolRegular.BrightnessHigh24, "Paper white", "How bright the game's white is, in nits. Default: 203. Range: 10–500",
 +                10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", "203"), 203),
                  v => Ini.Set("hdr_paper_white", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
-                 format: "0' nits'", valueWidth: 82);
+-                format: "0' nits'", valueWidth: 82);
++                format: "0' nits'", valueWidth: 82, inputUnit: "nits");
              SliderRow(SymbolRegular.WeatherSunny24, "Peak brightness", "Your display's peak brightness, in nits. Range: 10–4000",
-@@ -83,10 +103,14 @@ namespace BloodborneLauncher.Views
-                 format: "0' nits'", valueWidth: 82);
+-                10, 4000, 10, () => ParseDouble(Ini.Get("hdr_peak", "1000"), 1000),
++                10, 4000, 1, () => ParseDouble(Ini.Get("hdr_peak", "1000"), 1000),
+                 v => Ini.Set("hdr_peak", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
+-                format: "0' nits'", valueWidth: 82);
++                format: "0' nits'", valueWidth: 82, inputUnit: "nits");
              ComboRow(SymbolRegular.Sparkle24, "Highlight boost", "Off keeps the game's own look; higher makes lamps, fire and the sky brighter",
                  Choices.HdrBoost, () => Ini.Get("hdr_boost", "0.25"), v => Ini.Set("hdr_boost", v));
 -            ComboRow(SymbolRegular.TextFont24, "UI brightness", "Native source only: how bright the HUD, menus and subtitles are, against paper white",
@@ -113,3 +117,68 @@ index 1539827..72a1f68 100644
  
              Group("Frame rate");
              SettingCombo(SymbolRegular.Gauge24, "Frame rate", "30, 60, 90, 120 and 144 are the game's frame-rate patches for that rate; Uncapped uses the community uncapped patch", Choices.FpsModes, "fps_mode");
+diff --git a/launcher/windows/BloodborneLauncher/Views/LauncherPage.cs b/launcher/windows/BloodborneLauncher/Views/LauncherPage.cs
+index 36b0d24..dff3352 100644
+--- a/launcher/windows/BloodborneLauncher/Views/LauncherPage.cs
++++ b/launcher/windows/BloodborneLauncher/Views/LauncherPage.cs
+@@ -422,7 +422,8 @@ namespace BloodborneLauncher.Views
+ 
+         /// <summary>A slider with its value printed beside it.</summary>
+         protected Slider SliderRow(SymbolRegular icon, string title, string? hint, double min, double max, double step,
+-            Func<double> get, Action<double> set, string format = "0.00", Panel? into = null, double valueWidth = 44)
++            Func<double> get, Action<double> set, string format = "0.00", Panel? into = null, double valueWidth = 44,
++            string? inputUnit = null)
+         {
+             var slider = new Slider
+             {
+@@ -451,7 +452,49 @@ namespace BloodborneLauncher.Views
+                 set(slider.Value);
+                 Ws.SaveSoon();
+             };
+-            Add(Card(icon, title, hint, Row(value, slider), out _), into);
++            FrameworkElement valueControl = value;
++            if (inputUnit != null)
++            {
++                var input = new TextBox
++                {
++                    Width = valueWidth,
++                    TextAlignment = TextAlignment.Right,
++                    VerticalAlignment = VerticalAlignment.Center,
++                    ToolTip = "Type an exact value, then press Enter. Escape cancels the edit.",
++                };
++                input.SetResourceReference(TextBox.FontFamilyProperty, "MonoFont");
++                void RefreshValue() => input.Text = slider.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
++                void CommitValue()
++                {
++                    var valid = double.TryParse(input.Text, System.Globalization.NumberStyles.Float,
++                        System.Globalization.CultureInfo.InvariantCulture, out var number) ||
++                        double.TryParse(input.Text, System.Globalization.NumberStyles.Float,
++                            System.Globalization.CultureInfo.CurrentCulture, out number);
++                    if (valid && double.IsFinite(number))
++                    {
++                        number = Math.Clamp(number, min, max);
++                        slider.Value = Math.Clamp(min + Math.Round((number - min) / step,
++                            MidpointRounding.AwayFromZero) * step, min, max);
++                    }
++                    RefreshValue();
++                }
++                RefreshValue();
++                input.GotKeyboardFocus += (_, _) => input.SelectAll();
++                input.LostKeyboardFocus += (_, _) => CommitValue();
++                input.KeyDown += (_, e) =>
++                {
++                    if (e.Key == Key.Enter) { CommitValue(); e.Handled = true; }
++                    else if (e.Key == Key.Escape) { RefreshValue(); input.SelectAll(); e.Handled = true; }
++                };
++                slider.ValueChanged += (_, _) => RefreshValue();
++                valueControl = Row(input, new TextBlock
++                {
++                    Text = inputUnit,
++                    Margin = new Thickness(6, 0, 10, 0),
++                    VerticalAlignment = VerticalAlignment.Center,
++                });
++            }
++            Add(Card(icon, title, hint, Row(valueControl, slider), out _), into);
+             return slider;
+         }
+ 

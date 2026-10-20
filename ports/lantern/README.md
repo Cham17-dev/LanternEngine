@@ -35,6 +35,8 @@ listed there. F9 cycles HDR / SDR reference / approximate split. Changing into o
 
 Paper white defaults to 203 nits in the engine and launcher. Explicit values already saved in
 `bbport.ini` are preserved; change an existing 200-nit setting to 203 once if desired.
+Paper white and peak brightness have editable numeric values beside their sliders: type a
+value and press Enter or leave the field to apply it. Escape restores the current slider value.
 The launcher hides Highlight boost and UI colour for PsychoV30 because they do not affect this
 mode. HUD brightness remains available. Switching back to Native/Expand restores applicable rows.
 The in-game menu exposes the source PsychoV30 scene controls, with their original neutral values;

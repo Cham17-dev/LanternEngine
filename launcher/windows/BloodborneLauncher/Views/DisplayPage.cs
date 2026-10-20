@@ -96,11 +96,11 @@ namespace BloodborneLauncher.Views
             SliderRow(SymbolRegular.BrightnessHigh24, "Paper white", "How bright the game's white is, in nits. Default: 203. Range: 10–500",
                 10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", "203"), 203),
                 v => Ini.Set("hdr_paper_white", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
-                format: "0' nits'", valueWidth: 82);
+                format: "0' nits'", valueWidth: 82, inputUnit: "nits");
             SliderRow(SymbolRegular.WeatherSunny24, "Peak brightness", "Your display's peak brightness, in nits. Range: 10–4000",
-                10, 4000, 10, () => ParseDouble(Ini.Get("hdr_peak", "1000"), 1000),
+                10, 4000, 1, () => ParseDouble(Ini.Get("hdr_peak", "1000"), 1000),
                 v => Ini.Set("hdr_peak", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
-                format: "0' nits'", valueWidth: 82);
+                format: "0' nits'", valueWidth: 82, inputUnit: "nits");
             ComboRow(SymbolRegular.Sparkle24, "Highlight boost", "Off keeps the game's own look; higher makes lamps, fire and the sky brighter",
                 Choices.HdrBoost, () => Ini.Get("hdr_boost", "0.25"), v => Ini.Set("hdr_boost", v));
             _hdrBoostRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
