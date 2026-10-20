@@ -5119,7 +5119,7 @@ index 571167a..ded4e3b 100644
      return s.hdr_output.load(std::memory_order_relaxed) != BbSettings::HdrOutputOff &&
             s.hdr_mode.load(std::memory_order_relaxed) == BbSettings::HdrModeNative;
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index d8713f2..239b735 100644
+index d8713f2..a06a639 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 @@ -11,6 +11,8 @@
@@ -5131,7 +5131,17 @@ index d8713f2..239b735 100644
  #include "common/elf_info.h"
  #include "common/io_file.h"
  #include "common/path_util.h"
-@@ -640,6 +642,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
+@@ -389,6 +391,9 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
+                              AmdGpu::Liverpool* liverpool_, u32 sparse_page_shift)
+     : instance{instance_}, scheduler{scheduler_}, liverpool{liverpool_},
+       desc_heap{instance, scheduler.GetWorkSemaphore(), DescriptorHeapSizes} {
++    ASSERT_MSG(!HdrChannel::Native16() ||
++        instance.GetPhysicalDevice().getProperties().limits.maxPushConstantsSize >= 176,
++        "PsychoV30 requires 176 bytes of Vulkan push constants; choose Native or Expand on this GPU");
+     sel.regs = &liverpool->regs;
+     const auto& vk12_props = instance.GetVk12Properties();
+     profile = Shader::Profile{
+@@ -640,6 +645,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
          color_buffer.data_format = col_buf.GetDataFmt();
          color_buffer.num_format = col_buf.GetNumberFmt();
          color_buffer.num_conversion = col_buf.GetNumberConversion();
@@ -5148,7 +5158,7 @@ index d8713f2..239b735 100644
          color_buffer.export_format = regs.color_export_format.GetFormat(cb);
          color_buffer.swizzle = col_buf.Swizzle();
  
-@@ -909,6 +921,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
+@@ -909,6 +924,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
      auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, runtime_info, ir_program, binding);
      DumpShader(spv, info.pgm_hash, info.hw_stage, perm_idx, "spv");
  
@@ -6960,3 +6970,29 @@ index cee7291..c2c103d 100644
      s32 GetGpuId() { static const auto value = s32(Number("BB_GPU_ID", -1)); return value; }
      u32 GetInternalScreenWidth() { static const auto value = u32(Number("BB_INTERNAL_WIDTH", 1920)); return value; }
      u32 GetInternalScreenHeight() { static const auto value = u32(Number("BB_INTERNAL_HEIGHT", 1080)); return value; }
+diff --git a/tests/test_settings.cpp b/tests/test_settings.cpp
+index 8501ba0..62f1b76 100644
+--- a/tests/test_settings.cpp
++++ b/tests/test_settings.cpp
+@@ -207,6 +207,21 @@ int main() {
+ #endif
+     BbSettings::Load();
+     assert(s.hdr_mode == BbSettings::HdrModeNative);
++    { std::ofstream file(path); file << "hdr=1\nhdr_mode=psychov30\nhdr_tonemapper=3\n"
++        "hdr_exposure=1.25\nhdr_scene_grading=75\nhdr_bloom=40\n"; }
++    BbSettings::Load();
++    assert(s.startup_psychov30 && s.hdr_mode == BbSettings::HdrModePsychoV30);
++    assert(s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoScene &&
++           s.hdr_exposure == 1.25f && s.hdr_scene_grading == 75.0f && s.hdr_bloom == 40.0f);
++    BbSettings::Save();
++    assert(Read(path).find("hdr_mode=psychov30\n") != std::string::npos);
++    BbSettings::Load();
++    assert(s.startup_psychov30 && s.hdr_exposure == 1.25f && s.hdr_bloom == 40.0f);
++    { std::ofstream file(path); file << "hdr=0\nhdr_mode=psychov30\nhdr_tonemapper=99\n"
++        "hdr_exposure=nan\nhdr_bloom=999\nhdr_scene_grading=-5\n"; }
++    BbSettings::Load();
++    assert(!s.startup_psychov30 && s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoScene);
++    assert(s.hdr_exposure == 1.0f && s.hdr_bloom == 100.0f && s.hdr_scene_grading == 0.0f);
+     std::filesystem::remove(temporary);
+     std::puts("PASS: settings save keeps other keys, menu position");
+ }
