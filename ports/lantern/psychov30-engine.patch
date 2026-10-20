@@ -41,14 +41,17 @@ index 0000000..041ff71
 +extern glm::vec4* g_out;
 diff --git a/docs/hdr-tools/upscale_transfer_check/main.cpp b/docs/hdr-tools/upscale_transfer_check/main.cpp
 new file mode 100644
-index 0000000..48bc20d
+index 0000000..8fb131a
 --- /dev/null
 +++ b/docs/hdr-tools/upscale_transfer_check/main.cpp
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,178 @@
 +// Exercises the compiled production GLSL functions (SPIRV-Cross' CPU backend), including FP16
 +// storage boundaries. No game, Vulkan device, screenshots, or reimplementation of the shader.
++// The contract: the decode gives linear BT.2020 (>= 0) from the chain's signed gamma-2.2 BT.709,
++// the encode the reverse; a color inside BT.2020 survives the round trip, sign included.
 +#include <spirv_cross/external_interface.h>
 +#include <algorithm>
++#include <array>
 +#include <cmath>
 +#include <cstdio>
 +#include <limits>
@@ -57,6 +60,43 @@ index 0000000..48bc20d
 +
 +glm::vec4* g_in;
 +glm::vec4* g_out;
++
++namespace {
++using Vec = std::array<double, 3>;
++// Rows of the shader's matrices (upscale_transfer.glsl).
++constexpr double to2020[3][3] = {{0.6274040, 0.3292820, 0.0433136},
++                                 {0.0690970, 0.9195400, 0.0113612},
++                                 {0.0163916, 0.0880132, 0.8955950}};
++constexpr double to709[3][3] = {{1.6604902958, -0.5876391058, -0.0728515982},
++                                {-0.1245499701, 1.1328999220, -0.0083479642},
++                                {-0.0181511189, -0.1005787239, 1.1187298782}};
++constexpr double fp16_max = 65504.0;
++
++Vec Mul(const double (&m)[3][3], const Vec& v) {
++    return {m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2],
++            m[1][0] * v[0] + m[1][1] * v[1] + m[1][2] * v[2],
++            m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2]};
++}
++double SignedPow(double v, double p) {
++    return std::copysign(std::pow(std::abs(v), p), v);
++}
++// The decode's expected linear BT.2020.
++Vec Decode(const Vec& encoded) {
++    Vec linear;
++    for (int c = 0; c < 3; ++c) linear[c] = std::clamp(SignedPow(encoded[c], 2.2), -fp16_max, fp16_max);
++    Vec out = Mul(to2020, linear);
++    for (auto& v : out) v = std::clamp(v, 0.0, fp16_max);
++    return out;
++}
++// The encode's expected signal.
++Vec Encode(const Vec& linear) {
++    Vec clamped;
++    for (int c = 0; c < 3; ++c) clamped[c] = std::clamp(linear[c], 0.0, fp16_max);
++    Vec out = Mul(to709, clamped);
++    for (auto& v : out) v = SignedPow(std::clamp(v, -fp16_max, fp16_max), 1.0 / 2.2);
++    return out;
++}
++} // namespace
 +
 +int main() {
 +    std::vector<glm::vec4> inputs;
@@ -72,6 +112,15 @@ index 0000000..48bc20d
 +    inputs.push_back({0.5f, 0.5f, 0.5f, 1.f});
 +    inputs.push_back({-1.f, 0.f, 2.f, 1.f});
 +    inputs.push_back({65504.f, 1000.f, 100.f, 1.f});
++    // Colors outside BT.709, inside BT.2020 (a channel below 0 in BT.709): the case the signed
++    // chain exists for. BT.2020 green and red at a few levels, through the encoding.
++    for (const double level : {0.05, 0.5, 2.0, 8.0}) {
++        for (const Vec& bt2020 : {Vec{0.0, level, 0.0}, Vec{level, 0.0, 0.0}, Vec{0.0, 0.0, level}}) {
++            const Vec bt709 = Mul(to709, bt2020);
++            inputs.push_back({float(SignedPow(bt709[0], 1 / 2.2)), float(SignedPow(bt709[1], 1 / 2.2)),
++                              float(SignedPow(bt709[2], 1 / 2.2)), 1.f});
++        }
++    }
 +    const auto tested = inputs.size();
 +    while (inputs.size() % 64) inputs.push_back({0.18f, 0.18f, 0.18f, 1.f});
 +    // A backend that accidentally executes zero invocations must fail, including black cases.
@@ -92,44 +141,85 @@ index 0000000..48bc20d
 +    int failures = 0;
 +    double worst_storage_nits = 0;
 +    const auto check = [&](bool ok, const char* what, size_t i, int channel) {
-+        if (!ok && failures++ < 8) std::printf("FAIL %s case %zu channel %d\n", what, i, channel);
++        if (!ok && failures++ < 12)
++            std::printf("FAIL %s case %zu channel %d: in %g %g %g\n", what, i, channel, inputs[i].x,
++                        inputs[i].y, inputs[i].z);
++    };
++    const auto close = [](double a, double b, double rel) {
++        return std::abs(a - b) <= std::max(2e-6, std::abs(b) * rel);
 +    };
 +    for (size_t i = 0; i < tested; ++i) {
++        const Vec signal{inputs[i][0], inputs[i][1], inputs[i][2]};
++        const Vec light = Decode(signal);
++        const Vec roundtrip = Encode(light);
++        Vec half_light;
++        for (int c = 0; c < 3; ++c) half_light[c] = light[c] * 0.5;
++        const Vec half = Encode(half_light);
++        // Errors are measured in light against the color's brightest channel: a channel near 0
++        // beside a bright one carries that one's rounding (the primaries' conversion mixes them).
++        const double top = std::max({light[0], light[1], light[2]});
++        const auto light_close = [&](double signal_a, double signal_b, double rel) {
++            return std::abs(SignedPow(signal_a, 2.2) - SignedPow(signal_b, 2.2)) <=
++                   std::max(2e-7, std::max(top, std::abs(SignedPow(signal_b, 2.2))) * rel);
++        };
 +        for (int channel = 0; channel < 3; ++channel) {
-+            const double signal = std::max(double(inputs[i][channel]), 0.0);
-+            const double light = std::min(std::pow(signal, 2.2), 65504.0);
 +            for (int result = 0; result < 6; ++result)
 +                check(std::isfinite(outputs[6 * i + result][channel]), "finite", i, channel);
-+            const double decoded = outputs[6 * i][channel];
-+            check(std::abs(decoded - light) <= std::max(2e-7, light * 3e-6),
++            check(std::abs(outputs[6 * i][channel] - light[channel]) <= std::max(2e-7, top * 3e-6),
 +                  "linear light", i, channel);
-+            const double roundtrip = outputs[6 * i + 2][channel];
-+            const double bounded_signal = std::min(signal, std::pow(65504.0, 1.0 / 2.2));
-+            check(std::abs(roundtrip - bounded_signal) <= std::max(2e-7, bounded_signal * 3e-6),
-+                  "round trip", i, channel);
-+            const double stored = outputs[6 * i + 3][channel];
-+            const double reconstructed_nits = std::pow(std::max(stored, 0.0), 2.2) * 203.0;
-+            const double error = std::abs(reconstructed_nits - light * 203.0);
-+            check(error <= std::max(3e-5, light * 203.0 * 0.002),
-+                  "FP16 round trip", i, channel);
-+            if (light * 203.0 <= 1.0) worst_storage_nits = std::max(worst_storage_nits, error);
-+            const double half_signal = outputs[6 * i + 4][channel];
-+            const double half_light = std::pow(std::max(half_signal, 0.0), 2.2);
-+            check(std::abs(half_light - light * 0.5) <= std::max(2e-7, light * 3e-6),
++            check(light_close(outputs[6 * i + 2][channel], roundtrip[channel], 1e-5), "round trip",
++                  i, channel);
++            check(light_close(outputs[6 * i + 4][channel], half[channel], 1e-5),
 +                  "half-light averaging", i, channel);
 +        }
++        // FP16 storage of the linear BT.2020 and of the signal: the light within 0.2 % of the
++        // brightest channel (or a tiny absolute error near black), in nits at 203 nits per unit.
++        const Vec stored{outputs[6 * i + 3][0], outputs[6 * i + 3][1], outputs[6 * i + 3][2]};
++        const Vec stored_light = Decode(stored);
++        for (int channel = 0; channel < 3; ++channel) {
++            const double error = std::abs(stored_light[channel] - light[channel]) * 203.0;
++            check(error <= std::max(3e-4, top * 203.0 * 0.002), "FP16 round trip", i, channel);
++            if (top * 203.0 <= 1.0) worst_storage_nits = std::max(worst_storage_nits, error);
++        }
++        // A color inside BT.2020 comes back as it went in, sign included (not for the clipped
++        // or out-of-range inputs: black, the extreme case and the one outside BT.2020).
++        bool inside = true;
++        for (int c = 0; c < 3; ++c) {
++            Vec linear709{SignedPow(signal[0], 2.2), SignedPow(signal[1], 2.2), SignedPow(signal[2], 2.2)};
++            inside = inside && Mul(to2020, linear709)[c] >= 0.0 && std::abs(signal[c]) < 100.0;
++        }
++        if (inside) {
++            // In light (BT.709, linear): within 1e-5 of the color's brightest channel (well below
++            // a thousandth of a nit at 203 nits per unit for the colors of a frame).
++            double top = 0;
++            for (int c = 0; c < 3; ++c) top = std::max(top, std::abs(SignedPow(signal[c], 2.2)));
++            for (int channel = 0; channel < 3; ++channel)
++                check(std::abs(SignedPow(outputs[6 * i + 2][channel], 2.2) - SignedPow(signal[channel], 2.2)) <=
++                          1e-5 * std::max(top, 1e-3),
++                      "identity inside BT.2020", i, channel);
++        }
 +        if (i % 3 == 0 && i < 1536) {
-+            check(outputs[6 * i + 3].x == outputs[6 * i + 3].y &&
-+                  outputs[6 * i + 3].y == outputs[6 * i + 3].z, "neutral grey", i, 0);
++            const auto& grey = outputs[6 * i + 3];
++            check(std::abs(grey.x - grey.y) <= 2e-3f * std::abs(grey.y) + 1e-6f &&
++                      std::abs(grey.y - grey.z) <= 2e-3f * std::abs(grey.y) + 1e-6f,
++                  "neutral grey", i, 0);
 +        }
 +    }
 +    // A non-linear input of 0.5 is about 0.218 of the light. Averaging white and black in
 +    // linear light instead gives a signal about 0.730; the two contracts must not be confused.
 +    const size_t white_case = 1537;
-+    check(std::abs(outputs[6 * white_case + 4].x - 0.72974005f) < 2e-6f,
++    check(std::abs(outputs[6 * white_case + 4].x - 0.72974005f) < 2e-5f,
 +          "white/black energy", white_case, 0);
-+    std::printf("Mode 5 transfer: %zu inputs, linear-light/round-trip/FP16/neutral/energy checks; "
-+                "max FP16 error below 1 nit %.6g nits; %d failures\n",
++    // The signed cases (inside BT.2020, outside BT.709) keep a channel below 0 through the trip.
++    for (size_t i = 1541; i < tested; ++i) {
++        bool negative = false;
++        for (int c = 0; c < 3; ++c) negative = negative || inputs[i][c] < 0.f;
++        bool kept = false;
++        for (int c = 0; c < 3; ++c) kept = kept || outputs[6 * i + 2][c] < 0.f;
++        check(!negative || kept, "sign kept", i, 0);
++    }
++    std::printf("Mode 5 transfer: %zu inputs, BT.2020 linear-light/round-trip/FP16/neutral/energy/"
++                "sign checks; max FP16 error below 1 nit %.6g nits; %d failures\n",
 +                tested, worst_storage_nits, failures);
 +    return failures ? 1 : 0;
 +}
@@ -277,10 +367,10 @@ index 310bda9..45278a1 100644
          }
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag
 new file mode 100644
-index 0000000..581353f
+index 0000000..5fbf9de
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,73 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -327,7 +417,10 @@ index 0000000..581353f
 +    vec2 uv = vec2(fma(dx2, gl_BaryCoordEXT.z, fma(dx1, gl_BaryCoordEXT.y, fs_in_attr0_p[0].x)),
 +                   fma(dy2, gl_BaryCoordEXT.z, fma(dy1, gl_BaryCoordEXT.y, fs_in_attr0_p[0].y)));
 +    vec4 c = textureLod(sampler2D(fs_img0, fs_samp0), uv, 0.0);
++    // Channels below 0 (PsychoV30 with a BT.2020 target: colors outside BT.709): the table
++    // grades the positive part, the negative part is added back ungraded (as RenoDX's mods).
 +    vec3 v = max(c.xyz, 0.0);
++    vec3 below = min(c.xyz, 0.0);
 +    // Above white, as RenoDX's LUT sampling: the color divided by its largest channel (its hue
 +    // and saturation kept, unlike clipping each channel at 1), graded, then scaled back up. At or
 +    // below white the table as the game applies it.
@@ -339,7 +432,7 @@ index 0000000..581353f
 +    uint bits = push_data.bb_hdr.w;
 +    float strength = bits == 0u ? 1.0 : clamp(uintBitsToFloat(bits - 1u), 0.0, 1.0);
 +    graded = mix(sdr, graded, strength);
-+    vec3 o = graded * scale;
++    vec3 o = graded * scale + below;
 +    // The game's channel order: its target holds them swapped.
 +    frag_color0 = vec4(o.zyx, max(c.w, 0.0));
 +    // Chain probe (in-game menu, test; bb_hdr.z): 3 magenta where the input is above white,
@@ -655,10 +748,10 @@ index 0000000..5bbaf8f
 +#endif // BBPORT_BB_COMPOSITE_GLSL
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag
 new file mode 100644
-index 0000000..b4f838d
+index 0000000..588d13d
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag
-@@ -0,0 +1,305 @@
+@@ -0,0 +1,320 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -762,6 +855,14 @@ index 0000000..b4f838d
 +    return bits == 0u ? fallback : uintBitsToFloat(bits - 1u);
 +}
 +
++// The chain's gamma encoding (`power`, the game's 1/2.2) with the sign kept for channels below 0
++// (BT.2020 colors outside BT.709): exactly the unsigned encoding for the others.
++vec3 bb_encode_signed(vec3 v, float power) {
++    vec3 positive = exp2(power * log2(max(v, 0.0) + BB_EPS));
++    vec3 negative = exp2(power * log2(max(-v, 0.0) + BB_EPS)) - exp2(power * log2(BB_EPS));
++    return positive - negative;
++}
++
 +// The value plus one in `word` (0: not set, `fallback`).
 +int bb_choice(uint word, int fallback) {
 +    return word == 0u ? fallback : int(word - 1u);
@@ -796,9 +897,12 @@ index 0000000..b4f838d
 +    }
 +    t = rd_psychov30(x, peak, exposure, highlights, shadows, max(contrast, 0.05), purity, 1.0,
 +                     vec3(grey_in), vec3(0.18), 1.0, gamut, 1.0, RD_PSY30_SOURCE_BOUNDARY_BT709);
-+    // The chain after the composite carries BT.709 (gamma encoded): the channels a BT.2020
-+    // color has below 0 there are clipped here.
-+    t = max(t, 0.0);
++    // BT.2020: a color outside BT.709 has BT.709 channels below 0. They are kept, signed, through
++    // the 16-bit chain to the final pass, which converts to BT.2020 before it drops what is still
++    // negative (as RenoDX's mods). BT.709: within the cube, as before.
++    if (gamut == 0) {
++        t = max(t, 0.0);
++    }
 +    if (pure) {
 +        return true; // PsychoV30 (pure): its own shadows
 +    }
@@ -895,12 +999,16 @@ index 0000000..b4f838d
 +        }
 +        vec3 delta = vec3(0.0);
 +        if (has_hdr || scaled) {
++            // PsychoV30 (scene) with a BT.2020 target: channels below 0 kept, signed (the
++            // target holds the game's color plus this delta: RGBA16F, additive blending).
 +            if (BB_GAMMA) {
-+                vec3 hdr_encoded = exp2(bb_c(808u) * log2(max(target, 0.0) + BB_EPS));
++                vec3 hdr_encoded = psycho_scene
++                    ? bb_encode_signed(target, bb_c(808u))
++                    : exp2(bb_c(808u) * log2(max(target, 0.0) + BB_EPS));
 +                vec3 sdr_game = exp2(bb_c(808u) * log2(clamp(sdr_graded + BB_EPS, 0.0, 1.0)));
 +                delta = hdr_encoded - sdr_game;
 +            } else {
-+                delta = max(target, 0.0) - clamp(sdr_graded, 0.0, 1.0);
++                delta = (psycho_scene ? target : max(target, 0.0)) - clamp(sdr_graded, 0.0, 1.0);
 +            }
 +        }
 +        // PsychoV30 (scene) replaces the game's curve, so it may also darken.
@@ -1018,10 +1126,10 @@ index 0000000..cc826a2
 +}
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_display_copy.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_display_copy.frag
 new file mode 100644
-index 0000000..dd5b1c6
+index 0000000..d8fb667
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_display_copy.frag
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,63 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -1059,11 +1167,18 @@ index 0000000..dd5b1c6
 +
 +layout(location = 0) out vec4 frag_color0;
 +
-+float brightness(float v, float row) {
++float table(float v, float row) {
 +    if (v <= 1.0) {
 +        return texture(sampler1DArray(fs_img1, fs_samp0), vec2(v, row)).x;
 +    }
 +    return texture(sampler1DArray(fs_img1, fs_samp0), vec2(1.0, row)).x * v;
++}
++
++// Below 0 (PsychoV30 with a BT.2020 target: a channel of a color outside BT.709), the curve
++// continued point-symmetric about its value at 0: the table alone read its value at 0 there and
++// the channel lost its sign.
++float brightness(float v, float row) {
++    return v >= 0.0 ? table(v, row) : 2.0 * table(0.0, row) - table(-v, row);
 +}
 +
 +void main() {
@@ -2384,30 +2499,53 @@ index 0000000..95e3ffa
 +}
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/upscale_transfer.glsl b/gpu/shadps4/video_core/host_shaders/hdr/upscale_transfer.glsl
 new file mode 100644
-index 0000000..468be0d
+index 0000000..d51e40b
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/upscale_transfer.glsl
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,41 @@
 +// SPDX-License-Identifier: GPL-2.0-or-later
-+// Mode 5's post-composite frame is gamma 2.2 encoded, including values above SDR white.
-+// Temporal reconstruction works in linear light; the game's later UI/display passes still
-+// expect its original encoding. Neither conversion is a tone mapper or a gamut transform.
++// Mode 5's post-composite frame is gamma 2.2 encoded, including values above SDR white, in
++// BT.709 primaries with channels below 0 for colors outside BT.709 (PsychoV30 with a BT.2020
++// target). Temporal reconstruction works in linear light, on non-negative values: it gets the
++// frame in linear BT.2020 primaries, where those colors are positive (anything still negative
++// there, outside BT.2020, is dropped, as the final pass drops it). The game's later UI/display
++// passes get their original encoding and primaries back. Neither conversion is a tone mapper;
++// both keep a color inside BT.2020 as it is (up to rounding), sign included.
 +#ifndef BBPORT_HDR_UPSCALE_TRANSFER_GLSL
 +#define BBPORT_HDR_UPSCALE_TRANSFER_GLSL
 +
++// Linear BT.709 -> BT.2020 primaries (columns), as hdr_output.frag's, and its exact inverse
++// (computed from these values, so a round trip changes nothing but rounding).
++const mat3 BB_BT709_TO_BT2020 = mat3(
++    0.6274040, 0.0690970, 0.0163916,
++    0.3292820, 0.9195400, 0.0880132,
++    0.0433136, 0.0113612, 0.8955950);
++const mat3 BB_BT2020_TO_BT709 = mat3(
++    1.6604902958, -0.1245499701, -0.0181511189,
++    -0.5876391058, 1.1328999220, -0.1005787239,
++    -0.0728515982, -0.0083479642, 1.1187298782);
++
++// The FP16 limit: extreme inputs stay representable instead of writing infinity into the
++// temporal history. Normal mode 5 output (peak / paper white) is far below it.
++const float BB_FP16_MAX = 65504.0;
++
++vec3 bb_signed_pow(vec3 v, float power) {
++    return sign(v) * pow(abs(v), vec3(power));
++}
++
 +vec3 bb_upscale_decode(vec3 encoded) {
-+    // The destination is FP16. Keep extreme inputs representable instead of writing infinity
-+    // into the temporal history. Normal mode 5 output (peak / paper white) is far below this.
-+    return min(pow(max(encoded, vec3(0.0)), vec3(2.2)), vec3(65504.0));
++    vec3 linear = clamp(bb_signed_pow(encoded, 2.2), vec3(-BB_FP16_MAX), vec3(BB_FP16_MAX));
++    return clamp(BB_BT709_TO_BT2020 * linear, vec3(0.0), vec3(BB_FP16_MAX));
 +}
 +
 +vec3 bb_upscale_encode(vec3 linear) {
-+    return pow(clamp(linear, vec3(0.0), vec3(65504.0)), vec3(1.0 / 2.2));
++    vec3 bt709 = BB_BT2020_TO_BT709 * clamp(linear, vec3(0.0), vec3(BB_FP16_MAX));
++    return bb_signed_pow(clamp(bt709, vec3(-BB_FP16_MAX), vec3(BB_FP16_MAX)), 1.0 / 2.2);
 +}
 +
 +#endif
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr_output.frag b/gpu/shadps4/video_core/host_shaders/hdr_output.frag
-index b3d6246..39d1b2c 100644
+index b3d6246..57998cc 100644
 --- a/gpu/shadps4/video_core/host_shaders/hdr_output.frag
 +++ b/gpu/shadps4/video_core/host_shaders/hdr_output.frag
 @@ -13,6 +13,7 @@
@@ -2418,7 +2556,7 @@ index b3d6246..39d1b2c 100644
  
  layout (location = 0) out vec4 color;
  
-@@ -29,8 +30,13 @@ layout (push_constant) uniform HdrSettings {
+@@ -29,13 +30,20 @@ layout (push_constant) uniform HdrSettings {
      vec2 gain_scale;   // and 1 / its size: output pixels -> gain map coordinates
      float ui_white;    // native mode: the UI's white, times paper white
      float ui_vivid;    // native mode: 0 the UI in sRGB's colours .. 1 in DCI-P3's
@@ -2432,7 +2570,14 @@ index b3d6246..39d1b2c 100644
  const uint FLAG_SCRGB = 1u;   // scRGB output, else HDR10
  const uint FLAG_OVERLAY = 2u; // the menu layer has something drawn
  const uint FLAG_NATIVE = 4u;  // the gain map belongs to this frame
-@@ -91,9 +97,315 @@ vec3 Heat(float t) {
+ const uint FLAG_DEBUG = 8u;   // BB_HDR_DEBUG: the gain as a heat map
+ const uint FLAG_UI_FRAME = 16u; // native mode, a frame without a scene: all of it is UI
++// 32 PsychoV30 (16-bit) frame, 64 its signal encoded, 128 its pre-HUD snapshot bound (hdr_pass.h).
++const uint FLAG_NEGATIVE_PROBE = 256u; // PsychoV30: the 16-bit probe 6, channels below 0
+ 
+ // Linear brightness (SDR white = 1) above which the highlights are expanded: high, so large
+ // bright areas (fog, sky) stay near paper white and only lamps, fire and sparks reach the peak.
+@@ -91,9 +99,328 @@ vec3 Heat(float t) {
                        1.5 - abs(4.0 * t - 1.0)), 0.0, 1.0);
  }
  
@@ -2652,6 +2797,10 @@ index b3d6246..39d1b2c 100644
 +// white at 1 and its highlights above. The SDR part is decoded like the game's SDR (sRGB or 2.2);
 +// above 1 the values are the game's own, then shaped live like the side channel's.
 +vec3 native16_nits(vec3 v) {
++    // Channels below 0 (PsychoV30 with a BT.2020 target: colors outside BT.709) are kept apart,
++    // decoded with their sign and added back before the BT.2020 conversion, which drops what is
++    // still negative there (scene_to_nits). The rest exactly as before, on the positive part.
++    vec3 below = min(v, 0.0);
 +    v = max(v, 0.0);
 +    vec3 sdr = min(v, 1.0);
 +    // Encoded (2): the values are the SDR signal itself; linear (1): encoded like the game's.
@@ -2663,6 +2812,9 @@ index b3d6246..39d1b2c 100644
 +    vec3 lin_sdr = decode_sdr_signal(signal);
 +    // Above white the chain's values are gamma encoded (the composite's output, a 2.2 power).
 +    vec3 lin = black_floor(lin_sdr * mix(vec3(1.0), pow(v, vec3(2.2)), greaterThan(v, vec3(1.0))));
++    // The channels below 0, decoded with their sign (encoded: the chain's 2.2 power; linear: as
++    // they are), after Black Floor, which lowers the positive part only.
++    lin += pp.hdr_native16 == 2u ? -pow(-below, vec3(2.2)) : below;
 +    float peak = max(pp.hdr_peak_nits / pp.hdr_paper_white, 1.0);
 +    float l_sdr = dot(lin_sdr, LUMA709);
 +    vec3 t = lin;
@@ -2730,6 +2882,12 @@ index b3d6246..39d1b2c 100644
 +        pp.hdr_black_floor = hdr.black_floor;
 +        pp.hdr_debug = 0u;
 +        vec3 nits = native16_nits(game_srgb);
++        // The 16-bit probe 6 (in-game menu, test): magenta where a BT.709 channel reaches this
++        // pass below 0, a color outside BT.709 (PsychoV30 with a BT.2020 target) kept to the end.
++        if ((hdr.flags & FLAG_NEGATIVE_PROBE) != 0u &&
++            min(min(game_srgb.r, game_srgb.g), game_srgb.b) < -1e-3) {
++            nits = vec3(hdr.paper_white, 0.0, hdr.paper_white);
++        }
 +        if (hdr.compare == 2u && abs(uv.x - 0.5) * float(textureSize(game, 0).x) < 1.5)
 +            nits = vec3(hdr.paper_white);
 +        if ((hdr.flags & FLAG_OVERLAY) != 0u) {
@@ -4289,7 +4447,7 @@ index a263cce..855d239 100644
  
      const vk::RenderingAttachmentInfo attachment{
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/host_passes/hdr_pass.h b/gpu/shadps4/video_core/renderer_vulkan/host_passes/hdr_pass.h
-index db4f57f..a964204 100644
+index db4f57f..d42a242 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/host_passes/hdr_pass.h
 +++ b/gpu/shadps4/video_core/renderer_vulkan/host_passes/hdr_pass.h
 @@ -17,7 +17,7 @@ class HdrOutputPass {
@@ -4301,7 +4459,7 @@ index db4f57f..a964204 100644
          float peak = 1000.0f;       ///< nits the display reaches
          float boost = 0.5f;         ///< highlight expansion, 0..1 (expand mode and fallback)
          u32 flags = 0;              ///< FlagScRgb | FlagOverlay | FlagNative | FlagDebug
-@@ -28,7 +28,11 @@ public:
+@@ -28,7 +28,13 @@ public:
          /// Native mode: the UI's white (times paper white) and colours (0 sRGB .. 1 DCI-P3).
          float ui_white = 1.0f;
          float ui_vivid = 0.0f;
@@ -4310,10 +4468,12 @@ index db4f57f..a964204 100644
      };
 +    static_assert(sizeof(Settings) == 52);
 +    static constexpr u32 FlagPsycho = 32, FlagEncoded = 64, FlagSnapshot = 128;
++    /// PsychoV30: the in-game menu's 16-bit probe 6, magenta where a channel arrives below 0.
++    static constexpr u32 FlagNegativeProbe = 256;
      static constexpr u32 FlagScRgb = 1;   ///< scRGB (linear BT.709) output, else HDR10 PQ
      static constexpr u32 FlagOverlay = 2; ///< the menu layer is drawn
      static constexpr u32 FlagNative = 4;  ///< `gain` is this frame's gain map (native mode)
-@@ -47,7 +51,7 @@ public:
+@@ -47,7 +53,7 @@ public:
      /// in `gain_layout`) is filtered.
      void Render(vk::CommandBuffer cmdbuf, vk::ImageView game, vk::ImageView overlay,
                  vk::ImageView gain, vk::ImageLayout gain_layout, vk::ImageView output,
@@ -4488,10 +4648,10 @@ index 65fb22f..8e38232 100644
      std::optional<const Shader::Gcn::FetchShaderData> fetch_shader{};
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp
 new file mode 100644
-index 0000000..9384981
+index 0000000..8092375
 --- /dev/null
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp
-@@ -0,0 +1,609 @@
+@@ -0,0 +1,615 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -4951,6 +5111,12 @@ index 0000000..9384981
 +    return Upgraded(address, width, height, format);
 +}
 +
++u32 HdrChannel::ChainProbe() {
++    // 1..5 the chain's passes; 6 is the final pass's (channels below 0, presenter): none here.
++    const int probe = BbSettings::Get().hdr_native16_probe.load();
++    return probe >= 1 && probe <= 5 ? u32(probe) : 0u;
++}
++
 +bool HdrChannel::Native16Fixed() {
 +    return Native16() && FixedRenderSize().first != 0;
 +}
@@ -5103,10 +5269,10 @@ index 0000000..9384981
 +} // namespace Vulkan
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.h b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.h
 new file mode 100644
-index 0000000..e4aae02
+index 0000000..327cbeb
 --- /dev/null
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.h
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,116 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -5155,6 +5321,9 @@ index 0000000..e4aae02
 +    /// A tag of bbport's replacement shaders (hex): part of the mode 5 shader cache's name, so a
 +    /// cache made with other versions of them is not loaded.
 +    static std::string CacheTag();
++    /// The in-game menu's 16-bit probe for the chain's passes (bb_hdr.z): 1..5, else 0 (probe 6
++    /// is the final pass's, set by the presenter).
++    static u32 ChainProbe();
 +    /// Mode 5 with the startup-patched render size (BB_RENDER_RES, "Live resolution changes"
 +    /// off): the game's targets are already at the render size and the scene has no proxies, so
 +    /// the chain's targets get same-size RGBA16F proxies of their own (SceneTargets::OwnSize).
@@ -5346,7 +5515,7 @@ index 21188ff..9b444e8 100644
      vk::ShaderModule module;
      if (perm_idx < target->modules.size() && target->modules[perm_idx].module) {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
-index 9529089..5ee2838 100644
+index 9529089..45155b3 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
 @@ -1,3 +1,4 @@
@@ -5383,7 +5552,7 @@ index 9529089..5ee2838 100644
      LogHdrState(scrgb, mode, native);
      // BB_HDR_DEBUG=1: the gain as a heat map over a grey picture (hdr_output.frag).
      static const bool debug = [] {
-@@ -365,29 +368,35 @@ void Presenter::PresentHdr(vk::CommandBuffer cmdbuf, Frame* frame, vk::Extent2D
+@@ -365,29 +368,36 @@ void Presenter::PresentHdr(vk::CommandBuffer cmdbuf, Frame* frame, vk::Extent2D
                                    BbSettings::HdrPaperWhiteMax),
          .peak = std::clamp(settings.hdr_peak.load(), BbSettings::HdrPeakMin,
                             BbSettings::HdrPeakMax),
@@ -5397,6 +5566,7 @@ index 9529089..5ee2838 100644
 +                 (psycho ? HostPasses::HdrOutputPass::FlagPsycho : 0u) |
 +                 (psycho && frame->psycho_encoded ? HostPasses::HdrOutputPass::FlagEncoded : 0u) |
 +                 (psycho && frame->psycho_snapshot ? HostPasses::HdrOutputPass::FlagSnapshot : 0u) |
++                 (psycho && settings.hdr_native16_probe == 6 ? HostPasses::HdrOutputPass::FlagNegativeProbe : 0u) |
                   (debug ? HostPasses::HdrOutputPass::FlagDebug : 0u) |
                   (mode == BbSettings::HdrModeNative && !native ? HostPasses::HdrOutputPass::FlagUiFrame : 0u),
          .gain_offset = {float(fit.offset.x), float(fit.offset.y)},
@@ -5422,7 +5592,7 @@ index 9529089..5ee2838 100644
                                     ? hdr.peak
                                     : std::min(hdr.peak, hdr.paper_white * expand_white);
      swapchain.SetHdrMetadata(hdr.peak, content_peak, hdr.paper_white);
-@@ -403,7 +412,7 @@ void Presenter::PresentHdr(vk::CommandBuffer cmdbuf, Frame* frame, vk::Extent2D
+@@ -403,7 +413,7 @@ void Presenter::PresentHdr(vk::CommandBuffer cmdbuf, Frame* frame, vk::Extent2D
      hdr_pass.Render(cmdbuf, hdr_game.view, overlay ? hdr_overlay.view : hdr_game.view,
                      native ? *frame->hdr_gain->view : hdr_game.view,
                      native ? Layout::eGeneral : Layout::eShaderReadOnlyOptimal,
@@ -5431,7 +5601,7 @@ index 9529089..5ee2838 100644
  
      const std::array to_present{
          barrier(swapchain_image, Layout::eColorAttachmentOptimal, Layout::ePresentSrcKHR,
-@@ -461,7 +470,7 @@ void Presenter::RecreateFrame(Frame* frame, u32 width, u32 height) {
+@@ -461,7 +471,7 @@ void Presenter::RecreateFrame(Frame* frame, u32 width, u32 height) {
          vmaDestroyImage(instance.GetAllocator(), frame->image, frame->allocation);
      }
  
@@ -5440,7 +5610,7 @@ index 9529089..5ee2838 100644
      const vk::ImageCreateInfo image_info = {
          .flags = vk::ImageCreateFlagBits::eMutableFormat,
          .imageType = vk::ImageType::e2D,
-@@ -597,6 +606,7 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+@@ -597,6 +607,7 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
      // bbport: scaled upscaler presets: the output-size display buffer drawn by the port.
      TemporalUpscaler::Display display{};
      const bool upscaled = rasterizer->GetUpscaler().DisplayOverride(cpu_address, display);
@@ -5448,7 +5618,7 @@ index 9529089..5ee2838 100644
      VideoCore::ImageId image_id{};
      if (!upscaled) {
          auto desc = VideoCore::TextureCache::ImageDesc{attribute, cpu_address};
-@@ -605,6 +615,13 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+@@ -605,6 +616,13 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
      }
  
      Frame* frame = GetRenderFrame();
@@ -5462,7 +5632,7 @@ index 9529089..5ee2838 100644
      // bbport: native HDR output: the gain map made at this display buffer's display pass (for
      // the frame it holds, a frame earlier in the command stream) goes with the frame to the
      // present thread; the frame's old one, presented (its fence was waited above), goes back.
-@@ -635,9 +652,15 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+@@ -635,9 +653,15 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
          image_view = Check(device.createImageView({
              .image = display.image,
              .viewType = vk::ImageViewType::e2D,
@@ -5481,7 +5651,7 @@ index 9529089..5ee2838 100644
              .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
          }));
          draw_scheduler.DeferOperation([device, image_view] { device.destroyImageView(image_view); });
-@@ -679,6 +702,8 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+@@ -679,6 +703,8 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
      pp_settings.srgb_input =
          attribute.attrib.pixel_format == Libraries::VideoOut::PixelFormat::A2R10G10B10Srgb;
  
@@ -5490,7 +5660,7 @@ index 9529089..5ee2838 100644
      // Numbered here, in command order; marked where the commands are recorded.
      const u32 stream = draw_scheduler.CrumbStream();
      const bool crumbs = Breadcrumbs::Enabled();
-@@ -708,7 +733,7 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+@@ -708,7 +734,7 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
          }
          const vk::ImageView input = fsr_pass.Render(cmdbuf, image_view, image_size,
                                                      {frame->width, frame->height}, fsr,
@@ -5514,7 +5684,7 @@ index f090799..5a88cb6 100644
  
  enum SchedulerType {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
-index 0cdc917..417064b 100644
+index 0cdc917..629aad6 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
 @@ -1,3 +1,4 @@
@@ -5550,13 +5720,13 @@ index 0cdc917..417064b 100644
 +        if (const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
 +            ps && (ps->pgm_hash == HdrChannel::ColorGradingHash || ps->pgm_hash == 0x38d65b32 ||
 +                   ps->pgm_hash == 0xf7229091)) {
-+            push_data.bb_hdr[2] = u32(std::clamp(BbSettings::Get().hdr_native16_probe.load(), 0, 5));
++            push_data.bb_hdr[2] = HdrChannel::ChainProbe();
 +        }
 +    }
      pipeline->BindResources(set_writes, push_data, {image_infos.data(), image_infos.size()},
                              {buffer_infos.data(), buffer_infos.size()});
      if (pipeline->GetGraphicsKey().motion_vectors) {
-@@ -2058,6 +2079,79 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
+@@ -2058,6 +2079,77 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
              cmdbuf.endQuery(query.pool, query.index);
          }
      });
@@ -5592,9 +5762,7 @@ index 0cdc917..417064b 100644
 +                     (bb.hdr_tonemapper == BbSettings::HdrToneMapperPsychoPure ? 1u : 0u) + 1u};
 +        }
 +        // bb_hdr.y .. bb_hdr2[7], contiguous: one push, then the game's values back.
-+        std::array<u32, 11> probe{bits(knee),
-+                                  u32(std::clamp(BbSettings::Get().hdr_native16_probe.load(), 0, 5)),
-+                                  bits(bloom)};
++        std::array<u32, 11> probe{bits(knee), HdrChannel::ChainProbe(), bits(bloom)};
 +        std::array<u32, 11> game_reg{push_data.bb_hdr[1], push_data.bb_hdr[2], push_data.bb_hdr[3]};
 +        for (size_t i = 0; i < scene.size(); ++i) {
 +            probe[3 + i] = scene[i];
@@ -5636,7 +5804,7 @@ index 0cdc917..417064b 100644
      if (FrameCapture::Active()) {
          const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
          FrameCapture::Draw(vs_info.pgm_hash, ps ? ps->pgm_hash : 0, num_indices, num_instances);
-@@ -3126,6 +3220,32 @@ bool Rasterizer::IsComputeImageCopy(const Pipeline* pipeline) {
+@@ -3126,6 +3218,32 @@ bool Rasterizer::IsComputeImageCopy(const Pipeline* pipeline) {
      // Perform image copy
      VideoCore::Image& src_image = desc0.is_written ? image1 : image0;
      VideoCore::Image& dst_image = desc0.is_written ? image0 : image1;
@@ -5669,7 +5837,7 @@ index 0cdc917..417064b 100644
      runtime.CopyColorAndDepth(&src_image, &dst_image);
      return true;
  }
-@@ -4017,6 +4137,9 @@ vk::Sampler Rasterizer::CachedSampler(const AmdGpu::Sampler& sharp, bool is_dept
+@@ -4017,6 +4135,9 @@ vk::Sampler Rasterizer::CachedSampler(const AmdGpu::Sampler& sharp, bool is_dept
  // The sampler that reads each image is not known here: any point sampler counts.
  // BB_PROXY_POINT_NATIVE=0 (or experiment bit 0): proxies are read regardless, as before.
  bool Rasterizer::PointReadsNative(const Shader::Info& stage, const PreparedStage* prepared) const {
@@ -5679,7 +5847,7 @@ index 0cdc917..417064b 100644
      static const bool enabled = [] {
          const char* env = std::getenv("BB_PROXY_POINT_NATIVE");
          return !(env && env[0] == '0');
-@@ -4416,6 +4539,35 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
+@@ -4416,6 +4537,35 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
                            !same_size(texture_cache.GetImage(db_desc.first), 0))) {
          reduced = false;
      }
@@ -5715,7 +5883,7 @@ index 0cdc917..417064b 100644
      if (debug_pass) {
          if (db_desc.first) {
              const auto& depth = texture_cache.GetImage(db_desc.first);
-@@ -4425,7 +4577,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
+@@ -4425,7 +4575,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
          }
          std::printf("Scene pass: reduced %d %s\n", reduced, why.c_str());
      }
@@ -5724,7 +5892,7 @@ index 0cdc917..417064b 100644
      if (BbStats::enabled) {
          BbStats::reduced_draws.fetch_add(reduced, std::memory_order_relaxed);
          BbStats::scene_draws.fetch_add(scene_started, std::memory_order_relaxed);
-@@ -4662,13 +4814,13 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
+@@ -4662,13 +4812,13 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
          state.num_layers = 1;
      }
  
@@ -5740,7 +5908,7 @@ index 0cdc917..417064b 100644
      }
      if (FrameCapture::Active()) {
          std::array<const VideoCore::ImageInfo*, AmdGpu::NUM_COLOR_BUFFERS> colors{};
-@@ -4693,8 +4845,18 @@ void Rasterizer::Resolve() {
+@@ -4693,8 +4843,18 @@ void Rasterizer::Resolve() {
      const auto& mrt1_hint = CbExtent(1);
      VideoCore::TextureCache::ImageDesc mrt0_desc{Regs().color_buffers[0], mrt0_hint};
      VideoCore::TextureCache::ImageDesc mrt1_desc{Regs().color_buffers[1], mrt1_hint};
@@ -5761,7 +5929,7 @@ index 0cdc917..417064b 100644
  
      ScopeMarkerBegin(fmt::format("Resolve:MRT0={:#x}:MRT1={:#x}",
                                   Regs().color_buffers[0].Address(),
-@@ -5289,7 +5451,12 @@ void Rasterizer::UpdateRasterizationState() const {
+@@ -5289,7 +5449,12 @@ void Rasterizer::UpdateRasterizationState() const {
  void Rasterizer::UpdateColorBlendingState(const GraphicsPipeline* pipeline) const {
      const auto& regs = Regs();
      auto& dynamic_state = scheduler.GetDynamicState();
@@ -7010,10 +7178,10 @@ index 435d5d5..f127dde 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 6a75445..5a02b9d 100644
+index 6a75445..4eb576d 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
-@@ -272,6 +272,265 @@ void CheatStats() {
+@@ -272,6 +272,271 @@ void CheatStats() {
      CheatUnavailable(BbEngine::Cheats::Echoes);
  }
  
@@ -7264,8 +7432,14 @@ index 6a75445..5a02b9d 100644
 +            "приблизителен: его SDR-половина — HDR-картинка, обрезанная по белому. Не сохраняется."));
 +        static const char* probes[] = {"Off", "1. Composite: HDR part", "2. Final image above white",
 +                                       "3. Color grading input above white", "4. Color grading area",
-+                                       "5. Copy above white"};
-+        s.hdr_native16_probe = ComboIndex("16-bit probe", s.hdr_native16_probe, probes, 6, 0);
++                                       "5. Copy above white",
++                                       "6. Final pass: colors outside BT.709"};
++        s.hdr_native16_probe = ComboIndex("16-bit probe", s.hdr_native16_probe, probes, 7, 0);
++        Hint(BbSettings::MenuText(
++            "6: magenta where a color outside BT.709 (Target gamut BT.2020) reaches the final pass, "
++            "a BT.709 channel below 0 kept to the end. Not saved.",
++            "6: пурпурный там, где цвет вне BT.709 (Target gamut BT.2020) доходит до финального "
++            "прохода с отрицательным каналом BT.709. Не сохраняется."));
 +        if (ImGui::Button("Log the 16-bit chain (one frame)")) {
 +            s.hdr_chain_trace = true;
 +        }
@@ -7279,7 +7453,7 @@ index 6a75445..5a02b9d 100644
  // HDR output (bbport.ini hdr*): on/off on restart; paper white, peak and boost live.
  void HdrSection() {
      auto& s = BbSettings::Get();
-@@ -306,11 +565,26 @@ void HdrSection() {
+@@ -306,11 +571,26 @@ void HdrSection() {
      const char* modes[BbSettings::HdrModeCount] = {
          BbSettings::MenuText("Native (from the game's HDR scene)", "Нативный (из HDR-сцены игры)"),
          BbSettings::MenuText("Expand (from the SDR picture)", "Расширение (из SDR-картинки)"),
@@ -7306,7 +7480,7 @@ index 6a75445..5a02b9d 100644
      Hint(BbSettings::MenuText(
          "Native: the brightness of lamps, fire, the moon and other highlights comes from the "
          "game's own HDR scene, before its tonemap clipped it to SDR white. Midtones, colours and "
-@@ -372,13 +646,20 @@ void PictureSection() {
+@@ -372,13 +652,20 @@ void PictureSection() {
      // A moved setting turns Picture tuning on: it gates them all.
      const bool vignette = s.graphics_vignette;
      // The useful range on the slider; Ctrl+click types any value (bbport_settings.cpp keeps it
@@ -7332,7 +7506,7 @@ index 6a75445..5a02b9d 100644
      Checkbox(BbSettings::MenuText("Vignette", "Виньетка"), s.graphics_vignette);
      moved |= vignette != s.graphics_vignette;
      moved |= Slider(BbSettings::MenuText("Ambient occlusion strength", "Сила затенения (AO)"), s.graphics_ao_strength,
-@@ -399,6 +680,16 @@ void PictureSection() {
+@@ -399,6 +686,16 @@ void PictureSection() {
          Store(s.graphics_shadow_scale, 1.0f, true);
      }
      ImGui::EndDisabled();
@@ -7349,7 +7523,7 @@ index 6a75445..5a02b9d 100644
      Hint(BbSettings::MenuText(
          "Changes apply live, Picture tuning too, to the game's own colour, fog and lighting of each area "
          "(the HUD and menus keep theirs). Moving one turns Picture tuning on; off: the game's own picture. 1.00 and Hue 0 are the game's. Fog 0 clears the haze over distant streets. The "
-@@ -739,6 +1030,7 @@ void Menu() {
+@@ -739,6 +1036,7 @@ void Menu() {
      bool restart =
          s.object_motion != s.startup_object_motion || s.model_lod != s.startup_model_lod ||
          s.live_resolution != s.startup_live_resolution || s.hdr != s.startup_hdr ||
@@ -7357,7 +7531,7 @@ index 6a75445..5a02b9d 100644
          BbSettings::ResolutionNeedsRestart();
      for (int e = 0; e < BbSettings::EffectCount; ++e) {
          restart |= s.effects[e] != s.startup_effects[e];
-@@ -1045,6 +1337,11 @@ bool HandleEvent(const SDL_Event& event) {
+@@ -1045,6 +1343,11 @@ bool HandleEvent(const SDL_Event& event) {
      case SDL_EVENT_KEY_DOWN:
      case SDL_EVENT_KEY_UP: {
          const bool down = event.type == SDL_EVENT_KEY_DOWN;

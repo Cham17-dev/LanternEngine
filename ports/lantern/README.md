@@ -65,10 +65,32 @@ Target gamut (`hdr_gamut` in `bbport.ini`, `bt2020` or `bt709`; live, kept per p
 the launcher's Display page when PsychoV30 is selected) is PsychoV30's gamut_compression_mode, the
 color volume it fits the picture into: BT.2020 by default, as RenoDX's HDR mods, or BT.709 (the
 earlier builds of this port). It reaches the composite in `bb_hdr2b.z` (the value plus one, 0 not
-set), and both PsychoV30 calls of the shadow match use it. The 16-bit chain after the composite
-carries gamma-encoded BT.709: the channels a BT.2020 color has below 0 there are clipped right
-after PsychoV30, so BT.2020 here is PsychoV30's BT.2020 compression followed by that clip, not a
-wide-gamut output.
+set), and both PsychoV30 calls of the shadow match use it.
+
+With BT.2020, a color outside BT.709 has BT.709 channels below 0. The 16-bit chain keeps them,
+signed, to the final pass, which converts to BT.2020 and only then drops what is still negative
+(as RenoDX's mods); before, they were clipped right after PsychoV30 and BT.2020 changed almost
+nothing. Mode 5 only, every pass between the composite and the final one:
+
+- Composite (`bb_composite_hdr.frag`): no clip after PsychoV30 (BT.709 keeps it, exactly as
+  before); the target's gamma encoding keeps the sign (`bb_encode_signed`, the unsigned encoding
+  bit for bit on channels >= 0), and so does the delta (RGBA16F, additive blending).
+- Color grading (`bb_color_grading.frag`): the game's table grades the positive part (max-channel
+  normalization as before), the negative part is added back ungraded, as RenoDX's mods.
+- Display copy (`bb_display_copy.frag`): below 0 the brightness table is continued
+  point-symmetric about its value at 0 (the table alone read its value at 0 there).
+- Temporal reconstruction (`upscale_transfer.glsl`, DLSS / FSR / TAA): the decode is signed and
+  goes to linear BT.2020, where those colors are positive (the upscalers get no negative light);
+  the encode returns to signed gamma-2.2 BT.709. The two are exact inverses inside BT.2020
+  (`docs/hdr-tools/upscale_transfer_check`, now with signed cases).
+- Final pass (`hdr_output.frag`): the negative part is decoded with its sign and added after
+  Black Floor, which lowers the positive part only; the BT.2020 conversion then drops what is
+  still negative. The copies, the pre-HUD snapshot and the UI composition copy float to float.
+- 16-bit probe 6 (Advanced, Debug): magenta where a BT.709 channel reaches the final pass below
+  0, to check in game that the BT.2020 colors get to the end. Probes 1-5 are unchanged.
+
+Native, Expand and mode 4 are unchanged. Whether the game produces colors outside BT.709 at all
+is up to PsychoV30's response to its scene: see Validation.
 
 PsychoV30 Pure (`hdr_tonemapper=4`; live, kept per preset, also on the launcher's Display page
 as "Tone mapper" when PsychoV30 is selected) is PsychoV30 Matched (`hdr_tonemapper=3`, the
@@ -127,7 +149,9 @@ movement. Inspect HUD brightness, clipping, color order, borders and temporal st
 repeated JXR pairs for comparison with the reference mod; those captures are not in this repo.
 No FPS or visual-quality improvement is claimed before those measurements.
 
-- Compare Target gamut BT.2020 and BT.709 on saturated lights (lanterns, fire, blue lights).
+- Compare Target gamut BT.2020 and BT.709 on saturated lights (lanterns, fire, blue lights);
+  with probe 6, check where colors outside BT.709 reach the final pass, with and without an
+  upscaler (DLSS / FSR / TAA reconstruct in BT.2020 primaries).
 - Compare PsychoV30 Matched and PsychoV30 Pure in dark interiors and in fog.
 
 ## Sources and licenses
