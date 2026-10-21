@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <AssemblyName>Bloodborne Launcher</AssemblyName>
+    <AssemblyName>Lantern Engine</AssemblyName>
     <RootNamespace>BloodborneLauncher</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Version>0.9.9</Version>
@@ -20,9 +20,12 @@
 
   <ItemGroup>
     <Resource Include="app.ico" />
+    <Resource Include="lantern-beta.ico" />
+    <Resource Include="lantern-stable.ico" />
+    <Resource Include="lantern-j3loo.ico" />
     <Resource Include="Assets\backdrop.jpg" />
+    <Resource Include="Assets\discord-logo.png" />
   </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="WPF-UI" Version="4.3.0" />
   </ItemGroup>

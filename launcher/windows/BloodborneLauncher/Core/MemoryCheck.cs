@@ -51,7 +51,7 @@ namespace BloodborneLauncher.Core
                 int.TryParse(ini.Get("preset", "0"), out var preset);
                 scale = PresetScales[Math.Clamp(preset, 0, PresetScales.Length - 1)];
             }
-            long rw = (long)Math.Round(w / scale / 2) * 2, rh = (long)Math.Round(h / scale / 2) * 2;
+            long rw = (long)Math.Round(w / scale / 4) * 4, rh = (long)Math.Round(h / scale / 4) * 4;
             return rw * rh > 1920 * 1080;
         }
 

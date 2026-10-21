@@ -43,9 +43,9 @@ namespace BloodborneLauncher.Core
 
         public static readonly Profile[] BuiltIns =
         {
-            new("PC default", "Bloodborne PC", "The engine's own layout: attack on left click, firearm and transform on the mouse too.",
+            new("PC default", "Lantern Engine", "The engine's own layout: attack on left click, firearm and transform on the mouse too.",
                 DefaultBindings(), BuiltIn: true),
-            new("EldenRingStyle", "Bloodborne PC", "Elden Ring's PC layout (the package default): left click attacks, Shift + left click strong attack, " +
+            new("EldenRingStyle", "Lantern Engine", "Elden Ring's PC layout (the package default): left click attacks, Shift + left click strong attack, " +
                 "right click left hand (firearm / parry), Q or middle click lock on, R Blood Vial, E interact, arrows switch.",
                 new Dictionary<string, string>(DefaultBindings())
                 {
@@ -65,7 +65,7 @@ namespace BloodborneLauncher.Core
                     ["dpad_up"] = "Up",
                     ["walk"] = "Left Alt",
                 }, BuiltIn: true),
-            new("Mouse focus", "Bloodborne PC", "Both attacks and lock on on the mouse: left click attack, right click strong attack, " +
+            new("Mouse focus", "Lantern Engine", "Both attacks and lock on on the mouse: left click attack, right click strong attack, " +
                 "middle click lock on; firearm F, quick item V.",
                 new Dictionary<string, string>(DefaultBindings())
                 {

@@ -29,8 +29,13 @@ namespace BloodborneLauncher
             ws.Logged += OnLogged;
             ws.Saved += () => SavedText.Text = $"Saved {DateTime.Now:HH:mm:ss}";
             ws.GameStateChanged += UpdatePlayButton;
+            ws.GameStateChanged += UpdateDiscord;
             ws.GameCrashed += OnGameCrashed;
+            ws.SignInRefused += OnSignInRefused;
             ws.Initialise();
+            KeyDown += Window_KeyDown;
+            PreviewMouseDown += Window_PreviewMouseDown;
+            Deactivated += (_, _) => SearchResults.Visibility = Visibility.Collapsed;
 
             // Layout, read once at start (Settings › Layout restarts the launcher to switch).
             var args = Environment.GetCommandLineArgs();
@@ -55,6 +60,9 @@ namespace BloodborneLauncher
             TabStrip.Visibility = SettingRow.Classic ? Visibility.Collapsed : Visibility.Visible;
             if (!SettingRow.Classic)
                 ApplyGlass();
+            LauncherTheme.Apply(ws.Settings, glass: !SettingRow.Classic);
+            ApplyWindowButtons();
+            ApplyIcon();
 
             var version = typeof(MainWindow).Assembly.GetName().Version;
             VersionText.Text = version == null ? "" : Updater.CurrentLabel;
@@ -92,8 +100,8 @@ namespace BloodborneLauncher
                     Dispatcher.BeginInvoke(() => Prompt.Confirm("Switch layout", "The launcher restarts to change its layout.", "Restart now"),
                         System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 ws.Log(Paths.IsPortDir(Paths.PortDir)
-                        ? $"Bloodborne Launcher ready. Engine: {Paths.PortDir}"
-                        : "Bloodborne Launcher ready. Choose the engine folder in Settings.",
+                        ? $"Lantern Engine ready. Engine: {Paths.PortDir}"
+                        : "Lantern Engine ready. Choose the engine folder in Settings.",
                     Paths.IsPortDir(Paths.PortDir) ? LogLevel.Good : LogLevel.Warn);
                 // Once: the settings that suit this PC, shown before anything changes.
                 if (_directPlay)
@@ -104,10 +112,11 @@ namespace BloodborneLauncher
             Closing += OnClosing;
         }
 
-        private bool _directPlay, _directCrashed;
+        private bool _directPlay, _directKeepOpen;
 
         /// <summary>--play: starts the game; the launcher closes when it ends normally, and opens when
-        /// the start did not happen or the game crashed (the crash dialog first).</summary>
+        /// the start did not happen, the game crashed (the crash dialog first) or The Hunter's Dream
+        /// refused the sign-in (the Online page is where the player signs in again).</summary>
         private async Task PlayDirectAsync()
         {
             var ws = Workspace.Current;
@@ -119,12 +128,13 @@ namespace BloodborneLauncher
                 ShowLauncher();
                 return;
             }
-            ws.GameCrashed += (_, _) => _directCrashed = true;
+            ws.GameCrashed += (_, _) => _directKeepOpen = true;
+            ws.SignInRefused += (_, _) => _directKeepOpen = true;
             ws.GameStateChanged += () =>
             {
                 if (!_directPlay || ws.Game.Running) return;
                 _directPlay = false;
-                if (_directCrashed)
+                if (_directKeepOpen)
                     ShowLauncher();
                 else
                     Close();
@@ -166,6 +176,7 @@ namespace BloodborneLauncher
         {
             var current = PageFrame.Content as LauncherPage;
             _pages.Clear();
+            _searchPagesReady = null; // made again for the search when its box is next focused
             if (current == null) return;
             var page = _pages[current.GetType()] = (LauncherPage)Activator.CreateInstance(current.GetType())!;
             PageFrame.Navigate(page);
@@ -185,8 +196,10 @@ namespace BloodborneLauncher
             {
                 try
                 {
-                    Clipboard.SetText(CrashReport.Build(ws.Settings, ws.Ini, code));
-                    ws.Log("Crash report copied to the clipboard.", LogLevel.Good);
+                    if (ClipboardText.Set(CrashReport.Build(ws.Settings, ws.Ini, code)))
+                        ws.Log("Crash report copied to the clipboard.", LogLevel.Good);
+                    else
+                        ws.Log("Could not copy the report: another program is using the clipboard.", LogLevel.Warn);
                 }
                 catch (Exception e)
                 {
@@ -201,9 +214,22 @@ namespace BloodborneLauncher
             }
         }
 
+        /// <summary>The Hunter's Dream refused this PC's sign-in during the game (the engine's THD line):
+        /// nobody could summon or invite the player. The Online page marks the account until they sign in again.</summary>
+        private void OnSignInRefused(string name, string reason)
+        {
+            var choice = Prompt.Choose("The Hunter's Dream refused the sign-in",
+                $"During the game, The Hunter's Dream refused this PC's sign-in as {name} ({reason}). " +
+                "Until you sign in again, nobody can summon or invite you.\n\n" +
+                "Sign in again on the Online page: Hunter's Dream account › Sign in again.",
+                "Later", "Open the Online page");
+            if (choice == 1)
+                Show("online");
+        }
+
         /// <summary>
-        /// Modern layout: glass panes over the game's own artwork. Glass.xaml recolours the shared
-        /// brushes; the backdrop is the dump's sce_sys\pic1.png (or pic0), else the bundled art.
+        /// Modern layout: glass panes over a picture. Glass.xaml recolours the shared brushes;
+        /// ApplyBackdrop puts the picture behind them.
         /// </summary>
         private void ApplyGlass()
         {
@@ -211,29 +237,155 @@ namespace BloodborneLauncher
             {
                 Source = new Uri("pack://application:,,,/Themes/Glass.xaml", UriKind.Absolute),
             });
+            ApplyBackdrop();
+        }
+
+        /// <summary>
+        /// The Modern layout's background (Settings › Appearance, live): the dump's sce_sys\pic1.png
+        /// (or pic0, else the bundled art), the player's own picture, or none; blurred strongly,
+        /// lightly or not at all, under a dark wash tinted by the theme.
+        /// </summary>
+        public void ApplyBackdrop()
+        {
+            if (SettingRow.Classic)
+                return;
+            var s = Workspace.Current.Settings;
+            var shade = LauncherTheme.ShadeColour(s);
+            var wash = new LinearGradientBrush(new GradientStopCollection
+            {
+                new(LauncherTheme.WithAlpha(shade, 0x59), 0),
+                new(LauncherTheme.WithAlpha(shade, 0x80), 0.5),
+                new(LauncherTheme.WithAlpha(shade, 0xB3), 1),
+            }, 90);
+            wash.Freeze(); // never changes: frozen brushes skip change tracking
+            BackdropShade.Fill = wash;
+            var mode = s.Str("ui_background");
+            if (mode == "none")
+            {
+                _backdropLoad++; // a picture still loading is not shown
+                BackdropImage.Visibility = Visibility.Collapsed;
+                BackdropShade.Visibility = Visibility.Collapsed;
+                return;
+            }
+            var blur = s.Str("ui_background_blur");
+            var radius = blur == "off" ? 0 : blur == "light" ? 14 : 48;
+            BackdropImage.Effect = radius == 0 ? null : new System.Windows.Media.Effects.BlurEffect
+            {
+                Radius = radius,
+                KernelType = System.Windows.Media.Effects.KernelType.Gaussian,
+                RenderingBias = System.Windows.Media.Effects.RenderingBias.Performance,
+            };
+            BackdropImage.Margin = new Thickness(radius == 0 ? 0 : -60);
+            RenderOptions.SetBitmapScalingMode(BackdropImage, radius == 0 ? BitmapScalingMode.HighQuality : BitmapScalingMode.LowQuality);
+            BackdropShade.Visibility = Visibility.Visible;
+            _ = LoadBackdropAsync(mode, s.Str("ui_background_image"), GameEnvironment.GameDir(s),
+                radius == 0 ? 2560 : radius < 20 ? 1600 : 960); // blurred: less is enough
+        }
+
+        private int _backdropLoad;
+
+        /// <summary>Finds and decodes the background picture on a worker thread (the game folder may be
+        /// on a slow or sleeping disk, and a big PNG takes a while to decode), then shows it.</summary>
+        private async Task LoadBackdropAsync(string mode, string own, string game, int width)
+        {
+            var load = ++_backdropLoad;
+            System.Windows.Media.Imaging.BitmapImage? image;
             try
             {
-                var image = new System.Windows.Media.Imaging.BitmapImage();
-                image.BeginInit();
-                image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                image.DecodePixelWidth = 960; // blurred anyway
-                var game = GameEnvironment.GameDir(Workspace.Current.Settings);
-                var art = new[] { "pic1.png", "pic0.png" }
-                    .Select(n => System.IO.Path.Combine(game, "sce_sys", n))
-                    .FirstOrDefault(System.IO.File.Exists);
-                image.UriSource = art != null
-                    ? new Uri(art, UriKind.Absolute)
-                    : new Uri("pack://application:,,,/Assets/backdrop.jpg", UriKind.Absolute);
-                image.EndInit();
-                BackdropImage.Source = image;
-                BackdropImage.Visibility = Visibility.Visible;
-                BackdropShade.Visibility = Visibility.Visible;
+                image = await Task.Run(() =>
+                {
+                    string? art = mode == "custom" && System.IO.File.Exists(own)
+                        ? own
+                        : new[] { "pic1.png", "pic0.png" }
+                            .Select(n => System.IO.Path.Combine(game, "sce_sys", n))
+                            .FirstOrDefault(System.IO.File.Exists);
+                    var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    bitmap.DecodePixelWidth = width;
+                    bitmap.UriSource = art != null
+                        ? new Uri(art, UriKind.Absolute)
+                        : new Uri("pack://application:,,,/Assets/backdrop.jpg", UriKind.Absolute);
+                    bitmap.EndInit();
+                    bitmap.Freeze(); // decoded here, usable on the UI thread
+                    return bitmap;
+                });
             }
             catch
             {
-                // No artwork: the glass sits on the plain dark background.
+                image = null;
             }
+            if (load != _backdropLoad) return; // a newer choice is loading
+            // A picture that won't load: the glass sits on the plain dark background.
+            BackdropImage.Source = image;
+            BackdropImage.Visibility = image != null ? Visibility.Visible : Visibility.Collapsed;
         }
+
+        /// <summary>The theme, again (Settings › Appearance › Theme, live).</summary>
+        public void ApplyTheme()
+        {
+            LauncherTheme.Apply(Workspace.Current.Settings, glass: !SettingRow.Classic);
+            ApplyBackdrop();
+        }
+
+        /// <summary>
+        /// The window buttons (Settings › Appearance, live): macOS traffic lights or Windows caption
+        /// buttons, on their usual side (macOS left, Windows right) or the other. Close stays on the
+        /// outer edge; the title bar's own buttons move out of their way.
+        /// </summary>
+        /// <summary>Settings › App icon: this window's, and the game window's from its next start.</summary>
+        public void ApplyIcon()
+        {
+            var choice = Workspace.Current.Settings.Str("app_icon");
+            AppIcon.Apply(this, choice);
+            if (Paths.DetectPortDir() is { } package)
+                AppIcon.SyncGameWindow(package, choice);
+        }
+
+        public void ApplyWindowButtons()
+        {
+            var s = Workspace.Current.Settings;
+            var windows = s.Str("ui_window_buttons") == "windows";
+            var side = s.Str("ui_window_buttons_side");
+            var right = side == "right" || (side != "left" && windows);
+            MacButtons.Visibility = windows ? Visibility.Collapsed : Visibility.Visible;
+            WinButtons.Visibility = windows ? Visibility.Visible : Visibility.Collapsed;
+
+            static void Order(System.Windows.Controls.Panel panel, params UIElement[] order)
+            {
+                panel.Children.Clear();
+                foreach (var child in order) panel.Children.Add(child);
+            }
+            var mac = MacButtons.Children.OfType<System.Windows.Controls.Button>().ToList();
+            var close = mac.First(b => (string)b.ToolTip == "Close");
+            var minimize = mac.First(b => (string)b.ToolTip == "Minimize");
+            var maximize = mac.First(b => (string)b.ToolTip == "Maximize");
+            if (right)
+            {
+                Order(MacButtons, minimize, maximize, close);
+                Order(WinButtons, WinMinimize, WinMaximize, WinClose);
+            }
+            else
+            {
+                Order(MacButtons, close, minimize, maximize);
+                Order(WinButtons, WinClose, WinMaximize, WinMinimize);
+            }
+            foreach (var b in MacButtons.Children.OfType<FrameworkElement>())
+                b.Margin = right ? new Thickness(8, 0, 0, 0) : new Thickness(0, 0, 8, 0);
+            MacButtons.HorizontalAlignment = right ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+            MacButtons.Margin = right ? new Thickness(0, 0, 14, 0) : new Thickness(14, 0, 0, 0);
+            WinButtons.HorizontalAlignment = right ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+            // The traffic lights take 3 x 20 px plus their margin; the caption buttons 3 x 46.
+            var taken = !right ? 0 : windows ? 3 * 46 : 14 + 3 * 20;
+            TitleTools.Margin = new Thickness(0, 0, 10 + taken, 0);
+            // The settings search on the left, after the buttons when they are on that side; a little
+            // narrower beside the wider caption buttons, so it stays clear of the centred title.
+            var left = right ? 12 : windows ? 3 * 46 + 10 : 14 + 3 * 20 + 4;
+            SearchArea.Margin = new Thickness(left, 0, 0, 0);
+            SearchArea.Width = !right && windows ? 168 : 200;
+            SearchResults.Margin = new Thickness(left, 2, 0, 0);
+        }
+
         /// <summary>A wider resize border than FluentWindow's 4px, and the top strip handed back
         /// to Windows as a real caption.</summary>
         protected override void SetWindowChrome()
@@ -247,15 +399,27 @@ namespace BloodborneLauncher
             }
         }
 
+        private DateTime? _gameStartedUtc;
+
+        /// <summary>Discord status: shown while the game runs (Core/DiscordPresence).</summary>
+        public void UpdateDiscord()
+        {
+            var running = Workspace.Current.Game.Running;
+            if (running && _gameStartedUtc == null) _gameStartedUtc = DateTime.UtcNow;
+            if (!running) _gameStartedUtc = null;
+            DiscordPresence.Update(Workspace.Current.Settings, running, _gameStartedUtc);
+        }
+
         private async void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             Workspace.Current.SaveNow();
+            DiscordPresence.Stop();
             if (_closing || !Workspace.Current.Game.Running)
                 return;
 
             var answer = System.Windows.MessageBox.Show(this,
                 "The game is still running. Stop it and close the launcher?",
-                "Bloodborne Launcher", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+                "Lantern Engine", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             if (answer == MessageBoxResult.Cancel)
             {
                 e.Cancel = true;
@@ -284,17 +448,28 @@ namespace BloodborneLauncher
             if (sender is not System.Windows.Controls.RadioButton { Tag: Type pageType } item)
                 return;
 
-            if (!_pages.TryGetValue(pageType, out var page))
-                _pages[pageType] = page = (LauncherPage)Activator.CreateInstance(pageType)!;
+            var page = PageOf(pageType);
             PageFrame.Navigate(page);
             page.OnShown();
 
-            var name = item.Content as string ??
-                       (item.Content as Panel)?.Children.OfType<System.Windows.Controls.TextBlock>().FirstOrDefault()?.Text;
+            var name = ItemName(item);
             TitlePage.Text = string.IsNullOrEmpty(name) ? "" : $" — {name}";
         }
 
-        /// <summary>Shows a page: a tab, or one of More's ("online", "output", "mods", "advanced").</summary>
+        /// <summary>A page, made the first time it is asked for and kept.</summary>
+        private LauncherPage PageOf(Type type)
+        {
+            if (!_pages.TryGetValue(type, out var page))
+                _pages[type] = page = (LauncherPage)Activator.CreateInstance(type)!;
+            return page;
+        }
+
+        /// <summary>A tab's or sidebar entry's label: its text, or the text beside its icon.</summary>
+        private static string? ItemName(System.Windows.Controls.RadioButton item) =>
+            item.Content as string ??
+            (item.Content as Panel)?.Children.OfType<System.Windows.Controls.TextBlock>().FirstOrDefault()?.Text;
+
+        /// <summary>Shows a page: a tab ("online", "advanced": Settings), or one of More's ("output", "mods", "engine").</summary>
         public void Show(string page)
         {
             var item = SettingRow.Classic
@@ -302,13 +477,17 @@ namespace BloodborneLauncher
                 {
                     "output" => ClassicOutput,
                     "online" => ClassicOnline,
+                    "advanced" => ClassicSettings,
                     "mods" => ClassicMods,
+                    "engine" => ClassicEngine,
                     "controls" => ClassicControls,
                     _ => ClassicPlay,
                 }
                 : page switch
                 {
-                    "output" or "online" or "mods" or "advanced" => MoreItem,
+                    "online" => OnlineItem,
+                    "advanced" => SettingsItem,
+                    "output" or "mods" or "engine" => MoreItem,
                     "controls" => ControlsItem,
                     _ => PlayItem,
                 };
@@ -323,6 +502,214 @@ namespace BloodborneLauncher
         {
             while (PageFrame.CanGoBack)
                 PageFrame.RemoveBackEntry();
+        }
+
+        // ---------------------------------------------------------------- settings search
+
+        private List<SettingSearch.Hit> _hits = new();
+        private int _hit;
+
+        /// <summary>
+        /// The pages this layout's tabs or sidebar lead to, in their order, each made if not shown yet
+        /// (once; they are kept as when visited). More stands for its sections, each a place of its own.
+        /// </summary>
+        private IEnumerable<SettingSearch.Place> SearchPlaces()
+        {
+            // Classic lists Settings twice (top and bottom of the sidebar): the later entry is kept.
+            var items = new List<System.Windows.Controls.RadioButton>();
+            foreach (var item in SettingSearch.Descendants(SettingRow.Classic ? Sidebar : TabStrip).OfType<System.Windows.Controls.RadioButton>())
+            {
+                if (item.Tag is not Type) continue;
+                items.RemoveAll(i => Equals(i.Tag, item.Tag));
+                items.Add(item);
+            }
+            foreach (var item in items)
+            {
+                var name = ItemName(item) ?? "";
+                void Open() { if (item.IsChecked != true) item.IsChecked = true; }
+                // Only pages already made: MakeSearchPagesAsync makes the rest in the background and
+                // searches again once they are all there.
+                if (!_pages.TryGetValue((Type)item.Tag, out var made)) continue;
+                if (made is MorePage more)
+                {
+                    foreach (var (key, label, page) in more.MadeSectionPages())
+                        yield return new SettingSearch.Place($"{name} › {label}", page, () => { Open(); more.ShowSection(key); });
+                }
+                else
+                    yield return new SettingSearch.Place(name, made, Open);
+            }
+        }
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            // Bubbling, so a key the page took first (the Controls page listening for a binding) stays its own.
+            if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                SearchBox.Focus();
+                SearchBox.SelectAll();
+                e.Handled = true;
+            }
+        }
+
+        private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            // A click anywhere else closes the results (the text stays; typing opens them again).
+            if (SearchResults.IsVisible && e.OriginalSource is Visual source &&
+                !SearchResults.IsAncestorOf(source) && !SearchArea.IsAncestorOf(source))
+                SearchResults.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>Searches 150 ms after the last key, not at every key.</summary>
+        private System.Windows.Threading.DispatcherTimer? _searchDelay;
+
+        /// <summary>The pages the search looks through, made one at a time at background priority so
+        /// typing never waits for them (null until the search box is first focused).</summary>
+        private Task? _searchPagesReady;
+
+        private void SearchBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            SearchClear.Visibility = SearchBox.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (SearchBox.Text.Trim().Length == 0)
+            {
+                _searchDelay?.Stop();
+                ShowHits();
+                return;
+            }
+            if (_searchDelay == null)
+            {
+                _searchDelay = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+                _searchDelay.Tick += (_, _) =>
+                {
+                    _searchDelay.Stop();
+                    ShowHits();
+                };
+            }
+            _searchDelay.Stop();
+            _searchDelay.Start();
+        }
+
+        private void SearchBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            _searchPagesReady ??= MakeSearchPagesAsync();
+            ShowHits();
+        }
+
+        /// <summary>Makes every page the search looks through, yielding to input and rendering between
+        /// pages: the first search then finds them ready instead of building them all in one go.</summary>
+        private async Task MakeSearchPagesAsync()
+        {
+            var items = SettingSearch.Descendants(SettingRow.Classic ? Sidebar : TabStrip)
+                .OfType<System.Windows.Controls.RadioButton>()
+                .Select(i => i.Tag).OfType<Type>().Distinct().ToList();
+            foreach (var type in items)
+            {
+                await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
+                if (PageOf(type) is MorePage more)
+                    foreach (var key in more.SectionKeys)
+                    {
+                        await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
+                        more.MakeSection(key);
+                    }
+            }
+            // What was typed while the pages were being made, searched again over all of them.
+            if (SearchBox.IsKeyboardFocused && SearchBox.Text.Trim().Length > 0 && _searchDelay?.IsEnabled != true)
+                ShowHits();
+        }
+
+        private void SearchBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) =>
+            SearchResults.Visibility = Visibility.Collapsed;
+
+        private void SearchClear_Click(object sender, RoutedEventArgs e)
+        {
+            _searchDelay?.Stop();
+            SearchBox.Clear();
+            SearchBox.Focus();
+        }
+
+        private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            switch (e.Key)
+            {
+                case Key.Escape:
+                    // Esc clears; on an empty box it hands the keyboard back to the page.
+                    if (SearchBox.Text.Length > 0) SearchBox.Clear();
+                    else Keyboard.Focus(this);
+                    e.Handled = true;
+                    break;
+                case Key.Enter:
+                    // Typed faster than the search delay: search now, so Enter picks for what is typed.
+                    if (_searchDelay?.IsEnabled == true)
+                    {
+                        _searchDelay.Stop();
+                        ShowHits();
+                    }
+                    if (_hits.Count > 0 && SearchResults.IsVisible) PickHit(_hit);
+                    e.Handled = true;
+                    break;
+                case Key.Down or Key.Up when _hits.Count > 0:
+                    _hit = (_hit + (e.Key == Key.Down ? 1 : _hits.Count - 1)) % _hits.Count;
+                    MarkHit();
+                    e.Handled = true;
+                    break;
+            }
+        }
+
+        /// <summary>Searches again for what is typed, and shows the results under the box.</summary>
+        private void ShowHits()
+        {
+            var query = SearchBox.Text;
+            if (query.Trim().Length == 0 || !SearchBox.IsKeyboardFocused)
+            {
+                _hits.Clear();
+                SearchResults.Visibility = Visibility.Collapsed;
+                return;
+            }
+            _hits = SettingSearch.Find(SearchPlaces(), query);
+            _hit = 0;
+            SearchList.Children.Clear();
+            if (_hits.Count == 0)
+                SearchList.Children.Add(SettingSearch.Nothing(query));
+            for (var i = 0; i < _hits.Count; i++)
+            {
+                var index = i;
+                var view = SettingSearch.View(_hits[i]);
+                view.MouseEnter += (_, _) =>
+                {
+                    _hit = index;
+                    MarkHit();
+                };
+                view.MouseLeftButtonUp += (_, _) => PickHit(index);
+                SearchList.Children.Add(view);
+            }
+            MarkHit();
+            SearchResults.Visibility = Visibility.Visible;
+        }
+
+        /// <summary>Shades the result Enter picks (the first, until the arrow keys or the mouse move it).</summary>
+        private void MarkHit()
+        {
+            for (var i = 0; i < SearchList.Children.Count; i++)
+                if (SearchList.Children[i] is System.Windows.Controls.Border { Tag: SettingSearch.Hit } view)
+                {
+                    if (i == _hit) view.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "SidebarItemSelectedBrush");
+                    else view.Background = Brushes.Transparent;
+                }
+        }
+
+        /// <summary>Opens the result's page and, once it is laid out, scrolls to the setting and flashes it.</summary>
+        private void PickHit(int index)
+        {
+            if (index < 0 || index >= _hits.Count) return;
+            var hit = _hits[index];
+            SearchBox.Clear();
+            SearchResults.Visibility = Visibility.Collapsed;
+            hit.Place.Show();
+            // A page shown for the first time is navigated to, loaded and grouped into its boxes first.
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (!hit.Place.Page.Reveal(hit.Row))
+                    Keyboard.Focus(this);
+            }, System.Windows.Threading.DispatcherPriority.ContextIdle);
         }
 
         // ---------------------------------------------------------------- play
@@ -399,8 +786,8 @@ namespace BloodborneLauncher
                     Prompt.Tell("Updated, with files left out",
                         "Windows or an antivirus would not let these through, so the old ones were kept:\n" +
                         string.Join("\n", skipped.Take(5)) +
-                        "\n\nThe game runs without them; only online play with The Hunter's Dream (bbbridge) needs " +
-                        $"them. Allow the Bloodborne PC folder in the antivirus and update again, or take them from {Updater.ReleasesPage}");
+                        "\n\nThe game runs without them; online play may need " +
+                        $"them. Allow the Lantern Engine folder in the antivirus and update again, or take them from {Updater.ReleasesPage}");
                 Application.Current.Shutdown();
             }
             catch (Exception ex)
@@ -422,6 +809,22 @@ namespace BloodborneLauncher
                 return;
             }
 
+            // The launcher updated itself but the package kept an older engine: its crash fixes are
+            // missing (players reported crashes long fixed). Asked at each Play until it is updated.
+            if (Updater.EngineOutdated)
+            {
+                var choice = Prompt.Choose("Engine update needed",
+                    $"This launcher is {Updater.CurrentLabel}, but the engine in this folder is older ({Updater.LocalEngine() ?? "unknown"}): " +
+                    "the crash fixes since then are missing. Updating downloads the latest package and keeps your settings, saves and mods.",
+                    "Cancel", "Play anyway", "Update engine");
+                if (choice <= 0) return;
+                if (choice == 2)
+                {
+                    await UpdateEngineAsync();
+                    return;
+                }
+            }
+
             var s = ws.Settings;
             var ini = ws.Ini;
             // A connected Hunter's Dream account plays in its own co-op pool (the engine's thd backend);
@@ -429,17 +832,11 @@ namespace BloodborneLauncher
             ini.Set("online_pool", s.HuntersDreamToken.Length > 0 && s.Str("hd_name").Length > 0 ? "huntersdream" : "");
             if (!HuntersDream.OnlinePaused && ini.Get("online_enabled") == "1" && ini.Get("online_pool") != "huntersdream")
             {
-                // The engine refuses these at start; say so here instead.
-                var problem = ini.Get("online_username").Contains('@') ? "The account name is the name registered on the server, not an email address."
-                    : ini.Get("online_username").Trim().Length == 0 ? "Enter the account name before playing online."
-                    : s.OnlinePassword.Length == 0 ? "Enter the account password before playing online."
-                    : null;
-                if (problem != null)
-                {
-                    Prompt.Tell("Online", problem + "\n\nOr turn \"Play online\" off to play offline.");
-                    Show("online");
-                    return;
-                }
+                // Online play is The Hunter's Dream's: without its account the engine stays offline.
+                Prompt.Tell("Online", "Connect your Hunter's Dream account on the Online page first (with Discord, or without it)." +
+                                      "\n\nOr turn \"Play online\" off to play offline.");
+                Show("online");
+                return;
             }
 
             // No port folder yet: look for it again, then let the player point at it right here.
@@ -449,7 +846,7 @@ namespace BloodborneLauncher
                 if (!Paths.IsPortDir(Paths.PortDir))
                 {
                     if (!Prompt.Confirm("Where is the engine?",
-                            "The launcher needs the Bloodborne PC engine (the folder with run.py and bin\\bb-probe.exe). " +
+                            "The launcher needs the Lantern Engine (the folder with run.py and bin\\bb-probe.exe). " +
                             "It is normally the folder the launcher came in.", "Choose folder"))
                         return;
                     var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Port folder (with Bloodborne.exe and run.py)" };
@@ -482,6 +879,9 @@ namespace BloodborneLauncher
                 ws.Log(choice == 1 ? $"{names}: kept on while online; Play online will not reach the server."
                     : $"{names}: left out while online; it applies again with online off.", LogLevel.Step);
             }
+
+            if (!HuntersDream.OnlinePaused && ini.Get("online_enabled") == "1")
+                await Online.PrepareTrustAsync();
 
             // A third-party resolution patch while the output resolution sets the game's resolution
             // and UI itself: it would keep its own shape (black bars) and stop the widescreen hooks.
@@ -560,7 +960,8 @@ namespace BloodborneLauncher
                     try
                     {
                         leftover.Kill(entireProcessTree: true);
-                        leftover.WaitForExit(5000);
+                        using var wait = new System.Threading.CancellationTokenSource(5000);
+                        await leftover.WaitForExitAsync(wait.Token); // off the UI thread
                     }
                     catch { /* already gone */ }
                     leftover.Dispose();
@@ -598,11 +999,20 @@ namespace BloodborneLauncher
 
         // ---------------------------------------------------------------- log
 
+        /// <summary>The activity log keeps the newest entries only (the game's output has its own page).</summary>
+        private const int MaxLogItems = 500;
+
+        /// <summary>The log list's own scroller (inside its template, so the list can virtualize).</summary>
+        private System.Windows.Controls.ScrollViewer? LogScroller =>
+            LogList.Template?.FindName("LogScroller", LogList) as System.Windows.Controls.ScrollViewer;
+
         private void OnLogged(string message, LogLevel level)
         {
             _log.Add(new LogItem { Time = DateTime.Now.ToString("HH:mm:ss"), Message = message, Color = BrushFor(level) });
+            if (_log.Count > MaxLogItems) _log.RemoveAt(0);
             LogCount.Text = $"{_log.Count} events";
-            LogScroller.ScrollToEnd();
+            // Folded: nothing to scroll (ToggleLog scrolls to the end when it opens).
+            if (_logExpanded) LogScroller?.ScrollToEnd();
 
             StatusText.Text = message;
             StatusText.ToolTip = message;
@@ -635,7 +1045,7 @@ namespace BloodborneLauncher
             _logExpanded = !_logExpanded;
             LogPanel.Visibility = _logExpanded ? Visibility.Visible : Visibility.Collapsed;
             if (_logExpanded)
-                LogScroller.ScrollToEnd();
+                Dispatcher.BeginInvoke(() => LogScroller?.ScrollToEnd(), System.Windows.Threading.DispatcherPriority.Loaded);
         }
     }
 

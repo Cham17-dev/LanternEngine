@@ -51,8 +51,8 @@
 
     <!-- ==================== Text & accent ==================== -->
     <SolidColorBrush x:Key="TextFillColorPrimaryBrush" Color="#FFE6E6E8" />
-    <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#FFA8A8AD" />
-    <SolidColorBrush x:Key="TextFillColorTertiaryBrush" Color="#FF7C7C82" />
+    <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#FFB6B6BB" />
+    <SolidColorBrush x:Key="TextFillColorTertiaryBrush" Color="#FF909096" />
     <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FF4C9DFF" />
     <SolidColorBrush x:Key="StatusDotIdleBrush" Color="#FF6E6E74" />
     <SolidColorBrush x:Key="WarningTextBrush" Color="#FFF2B84B" />

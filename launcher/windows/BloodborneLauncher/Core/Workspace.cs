@@ -47,6 +47,8 @@ namespace BloodborneLauncher.Core
         public SessionStats? Session { get; private set; }
         /// <summary>The game ended by itself with an error (not stopped from here): exit code and session.</summary>
         public event Action<int, SessionStats>? GameCrashed;
+        /// <summary>The game ended after The Hunter's Dream refused this PC's sign-in: account name and reason.</summary>
+        public event Action<string, string>? SignInRefused;
         private bool _stopping;
 
         public void Initialise()
@@ -100,6 +102,16 @@ namespace BloodborneLauncher.Core
                     }
                     if (code != 0 && !stopped)
                         GameCrashed?.Invoke(code, session);
+                    // The server refused the account's token (the session log's THD line): kept until the
+                    // player signs in again, so the Online page marks the account, and told now.
+                    if (session.SignInRefused is { } refused)
+                    {
+                        var name = refused.Name.Length > 0 ? refused.Name : Settings.Str("hd_name");
+                        Settings.Set("hd_refused", refused.Reason);
+                        SaveSoon();
+                        Log($"The Hunter's Dream refused the sign-in as {name} ({refused.Reason}): sign in again on the Online page.", LogLevel.Warn);
+                        SignInRefused?.Invoke(name, refused.Reason);
+                    }
                 }
                 GameStateChanged?.Invoke();
             });
@@ -220,7 +232,7 @@ namespace BloodborneLauncher.Core
                 else if (!_iniWarned)
                 {
                     _iniWarned = true;
-                    Log("bbport.ini not written: the engine folder is not set (Settings › Bloodborne PC).", LogLevel.Warn);
+                    Log("bbport.ini not written: the engine folder is not set (Settings › Lantern Engine).", LogLevel.Warn);
                 }
                 Saved?.Invoke();
             }
@@ -240,15 +252,21 @@ namespace BloodborneLauncher.Core
             OutputCleared?.Invoke();
             if (Settings.Bool("save_backups"))
             {
-                try
+                // Copied on a worker thread: the game takes ~20 s to reach its first save, and a
+                // large save folder held the launcher (Play looked stuck) while it was copied here.
+                var settings = Settings;
+                System.Threading.Tasks.Task.Run(() =>
                 {
-                    if (SaveBackups.Create(Settings) != null)
-                        Log($"Saves backed up before playing (the newest {SaveBackups.Keep} are kept).", LogLevel.Step);
-                }
-                catch (Exception e)
-                {
-                    Log("Could not back up the saves: " + e.Message, LogLevel.Warn);
-                }
+                    try
+                    {
+                        if (SaveBackups.Create(settings) != null)
+                            Log($"Saves backed up before playing (the newest {SaveBackups.Keep} are kept).", LogLevel.Step);
+                    }
+                    catch (Exception e)
+                    {
+                        Log("Could not back up the saves: " + e.Message, LogLevel.Warn);
+                    }
+                });
             }
             var safeMode = Settings.Bool("safe_mode_next");
             Session = new SessionStats();

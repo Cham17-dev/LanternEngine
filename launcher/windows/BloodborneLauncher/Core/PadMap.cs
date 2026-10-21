@@ -20,8 +20,10 @@ namespace BloodborneLauncher.Core
             new("dpup", "D-pad up"), new("dpdown", "D-pad down"), new("dpleft", "D-pad left"), new("dpright", "D-pad right"),
             new("start", "Options / Start"), new("back", "Share / Back"), new("touchpad", "Touchpad click"),
             new("misc1", "Mute / Share (Xbox Series)"),
-            new("paddle1", "Back paddle 1 (Edge, Elite)"), new("paddle2", "Back paddle 2 (Edge, Elite)"),
-            new("paddle3", "Back paddle 3 (Elite)"), new("paddle4", "Back paddle 4 (Elite)"),
+            new("paddle1", "Extra button 1 (Edge / Elite paddle, 8BitDo R4 or back button)"),
+            new("paddle2", "Extra button 2 (Edge / Elite paddle, 8BitDo L4 or back button)"),
+            new("paddle3", "Extra button 3 (Elite paddle, 8BitDo back button)"),
+            new("paddle4", "Extra button 4 (Elite paddle, 8BitDo back button)"),
             new("", "Not bound"),
         };
 

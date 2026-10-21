@@ -15,6 +15,7 @@
                  Background="{DynamicResource WindowBaseBrush}"
                  UseLayoutRounding="True"
                  SnapsToDevicePixels="True"
+                 FontFamily="{DynamicResource UiFont}"
                  TextOptions.TextFormattingMode="Display"
                  TextOptions.TextRenderingMode="ClearType"
                  TextOptions.TextHintingMode="Fixed">
@@ -54,6 +55,43 @@
             </Setter>
         </Style>
 
+        <!-- Windows-style caption buttons (Settings › Appearance › Window buttons). -->
+        <Style x:Key="CaptionButton" TargetType="Button">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Cursor" Value="Arrow" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}">
+                            <Path Data="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"
+                                  Stroke="{TemplateBinding Foreground}" StrokeThickness="1" Stretch="None"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" SnapsToDevicePixels="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bg" Property="Opacity" Value="0.7" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="CaptionClose" TargetType="Button" BasedOn="{StaticResource CaptionButton}">
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FFE81123" />
+                    <Setter Property="Foreground" Value="White" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="TitleIcon" TargetType="Button">
             <Setter Property="Height" Value="22" />
             <Setter Property="MinWidth" Value="26" />
@@ -74,6 +112,92 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bg" Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- The settings search: a slim pill in the title bar, with its shortcut shown while it is empty. -->
+        <Style x:Key="TitleSearch" TargetType="TextBox">
+            <Setter Property="Height" Value="24" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="SelectionBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+            <Setter Property="SelectionOpacity" Value="0.35" />
+            <Setter Property="Background" Value="{DynamicResource PillTrackBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12" Padding="9,0,8,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon Symbol="Search24" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                                <TextBlock x:Name="Placeholder" Grid.Column="1" Text="Search settings" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}" IsHitTestVisible="False"
+                                           TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+                                <!-- Room on the right for the clear button, which sits over the box. -->
+                                <ScrollViewer x:Name="PART_ContentHost" Grid.Column="1" Margin="0,0,14,0" VerticalAlignment="Center"
+                                              Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+                                <TextBlock x:Name="Shortcut" Grid.Column="2" Text="Ctrl+F" FontSize="10.5" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}" IsHitTestVisible="False"
+                                           Visibility="Collapsed" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Text" Value="">
+                                <Setter TargetName="Placeholder" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="Text" Value="" />
+                                    <Condition Property="IsKeyboardFocused" Value="False" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Shortcut" Property="Visibility" Value="Visible" />
+                            </MultiTrigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource ControlFillColorInputActiveBrush}" />
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SearchClear" TargetType="Button">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Cursor" Value="Arrow" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+            <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="Transparent" CornerRadius="9">
+                            <Path Data="M 0,0 L 7,7 M 7,0 L 0,7" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.2"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -184,7 +308,7 @@
         <!-- ==================== Title bar ==================== -->
         <Border Grid.Row="0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
             <Grid>
-                <StackPanel Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Left"
+                <StackPanel x:Name="MacButtons" Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Left"
                             Background="Transparent" shell:WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button Style="{StaticResource TrafficLight}" Background="#FFFF5F57" ToolTip="Close"
                             Tag="M 3.5,3.5 L 8.5,8.5 M 8.5,3.5 L 3.5,8.5" Click="CloseWindow_Click" />
@@ -194,12 +318,33 @@
                             Tag="M 3,6 L 9,6 M 6,3 L 6,9" Click="MaximizeWindow_Click" />
                 </StackPanel>
 
+                <StackPanel x:Name="WinButtons" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,1"
+                            Visibility="Collapsed" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button x:Name="WinMinimize" Style="{StaticResource CaptionButton}" ToolTip="Minimize"
+                            Tag="M 0,0.5 L 10,0.5" Click="MinimizeWindow_Click" />
+                    <Button x:Name="WinMaximize" Style="{StaticResource CaptionButton}" ToolTip="Maximize"
+                            Tag="M 0.5,0.5 L 9.5,0.5 L 9.5,9.5 L 0.5,9.5 Z" Click="MaximizeWindow_Click" />
+                    <Button x:Name="WinClose" Style="{StaticResource CaptionClose}" ToolTip="Close"
+                            Tag="M 0,0 L 10,10 M 10,0 L 0,10" Click="CloseWindow_Click" />
+                </StackPanel>
+
+                <!-- Settings search (Ctrl+F): on the left, after the window buttons when they are there
+                     (ApplyWindowButtons places it); the results open under it. -->
+                <Grid x:Name="SearchArea" HorizontalAlignment="Left" VerticalAlignment="Center" Width="200"
+                      shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <TextBox x:Name="SearchBox" Style="{StaticResource TitleSearch}"
+                             TextChanged="SearchBox_TextChanged" PreviewKeyDown="SearchBox_PreviewKeyDown"
+                             GotKeyboardFocus="SearchBox_GotKeyboardFocus" LostKeyboardFocus="SearchBox_LostKeyboardFocus" />
+                    <Button x:Name="SearchClear" Style="{StaticResource SearchClear}" HorizontalAlignment="Right" Margin="0,0,4,0"
+                            VerticalAlignment="Center" Visibility="Collapsed" ToolTip="Clear (Esc)" Click="SearchClear_Click" />
+                </Grid>
+
                 <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" IsHitTestVisible="False">
                     <Run Text="Lantern Engine + PsychoV30" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                     <Run x:Name="TitlePage" Text="" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
                 </TextBlock>
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0">
+                <StackPanel x:Name="TitleTools" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0">
                     <Button x:Name="TitleUpdate" Style="{StaticResource TitleIcon}" Click="TitleUpdate_Click" Margin="0,0,6,0"
                             Visibility="Collapsed" BorderBrush="{DynamicResource GoodTextBrush}" BorderThickness="1"
                             ToolTip="A new launcher version is available">
@@ -304,6 +449,20 @@
                             </StackPanel>
                         </RadioButton>
                         <TextBlock Text="SYSTEM" Style="{StaticResource SidebarHeader}" Margin="18,18,0,6" />
+                        <RadioButton x:Name="ClassicSettings" GroupName="Classic" Style="{StaticResource SidebarItem}"
+                                     Tag="{x:Type views:SettingsPage}" Checked="SidebarItem_Checked">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Settings24" Style="{StaticResource SidebarIcon}" />
+                                <TextBlock Text="Settings" />
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton x:Name="ClassicEngine" GroupName="Classic" Style="{StaticResource SidebarItem}"
+                                     Tag="{x:Type views:EnginePage}" Checked="SidebarItem_Checked">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Wrench24" Style="{StaticResource SidebarIcon}" />
+                                <TextBlock Text="Engine switches" />
+                            </StackPanel>
+                        </RadioButton>
                         <RadioButton x:Name="ClassicOutput" GroupName="Classic" Style="{StaticResource SidebarItem}"
                                      Tag="{x:Type views:OutputPage}" Checked="SidebarItem_Checked">
                             <StackPanel Orientation="Horizontal">
@@ -329,6 +488,10 @@
                                  Tag="{x:Type views:ControlsPage}" Checked="SidebarItem_Checked" />
                     <RadioButton Style="{StaticResource TabItem}" Content="Trophies"
                                  Tag="{x:Type views:TrophiesPage}" Checked="SidebarItem_Checked" />
+                    <RadioButton x:Name="OnlineItem" Style="{StaticResource TabItem}" Content="Online"
+                                 Tag="{x:Type views:OnlinePage}" Checked="SidebarItem_Checked" />
+                    <RadioButton x:Name="SettingsItem" Style="{StaticResource TabItem}" Content="Settings"
+                                 Tag="{x:Type views:SettingsPage}" Checked="SidebarItem_Checked" />
                     <RadioButton x:Name="MoreItem" Style="{StaticResource TabItem}" Content="More"
                                  Tag="{x:Type views:MorePage}" Checked="SidebarItem_Checked" />
                 </StackPanel>
@@ -344,8 +507,22 @@
                 Background="{DynamicResource PanelDeepBrush}"
                 BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
             <Grid>
-                <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto" Padding="16,8,48,8">
-                    <ItemsControl x:Name="LogList">
+                <!-- Virtualized: only the lines in view are laid out (the scroller is the list's own). -->
+                <ItemsControl x:Name="LogList" VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
+                        <ItemsControl.Template>
+                            <ControlTemplate TargetType="ItemsControl">
+                                <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto" Padding="16,8,48,8"
+                                              CanContentScroll="True" Focusable="False">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Grid Margin="0,1">
@@ -360,8 +537,7 @@
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                </ItemsControl>
 
                 <Button Style="{StaticResource TitleIcon}" HorizontalAlignment="Right" VerticalAlignment="Top"
                         Margin="0,6,14,0" Click="ClearLog_Click" ToolTip="Clear activity">
@@ -392,6 +568,14 @@
                                Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
                 </StackPanel>
             </Grid>
+        </Border>
+
+        <!-- ==================== Settings search results (over everything, under the search box) ==================== -->
+        <Border x:Name="SearchResults" Grid.Row="1" Grid.RowSpan="3" HorizontalAlignment="Left" VerticalAlignment="Top"
+                Width="420" Padding="4" CornerRadius="10" BorderThickness="1" Visibility="Collapsed" Panel.ZIndex="10"
+                Background="{DynamicResource DialogBackgroundBrush}" BorderBrush="{DynamicResource DialogStrokeBrush}">
+            <!-- No drop shadow: an effect renders the results' text as a soft bitmap. -->
+            <StackPanel x:Name="SearchList" />
         </Border>
     </Grid>
 </ui:FluentWindow>

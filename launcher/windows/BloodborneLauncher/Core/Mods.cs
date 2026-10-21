@@ -206,14 +206,21 @@ namespace BloodborneLauncher.Core
             "Sprint Fix (High FPS)", "60FPS (no deltatime)", "Intel Black Tonemap Fix",
             "Intel 12th Gen+ SFX workaround", "Disable Chromatic Aberration", "Disable DoF", "Disable Motion Blur (perf increase)",
             "Disable SSAO", "Disable AA", "Disable Dynamic Light Shadows (perf increase)", "Enable Screen Space Reflections (READ NOTE)",
-            "Skip Intro", "Restore Debug Camera", "Restore Debug Menu (READ NOTES)",
+            "Skip Intro", "Restore Debug Camera", "Restore Debug Menu (READ NOTES)", "Increased Graphics Heap Sizes",
         };
 
         public static List<Patch> Discover(string directory)
         {
             var found = new List<Patch>();
-            if (!Directory.Exists(directory))
-                return found;
+            // The player's patches folder (removed by 0.9.30's update cleanup, GitHub issue 44): made
+            // again; the built-in patches are listed either way.
+            try
+            {
+                Directory.CreateDirectory(directory);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+            }
 
             var builtIn = Path.GetFullPath(Path.Combine(Paths.EngineDir, "patches", "Bloodborne.xml"));
             var footprint = ResolutionFootprint();
@@ -221,7 +228,7 @@ namespace BloodborneLauncher.Core
             // its optional patches, off until switched on here.
             // A copy of Bloodborne.xml in another patches folder (an older package's) is never listed: it would
             // apply its frame-rate patches over the port's own (scripts/patches.py does the same).
-            var files = Directory.GetFiles(directory, "*.xml").Where(p => !string.Equals(Path.GetFileName(p), Path.GetFileName(builtIn), StringComparison.OrdinalIgnoreCase));
+            var files = (Directory.Exists(directory) ? Directory.GetFiles(directory, "*.xml") : Array.Empty<string>()).Where(p => !string.Equals(Path.GetFileName(p), Path.GetFileName(builtIn), StringComparison.OrdinalIgnoreCase));
             if (File.Exists(builtIn)) files = files.Prepend(builtIn);
             foreach (var path in files.Distinct().ToList())
             {

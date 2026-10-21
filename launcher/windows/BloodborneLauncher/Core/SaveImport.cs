@@ -149,10 +149,18 @@ namespace BloodborneLauncher.Core
             if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true);
             Directory.CreateDirectory(staging);
             // Only the save's own files: the folder may be Downloads with the save files loose in it.
-            foreach (var file in Directory.GetFiles(from).Where(IsSaveFile))
-                File.Copy(file, Path.Combine(staging, Path.GetFileName(file)));
-            if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
-            Directory.Move(staging, target);
+            try
+            {
+                foreach (var file in Directory.GetFiles(from).Where(IsSaveFile))
+                    File.Copy(file, Path.Combine(staging, Path.GetFileName(file)));
+                if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+                Directory.Move(staging, target);
+            }
+            finally
+            {
+                // A failed copy leaves no staging folder behind; kept only if it is the one copy left.
+                try { if (Directory.Exists(staging) && Directory.Exists(target)) Directory.Delete(staging, recursive: true); } catch (Exception) { }
+            }
         }
     }
 }

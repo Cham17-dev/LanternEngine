@@ -11,7 +11,7 @@ namespace BloodborneLauncher.Core
     public static class CrashReport
     {
         private static readonly string[] Experimental =
-            { "exp_vram_cleanup", "exp_frame_pacing", "exp_vram_budget", "exp_thread_priority", "exp_sleep_spin", "exp_async_pipelines", "exp_occlusion", "exp_fast_draws", "exp_compile_skip" };
+            { "exp_vram_cleanup", "exp_frame_pacing", "exp_vram_budget", "exp_thread_priority", "exp_sleep_spin", "exp_async_pipelines", "exp_occlusion", "exp_fast_draws", "exp_compile_skip", "exp_fast_loading", "exp_hot_pages", "exp_sfx_workaround", "exp_camera_easing", "exp_sharp_ui" };
 
         /// <summary>What stopped the game, from the end of the session log (exit code 23 is the
         /// engine stopping itself, for several reasons).</summary>
@@ -69,6 +69,15 @@ namespace BloodborneLauncher.Core
             }
             // "Guest fault 0xc0000005 at guest+0x1234, ..." / "Host fault 0xc0000005 at bb-probe.exe+0x1234, ...".
             var fault = tail.LastOrDefault(l => FaultLine.IsMatch(l)) is { } f ? FaultLine.Match(f) : null;
+            // The game's effect ribbon writers (image 0x28ce7b0-0x28cf580): their stack locals lost on
+            // newer Intel CPUs (scripts/patches.py SFX_WORKAROUND), seen at the Witch of Hemwick.
+            if (fault != null && fault.Groups[1].Value == "Guest" &&
+                fault.Groups[3].Value.StartsWith("guest+0x", StringComparison.Ordinal) &&
+                ulong.TryParse(fault.Groups[3].Value[8..], System.Globalization.NumberStyles.HexNumber, null, out var at) &&
+                at is >= 0x28ce7b0 and < 0x28cf580)
+                return $"The game crashed drawing an effect trail ({fault.Groups[3].Value}), a known crash on newer Intel CPUs. " +
+                       "Turn on Graphics › Experimental › Effect trail crash fix: it stops this crash, " +
+                       "and that kind of effect trail is no longer drawn.";
             if (fault != null)
                 return fault.Groups[1].Value == "Guest"
                     ? $"The game's own code crashed ({fault.Groups[3].Value}), usually a rare timing race in the game."
@@ -140,7 +149,7 @@ namespace BloodborneLauncher.Core
         {
             var hw = Hardware.Detect();
             var text = new StringBuilder();
-            text.AppendLine($"Bloodborne Launcher {Updater.CurrentLabel}, engine {Updater.LocalEngine() ?? "unknown"}");
+            text.AppendLine($"Lantern Engine {Updater.CurrentLabel}, engine {Updater.LocalEngine() ?? "unknown"}");
             var tail = Tail(GameRunner.SessionLog, 120).ToList();
             text.AppendLine($"Exit code 0x{EngineCode(tail, code):X}: {Explain(code)}");
             text.AppendLine($"{hw.Summary}, {hw.RamBytes >> 30} GB RAM, Windows {Environment.OSVersion.Version}");

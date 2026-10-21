@@ -23,8 +23,10 @@ namespace BloodborneLauncher.Views
         private readonly TextBlock _versionHint;
         private IReadOnlyList<Updater.Release>? _releases;
         private bool _versionsLoading;
+        private readonly StackPanel _themeColour = new(), _picture = new();
+        private TextBlock _pictureHint = null!;
 
-        public SettingsPage() : base("Settings", "The Bloodborne PC engine, how the game is started, and keeping this launcher up to date.")
+        public SettingsPage() : base("Settings", "The Lantern Engine, how the game is started, and keeping this launcher up to date.")
         {
             Group("Appearance");
             FrameworkElement layout = null!;
@@ -45,7 +47,76 @@ namespace BloodborneLauncher.Views
                     reverting = false;
                 });
 
-            Group("Bloodborne PC");
+            SettingCombo(SymbolRegular.PaintBrush24, "Theme", "The accent colour, and a faint tint of it in the launcher's surfaces",
+                LauncherTheme.Themes, "ui_theme", changed: () =>
+                {
+                    ShowAppearance();
+                    MainWindow.Instance?.ApplyTheme();
+                });
+            var swatch = new Border
+            {
+                Width = 22, Height = 22, CornerRadius = new CornerRadius(11), BorderThickness = new Thickness(1),
+                Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center,
+            };
+            swatch.SetResourceReference(Border.BorderBrushProperty, "CardStrokeColorDefaultBrush");
+            var colour = new Wpf.Ui.Controls.TextBox
+            {
+                Text = S.Str("ui_theme_colour"), PlaceholderText = LauncherTheme.DefaultCustomColour, PlaceholderEnabled = true,
+                Width = 120, VerticalAlignment = VerticalAlignment.Center,
+            };
+            void ShowSwatch() => swatch.Background = LauncherTheme.ParseColour(colour.Text) is { } c
+                ? new System.Windows.Media.SolidColorBrush(c)
+                : System.Windows.Media.Brushes.Transparent;
+            ShowSwatch();
+            colour.TextChanged += (_, _) =>
+            {
+                ShowSwatch();
+                if (LauncherTheme.ParseColour(colour.Text) == null) return;
+                S.Set("ui_theme_colour", colour.Text.Trim());
+                Ws.SaveSoon();
+                MainWindow.Instance?.ApplyTheme();
+            };
+            var presets = Row(swatch, colour);
+            foreach (var preset in new[] { "#C41E3A", "#E0643A", "#D99A2B", "#3FA86B", "#2BB3B3", "#4C9DFF", "#8FB8E8", "#8E63D6", "#D65DA8", "#B8B8BE" })
+            {
+                var dot = new Border
+                {
+                    Width = 16, Height = 16, CornerRadius = new CornerRadius(8), Margin = new Thickness(6, 0, 0, 0),
+                    Background = new System.Windows.Media.SolidColorBrush(LauncherTheme.ParseColour(preset)!.Value),
+                    Cursor = System.Windows.Input.Cursors.Hand, ToolTip = preset, VerticalAlignment = VerticalAlignment.Center,
+                };
+                dot.MouseLeftButtonUp += (_, _) => colour.Text = preset;
+                presets.Children.Add(dot);
+            }
+            Add(Card(SymbolRegular.ColorBackground24, "Theme colour",
+                "Pick a dot or type a colour as #RRGGBB", presets, out _), _themeColour);
+            Body.Children.Add(_themeColour);
+
+            SettingCombo(SymbolRegular.ImageEdit24, "Background",
+                SettingRow.Classic ? "Shown in the Modern layout (Classic's panes are solid)" : "The picture behind the glass panes",
+                new[] { new Choice("Game artwork", "game"), new Choice("Your picture", "custom"), new Choice("None", "none") },
+                "ui_background", changed: () =>
+                {
+                    ShowAppearance();
+                    MainWindow.Instance?.ApplyBackdrop();
+                });
+            Add(Card(SymbolRegular.ImageEdit24, "Picture", "A PNG, JPG or BMP; it fills the window",
+                SmallButton("Choose", SymbolRegular.FolderOpen24, (_, _) => ChoosePicture()), out _pictureHint), _picture);
+            Body.Children.Add(_picture);
+            SettingCombo(SymbolRegular.Blur24, "Background blur", null,
+                new[] { new Choice("Strong", "strong"), new Choice("Light", "light"), new Choice("Off", "off") },
+                "ui_background_blur", changed: () => MainWindow.Instance?.ApplyBackdrop());
+            SettingCombo(SymbolRegular.Image24, "App icon", "The launcher's and the game window's icon. The game window takes it at its next start",
+                AppIcon.Choices, "app_icon", changed: () => MainWindow.Instance?.ApplyIcon());
+            SettingCombo(SymbolRegular.Window24, "Window buttons", "macOS: the red, yellow and green dots. Windows: – □ ✕",
+                new[] { new Choice("macOS", "mac"), new Choice("Windows", "windows") },
+                "ui_window_buttons", changed: () => MainWindow.Instance?.ApplyWindowButtons());
+            SettingCombo(SymbolRegular.ArrowBidirectionalLeftRight24, "Window buttons side", null,
+                new[] { new Choice("Usual", "usual", "macOS on the left, Windows on the right"), new Choice("Left", "left"), new Choice("Right", "right") },
+                "ui_window_buttons_side", changed: () => MainWindow.Instance?.ApplyWindowButtons());
+            ShowAppearance();
+
+            Group("Lantern Engine");
             Add(Card(SymbolRegular.FolderLink24, "Engine folder", "", Row(
                 SmallButton("Browse", SymbolRegular.FolderOpen24, (_, _) => ChoosePort()),
                 IconButton(SymbolRegular.Open24, "Open in Explorer", (_, _) => Paths.OpenFolder(Paths.PortDir)),
@@ -69,23 +140,31 @@ namespace BloodborneLauncher.Views
             Group("Performance");
             SettingCombo(SymbolRegular.Flow20, "Two-stage GPU pipeline", "20–30% faster; turn off if the game is unstable",
                 Choices.DrawPipe, "draw_pipe");
-            SettingCombo(SymbolRegular.ArrowSwap24, "CPU reads of GPU data", "Relaxed is the default", Choices.Readbacks, "readbacks");
-            SettingToggle(SymbolRegular.Speaker224, "Sound threads first",
-                "For CPUs with many slower cores (older Xeons and similar): the game's sound runs before its other threads, against late or stuttering sound. Off by default",
-                "audio_priority");
             SettingCombo(SymbolRegular.Speaker224, "Sound output",
                 "If the sound jitters or crackles, try DirectSound. The larger buffer is steadier but the sound comes a little later",
                 Choices.SoundOutput, "sound_output");
+            var perfMore = Advanced();
+            SettingCombo(SymbolRegular.ArrowSwap24, "CPU reads of GPU data", "Relaxed is the default", Choices.Readbacks, "readbacks", perfMore);
+            SettingToggle(SymbolRegular.Speaker224, "Sound threads first",
+                "For CPUs with many slower cores (older Xeons and similar): the game's sound runs before its other threads, against late or stuttering sound. Off by default",
+                "audio_priority", perfMore);
 
             Group("Diagnostics");
-            SettingToggle(SymbolRegular.TextBulletListSquare24, "Frame statistics in the log", "BB_FRAME_STATS", "frame_stats");
-            SettingToggle(SymbolRegular.DeveloperBoard24, "FSR 4 profile in the log", "BB_FSR4_PROFILE", "fsr_profile");
-            SettingToggle(SymbolRegular.Speaker224, "Audio statistics in the log", "BB_AUDIO_STATS", "audio_stats");
+            Add(Card(SymbolRegular.Wrench24, "Engine switches",
+                "The engine's other player-facing BB_ variables (GPU choice, texture filtering, memory, sound, fixes) as switches, sliders and lists at the engine's defaults: no typing needed",
+                SmallButton("Open", SymbolRegular.Open24, (_, _) => MainWindow.Instance?.Show("engine")), out _));
+            var logs = Advanced("Log, capture and extra variables");
+            SettingToggle(SymbolRegular.TextBulletListSquare24, "Frame statistics in the log", "BB_FRAME_STATS", "frame_stats", logs);
+            SettingToggle(SymbolRegular.DeveloperBoard24, "FSR 4 profile in the log", "BB_FSR4_PROFILE", "fsr_profile", logs);
+            SettingToggle(SymbolRegular.Speaker224, "Audio statistics in the log", "BB_AUDIO_STATS", "audio_stats", logs);
             SettingToggle(SymbolRegular.HourglassHalf24, "Loading profile in the log",
-                "BB_SAMPLE_THREADS: where the game's main, render and file threads spend their time, every 5 seconds. For slow loading; costs a little speed", "load_profile");
-            SettingToggle(SymbolRegular.Timer24, "Render stage timings in the log", "BB_SECTIONS: where each frame's CPU time goes (with frame statistics). It costs FPS, so it applies to the next game only", "section_stats");
-            TextRow(SymbolRegular.Code24, "Extra variables", "NAME=value pairs separated by spaces, passed to the game", "BB_EXAMPLE=1",
-                () => S.Str("extra_env"), v => S.Set("extra_env", v.Trim()), width: 300);
+                "BB_SAMPLE_THREADS: where the game's main, render and file threads spend their time, every 5 seconds. For slow loading; costs a little speed", "load_profile", logs);
+            SettingToggle(SymbolRegular.Timer24, "Render stage timings in the log", "BB_SECTIONS: where each frame's CPU time goes (with frame statistics). It costs FPS, so it applies to the next game only", "section_stats", logs);
+            SettingToggle(SymbolRegular.Camera24, "Capture shaders",
+                "BB_SHADER_CAPTURE: every shader the game uses is saved once to logs\\shaders (a few MB), for testing the new native shader compiler offline. Costs a little time the first time each shader is seen", "shader_capture", logs);
+            TextRow(SymbolRegular.Code24, "Extra variables",
+                "NAME=value pairs separated by spaces, passed to the game. For anything Engine switches doesn't list; a variable set here wins over its switch there",
+                "BB_EXAMPLE=1", () => S.Str("extra_env"), v => S.Set("extra_env", v.Trim()), logs, width: 300);
 
             Group("Files");
             Add(Card(SymbolRegular.DocumentSettings20, "Launcher settings", Paths.ConfigFile,
@@ -96,6 +175,11 @@ namespace BloodborneLauncher.Views
                 "The game's compiled shaders, kept between starts (a new engine version clears them itself). Clear them if " +
                 "something draws wrong in every save, such as missing skin or hair; the next start compiles them again and stutters for a while",
                 SmallButton("Clear", SymbolRegular.Broom24, (_, _) => ClearShaderCache()), out _));
+            Add(Card(SymbolRegular.Share24, "Share shader cache",
+                "Save your compiled shaders as a file, or use someone else's: areas they have played don't stutter for you. " +
+                "It works between the same launcher version and the same kind of graphics card; using one replaces yours (kept as a backup)",
+                Row(SmallButton("Save as file", SymbolRegular.Save24, (_, _) => ExportShaderCache()),
+                    SmallButton("Use a file", SymbolRegular.FolderOpen24, (_, _) => ImportShaderCache())), out _));
 
             Group("Share settings");
             Add(Card(SymbolRegular.Share24, "Share your settings",
@@ -108,6 +192,53 @@ namespace BloodborneLauncher.Views
                     SmallButton("Open file", SymbolRegular.FolderOpen24, (_, _) => ImportSettingsFile())), out _));
 
             Group("Community");
+            // Discord status: a preview of the card, and for Custom every part Discord lets a game set.
+            var discordPreview = new DiscordPreview();
+            var discordCustom = new StackPanel();
+            var discordLink = new StackPanel();
+            var discordOwn = new StackPanel();
+            void DiscordChanged()
+            {
+                var mode = S.Str("discord_status");
+                discordCustom.Visibility = mode == "custom" ? Visibility.Visible : Visibility.Collapsed;
+                discordLink.Visibility = S.Str("discord_picture") == "url" ? Visibility.Visible : Visibility.Collapsed;
+                discordOwn.Visibility = S.Str("discord_app") == "own" ? Visibility.Visible : Visibility.Collapsed;
+                discordPreview.Show(DiscordPresence.LookOf(S));
+                Ws.SaveSoon();
+                MainWindow.Instance?.UpdateDiscord();
+            }
+            Wpf.Ui.Controls.TextBox DiscordText(string title, string placeholder, string key, string? hint = null) =>
+                TextRow(SymbolRegular.TextDescription24, title, hint, placeholder, () => S.Str(key),
+                    v => { S.Set(key, v); DiscordChanged(); }, discordCustom, 380);
+            SettingCombo(SymbolRegular.PeopleCommunity24, "Discord status",
+                "Shows that you're playing on your Discord profile while the game runs. Custom: your own lines, picture and buttons",
+                Choices.DiscordStatus, "discord_status", changed: DiscordChanged);
+            Body.Children.Add(discordPreview);
+            ComboRow(SymbolRegular.Rename24, "Name", "The name in bold is the Discord app's. My own Discord app: make one on discord.com/developers with any name and paste its Application ID",
+                DiscordPresence.Names, () => S.Str("discord_app") is { Length: > 0 } v ? v : "lantern",
+                v => S.Set("discord_app", v), discordCustom, changed: DiscordChanged);
+            TextRow(SymbolRegular.Key24, "Application ID", "From your app's General Information page", "e.g. 1234567890123456789",
+                () => S.Str("discord_app_id"), v => { S.Set("discord_app_id", v); DiscordChanged(); }, discordOwn, 380);
+            TextRow(SymbolRegular.Rename24, "Your app's name", "Only for the preview: Discord shows the name you gave the app", "Bloodborne",
+                () => S.Str("discord_app_name"), v => { S.Set("discord_app_name", v); DiscordChanged(); }, discordOwn, 380);
+            discordCustom.Children.Add(discordOwn);
+            DiscordText("First line", "Hunting in Yharnam", "discord_details", "{version} shows the launcher's version");
+            DiscordText("Second line", "Optional", "discord_state");
+            ComboRow(SymbolRegular.Image24, "Picture", null, DiscordPresence.Pictures, () => S.Str("discord_picture") is { Length: > 0 } v ? v : "logo",
+                v => S.Set("discord_picture", v), discordCustom, changed: DiscordChanged);
+            TextRow(SymbolRegular.Link24, "Picture link", "An https link to a PNG, JPG or GIF: Discord downloads it, so a file on your PC can't be used",
+                "https://…", () => S.Str("discord_image_url"), v => { S.Set("discord_image_url", v); DiscordChanged(); }, discordLink, 380);
+            discordCustom.Children.Add(discordLink);
+            DiscordText("Picture hover text", "Lantern Engine", "discord_image_text");
+            DiscordText("Small badge link", "Optional https link", "discord_badge_url", "A small round picture on the corner of the big one");
+            DiscordText("Badge hover text", "Optional", "discord_badge_text");
+            ToggleRow(SymbolRegular.Timer24, "Show play time", null, () => S.Bool("discord_timer"), v => S.Set("discord_timer", v), discordCustom, DiscordChanged);
+            DiscordText("Button 1 text", "Optional, e.g. Join my Discord", "discord_button1_label", "Other people see the buttons; Discord hides them on your own profile");
+            DiscordText("Button 1 link", "https://…", "discord_button1_url");
+            DiscordText("Button 2 text", "Optional", "discord_button2_label");
+            DiscordText("Button 2 link", "https://…", "discord_button2_url");
+            Body.Children.Add(discordCustom);
+            DiscordChanged();
             Add(Card(SymbolRegular.PeopleCommunity24, "Discord", "Help, news, co-op partners and beta feedback",
                 SmallButton("Join", SymbolRegular.Open24, (_, _) =>
                     Process.Start(new ProcessStartInfo(LauncherSettings.Discord) { UseShellExecute = true })), out _));
@@ -135,6 +266,7 @@ namespace BloodborneLauncher.Views
             SettingToggle(SymbolRegular.Alert24, "Check for updates at start", $"Looks at github.com/{Updater.Repository}/releases", "check_updates");
             _installVersion = SmallButton("Install", SymbolRegular.ArrowDownload24, async (_, _) => await InstallChosenVersionAsync());
             _installVersion.IsEnabled = false;
+            ComboSearch.Attach(_versions);
             _versions.SelectionChanged += (_, _) =>
                 _installVersion.IsEnabled = _versions.SelectedItem is ComboBoxItem { Tag: Updater.Release r } && !r.IsCurrent;
             Add(Card(SymbolRegular.History24, "Version",
@@ -236,6 +368,30 @@ namespace BloodborneLauncher.Views
                 : $"You have {Updater.CurrentLabel}, the latest ({latest.Tag})");
         }
 
+        /// <summary>Shows the rows that belong to the chosen theme and background.</summary>
+        private void ShowAppearance()
+        {
+            _themeColour.Visibility = S.Str("ui_theme") == "custom" ? Visibility.Visible : Visibility.Collapsed;
+            _picture.Visibility = S.Str("ui_background") == "custom" ? Visibility.Visible : Visibility.Collapsed;
+            var own = S.Str("ui_background_image");
+            SetHint(_pictureHint, own.Length == 0 ? "None chosen yet: the game artwork shows"
+                : File.Exists(own) ? own : $"{own} is missing: the game artwork shows");
+        }
+
+        private void ChoosePicture()
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Background picture",
+                Filter = "Pictures|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|All files|*.*",
+            };
+            if (dialog.ShowDialog() != true) return;
+            S.Set("ui_background_image", dialog.FileName);
+            Ws.SaveSoon();
+            ShowAppearance();
+            MainWindow.Instance?.ApplyBackdrop();
+        }
+
         /// <summary>Restarts into the chosen layout; false if the player cancelled.</summary>
         private static bool RestartForLayout()
         {
@@ -254,7 +410,7 @@ namespace BloodborneLauncher.Views
 
         /// <summary>Deletes the engine's shader and pipeline caches (user\cache beside the engine;
         /// scripts\run_windows.py also clears them when the engine changes).</summary>
-        private static void ClearShaderCache()
+        private static async void ClearShaderCache()
         {
             if (Process.GetProcessesByName("bb-probe").Length > 0)
             {
@@ -262,37 +418,89 @@ namespace BloodborneLauncher.Views
                 return;
             }
             var cache = Path.Combine(Paths.PortDir, "user", "cache");
-            var failed = 0;
-            if (Directory.Exists(cache))
+            // Thousands of files: deleted on a worker thread, the launcher stays responsive.
+            var failed = await Task.Run(() =>
             {
-                foreach (var entry in new DirectoryInfo(cache).EnumerateFileSystemInfos())
+                var failures = 0;
+                if (Directory.Exists(cache))
                 {
-                    if (entry.Name == "engine.txt") continue;
-                    try
+                    foreach (var entry in new DirectoryInfo(cache).EnumerateFileSystemInfos())
                     {
-                        if (entry is DirectoryInfo directory) directory.Delete(recursive: true);
-                        else entry.Delete();
+                        if (entry.Name == "engine.txt") continue;
+                        try
+                        {
+                            if (entry is DirectoryInfo directory) directory.Delete(recursive: true);
+                            else entry.Delete();
+                        }
+                        catch (Exception) { failures++; }
                     }
-                    catch (Exception) { failed++; }
                 }
-            }
+                return failures;
+            });
             Ws.Log(failed == 0 ? "Shader cache cleared: the next start compiles the shaders again."
                                : $"Shader cache: {failed} entries could not be removed ({cache}).",
                    failed == 0 ? LogLevel.Good : LogLevel.Warn);
+        }
+
+        private static void ExportShaderCache()
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "Save shader cache", Filter = "Shader cache|*.zip",
+                FileName = $"Lantern Engine shaders {Updater.EngineId}.zip",
+            };
+            if (dialog.ShowDialog() != true) return;
+            try
+            {
+                var count = ShaderCacheShare.Export(dialog.FileName);
+                Ws.Log($"Shader cache saved: {count} pipelines in {dialog.FileName}", LogLevel.Good);
+            }
+            catch (Exception e)
+            {
+                Ws.Log("Could not save the shader cache: " + e.Message, LogLevel.Bad);
+            }
+        }
+
+        private static void ImportShaderCache()
+        {
+            if (Process.GetProcessesByName("bb-probe").Length > 0)
+            {
+                Prompt.Tell("Shader cache", "Close the game first: it is using the cache.");
+                return;
+            }
+            var dialog = new Microsoft.Win32.OpenFileDialog { Title = "Use a shader cache", Filter = "Shader cache|*.zip|All files|*.*" };
+            if (dialog.ShowDialog() != true) return;
+            var mine = ShaderCacheShare.Pipelines(Path.Combine(ShaderCacheShare.CacheDir, "CUSA03173"));
+            if (mine > 0 && !Prompt.Confirm("Replace your shader cache?",
+                    $"Yours has {mine} pipelines; it is kept as a backup (user\\cache\\CUSA03173.bak).", "Replace"))
+                return;
+            try
+            {
+                var count = ShaderCacheShare.Import(dialog.FileName);
+                Ws.Log($"Shader cache: {count} pipelines taken; the game loads them at the next start.", LogLevel.Good);
+            }
+            catch (Exception e)
+            {
+                Prompt.Tell("Shader cache not used", "This file doesn't fit: " + e.Message + ".");
+            }
         }
 
         // ---------------------------------------------------------------- shared settings
 
         private void CopySettingsCode()
         {
-            Clipboard.SetText(SharedSettings.ToCode(SharedSettings.Take(Ini, S)));
+            if (!ClipboardText.Set(SharedSettings.ToCode(SharedSettings.Take(Ini, S))))
+            {
+                Ws.Log("Could not copy: another program is using the clipboard. Try again, or use Save settings file.", LogLevel.Warn);
+                return;
+            }
             Ws.Log("Settings code copied. Paste it in Discord; others import it in Settings › Share settings.", LogLevel.Good);
             Prompt.Tell("Settings code copied", "Paste it in Discord or anywhere else. Others use Import settings › Paste code.");
         }
 
         private void SaveSettingsFile()
         {
-            var dialog = new Microsoft.Win32.SaveFileDialog { Title = "Save settings", FileName = "Bloodborne PC settings.json", Filter = "Settings|*.json" };
+            var dialog = new Microsoft.Win32.SaveFileDialog { Title = "Save settings", FileName = "Lantern Engine settings.json", Filter = "Settings|*.json" };
             if (dialog.ShowDialog() != true) return;
             try
             {
@@ -307,7 +515,9 @@ namespace BloodborneLauncher.Views
 
         private void ImportSettingsCode()
         {
-            var clipboard = Clipboard.ContainsText() ? Clipboard.GetText() : "";
+            string clipboard;
+            try { clipboard = Clipboard.ContainsText() ? Clipboard.GetText() : ""; }
+            catch (System.Runtime.InteropServices.ExternalException) { clipboard = ""; }
             var values = Prompt.Ask("Import settings", $"Paste the code someone shared (it starts with {SharedSettings.CodePrefix}).",
                 new Prompt.Field("Code", clipboard.Contains(SharedSettings.CodePrefix, StringComparison.OrdinalIgnoreCase) ? clipboard.Trim() : "",
                     SharedSettings.CodePrefix + "…", Multiline: true));

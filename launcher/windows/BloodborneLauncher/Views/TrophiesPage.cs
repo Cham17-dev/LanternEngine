@@ -69,6 +69,7 @@ namespace BloodborneLauncher.Views
             var filter = new ComboBox { Width = 150 };
             foreach (var (label, value) in new[] { ("All", "all"), ("Earned", "earned"), ("Locked", "locked") })
                 filter.Items.Add(new ComboBoxItem { Content = label, Tag = value });
+            ComboSearch.Attach(filter);
             filter.SelectedIndex = 0;
             filter.SelectionChanged += (_, _) =>
             {
@@ -82,7 +83,7 @@ namespace BloodborneLauncher.Views
 
             // ==================== Notifications ====================
             Group("Notification");
-            SettingToggle(SymbolRegular.Alert24, "Show in game", "A small banner in a corner of the game's screen, without taking focus",
+            SettingToggle(SymbolRegular.Alert24, "Show in game", "A small banner in a corner of the game's screen, without taking focus. In fullscreen it needs Display › Borderless fullscreen",
                 "trophy_notifications");
             ComboRow(SymbolRegular.Pin24, "Position", null, new[]
             {
@@ -157,15 +158,38 @@ namespace BloodborneLauncher.Views
 
         public override void OnShown()
         {
+            Refresh();
+            _ = CheckSupportAsync();
+        }
+
+        /// <summary>The probe's path, size and time with its answer: bb-probe.exe is read whole (tens
+        /// of MB) only when it changed, and never on the UI thread.</summary>
+        private static (string Path, long Length, DateTime Written, bool Reports)? _probeChecked;
+
+        private async Task CheckSupportAsync()
+        {
             var probe = Path.Combine(Paths.BinariesDir, "bb-probe.exe");
-            var reports = File.Exists(probe) && TrophyTracker.RuntimeReportsTrophies(probe);
-            var hasLog = File.Exists(Ws.Trophies.LogPath);
+            var log = Ws.Trophies.LogPath;
+            var cached = _probeChecked;
+            var (reports, hasLog) = await Task.Run(() =>
+            {
+                var info = new FileInfo(probe);
+                bool says;
+                if (!info.Exists) says = false;
+                else if (cached is { } c && c.Path == probe && c.Length == info.Length && c.Written == info.LastWriteTimeUtc)
+                    says = c.Reports;
+                else
+                {
+                    says = TrophyTracker.RuntimeReportsTrophies(probe);
+                    _probeChecked = (probe, info.Length, info.LastWriteTimeUtc, says);
+                }
+                return (says, File.Exists(log));
+            });
             _support.IsOpen = !reports && !hasLog;
             _support.Title = "This build of the game does not report trophies";
             _support.Message = "Its bb-probe.exe accepts unlocks silently, so nothing can be tracked. A build with trophy hooks " +
                                "(for example the Windows release of github.com/pyL1nx/bloodborne_pc) writes trophies.log, and the " +
                                "launcher picks it up from there.";
-            Refresh();
         }
 
         private void Refresh()
@@ -184,12 +208,18 @@ namespace BloodborneLauncher.Views
             _dlcText.Text = $"{d} / {dt}";
             _dlc.Value = (double)d / dt;
 
+            // The grades and the 40 rows are made again only when the unlocks or the filter changed
+            // (Refresh also runs at every trophies.log check and each time the page is shown).
+            var shown = _filter + ":" + string.Join(",", t.Unlocked.OrderBy(p => p.Key).Select(p => $"{p.Key}@{p.Value}"));
+            if (shown == _shown) return;
+            _shown = shown;
+
             _grades.Children.Clear();
             foreach (var grade in new[] { Grade.Platinum, Grade.Gold, Grade.Silver, Grade.Bronze })
             {
                 var all = TrophyTracker.All.Where(x => x.Grade == grade).ToList();
                 var earned = all.Count(x => t.Unlocked.ContainsKey(x.Id));
-                var icon = new SymbolIcon { Symbol = SymbolRegular.Trophy24, Filled = true, FontSize = 18, Foreground = new SolidColorBrush(TrophyToast.GradeColor(grade)) };
+                var icon = new SymbolIcon { Symbol = SymbolRegular.Trophy24, Filled = true, FontSize = 18, Foreground = GradeBrush(grade) };
                 var value = Text($"{earned} / {all.Count}", "StatValue");
                 value.Margin = new Thickness(8, 0, 0, 0);
                 var label = Text(grade.ToString(), "StatLabel");
@@ -220,7 +250,7 @@ namespace BloodborneLauncher.Views
                 SetHint(row.Hint, hint);
                 symbol.Filled = earned;
                 symbol.Foreground = earned
-                    ? new SolidColorBrush(TrophyToast.GradeColor(trophy.Grade))
+                    ? GradeBrush(trophy.Grade)
                     : (Brush)FindResource("TextFillColorTertiaryBrush");
                 row.Opacity = earned ? 1 : 0.62;
                 row.ToolTip = $"{trophy.Grade} · {trophy.Points} points";
@@ -228,6 +258,22 @@ namespace BloodborneLauncher.Views
             }
             if (_list.Children.Count == 0)
                 _list.Children.Add(Text(_filter == "earned" ? "No trophies earned yet." : "Every trophy is earned. Hats off!", "Faint"));
+        }
+
+        private string? _shown;
+
+        private static readonly Dictionary<Grade, Brush> GradeBrushes = new();
+
+        /// <summary>One frozen brush per grade, shared by every row.</summary>
+        private static Brush GradeBrush(Grade grade)
+        {
+            if (!GradeBrushes.TryGetValue(grade, out var brush))
+            {
+                brush = new SolidColorBrush(TrophyToast.GradeColor(grade));
+                brush.Freeze();
+                GradeBrushes[grade] = brush;
+            }
+            return brush;
         }
 
         private void ChooseSound()

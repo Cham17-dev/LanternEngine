@@ -73,7 +73,7 @@ namespace BloodborneLauncher.Views
 
             // A package from before this launcher's engine (it updated itself, the engine did not).
             _engineCard = Card(SymbolRegular.ArrowDownload24, "Engine update available",
-                "This package has an older engine than this launcher needs (it unlocks 120 FPS and uncapped). " +
+                "This package has an older engine than this launcher: the crash fixes since then are missing. " +
                 "Updating downloads the latest package and keeps your settings, saves and mods.",
                 SmallButton("Update engine", SymbolRegular.ArrowDownload24, async (_, _) => await MainWindow.Instance!.UpdateEngineAsync(),
                     ControlAppearance.Primary), out _);
@@ -199,11 +199,52 @@ namespace BloodborneLauncher.Views
 
         public override void OnShown() => Refresh();
 
+        /// <summary>The game folder's last check (null until the first one is done).</summary>
+        private GameStatus? _status;
+        private int _refreshes, _profileReads, _backupReads;
+
+        /// <summary>Shows what is known at once, then checks the game folder (eboot.bin, param.sfo, an
+        /// update folder beside it, a DLC dump nearby) on a worker thread: on a slow or sleeping
+        /// disk that took seconds, with the whole launcher frozen.</summary>
         private void Refresh()
         {
             var gameDir = GameEnvironment.GameDir(S);
-            var status = GameCheck.Inspect(gameDir);
+            var dlcChosen = S.Str("dlc_dir");
             SetHint(_gameHint, string.IsNullOrEmpty(gameDir) ? "Not chosen" : gameDir);
+            var custom = S.Str("user_dir").Length > 0;
+            var root = GameEnvironment.SavesRoot(S);
+            SetHint(_userHint, (custom ? root : $"Default: {root}") + "  ·  every profile's saves live here");
+            _resetUser.IsEnabled = custom;
+            _resetDlc.IsEnabled = dlcChosen.Length > 0;
+            RefreshProfile();
+            RefreshBackups();
+            _engineCard.Visibility = Updater.EngineOutdated ? Visibility.Visible : Visibility.Collapsed;
+            RefreshSummary();
+            UpdateRunning();
+            _ = CheckGameAsync(gameDir, dlcChosen);
+        }
+
+        private async Task CheckGameAsync(string gameDir, string dlcChosen)
+        {
+            var refresh = ++_refreshes;
+            GameStatus status;
+            string dlc;
+            try
+            {
+                (status, dlc) = await Task.Run(() => (GameCheck.Inspect(gameDir),
+                    dlcChosen.Length > 0 ? Paths.Expand(dlcChosen) : GameEnvironment.FoundDlc(gameDir) ?? ""));
+            }
+            catch (Exception e)
+            {
+                (status, dlc) = (new GameStatus(Health.Warning, "The game folder could not be read: " + e.Message, "", ""), "");
+            }
+            if (refresh != _refreshes) return; // a newer check is on its way
+            ShowGame(status, dlc, chosen: dlcChosen.Length > 0);
+        }
+
+        private void ShowGame(GameStatus status, string dlc, bool chosen)
+        {
+            _status = status;
             _gameIcon.Symbol = status.Health == Health.Good ? SymbolRegular.CheckmarkCircle24 : SymbolRegular.Warning24;
             _gameIcon.SetResourceReference(ForegroundProperty, status.Health switch
             {
@@ -218,24 +259,12 @@ namespace BloodborneLauncher.Views
             _problem.Title = status.Health == Health.Bad ? "The game folder needs attention" : "Check the game";
             _problem.Message = status.Summary;
 
-            var dlc = GameEnvironment.DlcDir(S);
-            var chosen = S.Str("dlc_dir").Length > 0;
             SetHint(_dlcHint, dlc.Length > 0
                 ? chosen ? dlc : $"Found next to the game: {dlc}"
                 : "Only with a base-game dump: the folder of your dumped add-ons, one folder each (The Old Hunters: SPEXPANSIONDLC03). " +
                   "Found on its own when it is beside the game folder. The Game of the Year edition (CUSA03173) has it already");
-            _resetDlc.IsEnabled = chosen;
 
-            var custom = S.Str("user_dir").Length > 0;
-            var root = GameEnvironment.SavesRoot(S);
-            SetHint(_userHint, (custom ? root : $"Default: {root}") + "  ·  every profile's saves live here");
-            _resetUser.IsEnabled = custom;
-            RefreshProfile();
-            RefreshBackups();
-
-            _engineCard.Visibility = Updater.EngineOutdated ? Visibility.Visible : Visibility.Collapsed;
             _statGame.Text = status.Health == Health.Bad ? "Not found" : $"{status.TitleId} {status.Version}".Trim();
-            RefreshSummary();
             UpdateRunning();
         }
 
@@ -267,7 +296,8 @@ namespace BloodborneLauncher.Views
             else
             {
                 _clock.Stop();
-                _playStatus.Text = GameCheck.Inspect(GameEnvironment.GameDir(S)).Health == Health.Bad
+                // The last check's answer (Refresh checks the folder again off the UI thread).
+                _playStatus.Text = _status?.Health == Health.Bad
                     ? "Choose the game folder first"
                     : Ws.Session is { Length.TotalSeconds: > 10 } last
                         ? "Last session: " + last.Summary
@@ -298,7 +328,7 @@ namespace BloodborneLauncher.Views
             var exe = Path.Combine(Paths.PortDir, "Bloodborne.exe");
             if (!File.Exists(exe))
             {
-                Prompt.Tell("Add to Steam", "Bloodborne.exe is missing from the Bloodborne PC folder: reinstall the package.");
+                Prompt.Tell("Add to Steam", "Bloodborne.exe is missing from the Lantern Engine folder: reinstall the package.");
                 return;
             }
             if (SteamShortcut.SteamDir() is null)
@@ -340,14 +370,19 @@ namespace BloodborneLauncher.Views
 
         // ---------------------------------------------------------------- player profiles
 
-        private void RefreshProfile()
+        /// <summary>The profile line; whether saves exist is looked up on a worker thread.</summary>
+        private async void RefreshProfile()
         {
+            var read = ++_profileReads;
             var profile = PlayerProfiles.Current(S);
             _profileButton.Content = profile;
             var dir = GameEnvironment.UserDir(S);
             var saves = Path.Combine(dir, "savedata");
-            var found = Directory.Exists(saves) && Directory.EnumerateFileSystemEntries(saves).Any();
             var played = SessionStats.Playtime(S, profile);
+            bool found;
+            try { found = await Task.Run(() => Directory.Exists(saves) && Directory.EnumerateFileSystemEntries(saves).Any()); }
+            catch { found = false; }
+            if (read != _profileReads) return;
             SetHint(_profileHint, dir + (found ? "  ·  saves found" : "  ·  no saves yet; the game creates them here") +
                                   $"  ·  {Ws.Trophies.Count} / {TrophyTracker.All.Length} trophies" +
                                   (played.TotalMinutes >= 1 ? $"  ·  {SessionStats.Duration(played)} played" : ""));
@@ -355,15 +390,21 @@ namespace BloodborneLauncher.Views
 
         // ---------------------------------------------------------------- save backups
 
-        private void RefreshBackups()
+        /// <summary>The backups line. Listing them adds up every backup's size, so it is done on a
+        /// worker thread (it ran at each game start and stop, right when the launcher is busiest).</summary>
+        private async void RefreshBackups()
         {
+            var read = ++_backupReads;
+            var folder = SaveBackups.Folder(S);
+            var profile = PlayerProfiles.Current(S);
             List<SaveBackups.Backup> list;
-            try { list = SaveBackups.List(S); }
+            try { list = await Task.Run(() => SaveBackups.ListIn(folder)); }
             catch { list = new(); }
+            if (read != _backupReads) return;
             _restoreButton.IsEnabled = list.Count > 0;
             SetHint(_backupHint, !S.Bool("save_backups") ? "Off: no backups are made"
                 : list.Count == 0 ? "None yet: the first is made when you next press Play"
-                : $"{list.Count} for {PlayerProfiles.Current(S)}  ·  newest {list[0].When:d MMM, HH:mm}");
+                : $"{list.Count} for {profile}  ·  newest {list[0].When:d MMM, HH:mm}");
         }
 
         private void ShowBackupMenu()

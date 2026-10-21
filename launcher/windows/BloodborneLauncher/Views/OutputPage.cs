@@ -86,8 +86,10 @@ namespace BloodborneLauncher.Views
         private void Copy()
         {
             if (_output.Text.Length == 0) return;
-            Clipboard.SetText(_output.Text);
-            Ws.Log("Game output copied.", LogLevel.Good);
+            if (ClipboardText.Set(_output.Text))
+                Ws.Log("Game output copied.", LogLevel.Good);
+            else
+                Ws.Log("Could not copy: another program is using the clipboard. Try again, or use Export.", LogLevel.Warn);
         }
 
         private void Export()
@@ -101,7 +103,16 @@ namespace BloodborneLauncher.Views
             if (dialog.ShowDialog() != true) return;
             try
             {
-                File.WriteAllText(dialog.FileName, _output.Text);
+                // The whole session (logs\last_session.log), not the last lines this page keeps: a
+                // report trimmed to its end lost the start and what came before a freeze.
+                if (File.Exists(GameRunner.SessionLog))
+                {
+                    using var from = new FileStream(GameRunner.SessionLog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var to = File.Create(dialog.FileName);
+                    from.CopyTo(to);
+                }
+                else
+                    File.WriteAllText(dialog.FileName, _output.Text);
                 Ws.Log("Game output saved: " + dialog.FileName, LogLevel.Good);
             }
             catch (Exception e)

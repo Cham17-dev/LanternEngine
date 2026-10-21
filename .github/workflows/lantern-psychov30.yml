@@ -2,7 +2,7 @@ name: Lantern PsychoV30 port
 
 on:
   push:
-    branches: [lantern-psychov30]
+    branches: [lantern-psychov30, lantern-psychov30-beta98]
     paths: ['ports/lantern/**', 'launcher/**', 'engine/**', '.github/workflows/lantern-psychov30.yml']
   workflow_dispatch:
     inputs:
@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Awakenchan/LanternEngine
-          ref: 6c2fbf48d0a84dd6e3fc88fee240e326b66a4e4f
+          ref: 69018af24313407684cea267b107d2fb3fe86d5f
           path: upstream-lantern
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Awakenchan/LanternEngine
-          ref: 6c2fbf48d0a84dd6e3fc88fee240e326b66a4e4f
+          ref: 69018af24313407684cea267b107d2fb3fe86d5f
           path: upstream-lantern
           persist-credentials: false
       - uses: actions/checkout@v4

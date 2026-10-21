@@ -1,8 +1,8 @@
 diff --git a/launcher/windows/BloodborneLauncher/Core/Choices.cs b/launcher/windows/BloodborneLauncher/Core/Choices.cs
-index acabd6b..60fd4b2 100644
+index 6f9ad48..9cd4371 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Choices.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Choices.cs
-@@ -139,7 +139,7 @@
+@@ -182,7 +182,7 @@
  
          public static readonly Choice[] HdrPaperWhite =
          {
@@ -11,7 +11,7 @@ index acabd6b..60fd4b2 100644
              new("250 nits", "250"), new("300 nits", "300"), new("400 nits", "400"),
          };
  
-@@ -163,7 +163,22 @@
+@@ -211,7 +211,22 @@
  
          public static readonly Choice[] HdrMode =
          {
@@ -166,7 +166,7 @@ index 0000000..e5cbd26
 +    }
 +}
 diff --git a/launcher/windows/BloodborneLauncher/Core/GameEnvironment.cs b/launcher/windows/BloodborneLauncher/Core/GameEnvironment.cs
-index 41cbda8..61d1595 100644
+index 249e178..eca65b2 100644
 --- a/launcher/windows/BloodborneLauncher/Core/GameEnvironment.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/GameEnvironment.cs
 @@ -1,4 +1,4 @@
@@ -175,53 +175,37 @@ index 41cbda8..61d1595 100644
  
  namespace BloodborneLauncher.Core
  {
-@@ -224,7 +224,7 @@ namespace BloodborneLauncher.Core
-         {
-             yield return ("SDL_JOYSTICK_HIDAPI_PS3", "1");
-             yield return ("SDL_JOYSTICK_HIDAPI_PS3_SIXAXIS_DRIVER", "1");
--            var mappings = Path.Combine(Paths.PortDir, "gamecontrollerdb.txt");
-+            var mappings = Path.Combine(Paths.EngineDir, "gamecontrollerdb.txt");
-             if (File.Exists(mappings)) yield return ("SDL_GAMECONTROLLERCONFIG_FILE", mappings);
-         }
-     }
 diff --git a/launcher/windows/BloodborneLauncher/Core/GameRunner.cs b/launcher/windows/BloodborneLauncher/Core/GameRunner.cs
-index 408d0ca..ee5e849 100644
+index 9818eb9..4a8f9cb 100644
 --- a/launcher/windows/BloodborneLauncher/Core/GameRunner.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/GameRunner.cs
-@@ -48,15 +48,19 @@ namespace BloodborneLauncher.Core
-                 var python = File.Exists(Paths.Python) ? Paths.Python : "py";
-                 info = new ProcessStartInfo(python);
-                 if (python == "py") info.ArgumentList.Add("-3");
--                info.ArgumentList.Add(Path.Combine(Paths.PortDir, "scripts", "run_windows.py"));
-+                info.ArgumentList.Add(Path.Combine(Paths.EngineDir, "scripts", "run_windows.py"));
-                 info.ArgumentList.Add("--game-dir");
-                 info.ArgumentList.Add(GameEnvironment.GameDir(s));
-             }
+@@ -1,4 +1,4 @@
+-﻿using System.Diagnostics;
++using System.Diagnostics;
+ using System.IO;
+ using System.Text;
  
--            info.WorkingDirectory = Paths.IsPortDir(Paths.PortDir) ? Paths.PortDir : Environment.CurrentDirectory;
-+            info.WorkingDirectory = Paths.IsPortDir(Paths.PortDir) ? Paths.EngineDir : Environment.CurrentDirectory;
-             foreach (var (key, value) in GameEnvironment.Build(s))
-                 info.Environment[key] = value;
-             info.Environment["PYTHONUNBUFFERED"] = "1";
-+            info.Environment["PYTHONUTF8"] = "1";
-+            info.Environment["PYTHONIOENCODING"] = "utf-8";
+@@ -92,6 +92,8 @@ namespace BloodborneLauncher.Core
+             // code pages cannot write.
+             info.Environment["PYTHONUTF8"] = "1";
+             info.Environment["PYTHONIOENCODING"] = "utf-8";
 +            // Prepared game files live with user data, whereas the custom engine is in engine/out.
 +            info.Environment["BB_PROBE"] = Path.Combine(Paths.BinariesDir, "bb-probe.exe");
              info.UseShellExecute = false;
              info.CreateNoWindow = true;
              info.RedirectStandardOutput = true;
-@@ -69,7 +73,8 @@ namespace BloodborneLauncher.Core
+@@ -104,7 +106,8 @@ namespace BloodborneLauncher.Core
                  var process = new Process { StartInfo = info, EnableRaisingEvents = true };
                  OpenLog();
                  // The first line of every log, the Output page's export included: which build ran.
--                Emit($"Bloodborne Launcher {Updater.CurrentLabel}, engine {Updater.LocalEngine() ?? "unknown"}, {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+-                Emit($"Lantern Engine {Updater.CurrentLabel}, engine {Updater.LocalEngine() ?? "unknown"}, {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
 +                Emit($"Lantern Engine + PsychoV30 {Updater.CurrentLabel}, engine {Updater.LocalEngine() ?? "unknown"}, {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
 +                Emit($"HDR engine: {Path.Combine(Paths.BinariesDir, "bb-probe.exe")}");
                  process.OutputDataReceived += (_, e) => { if (e.Data != null) Emit(e.Data); };
                  process.ErrorDataReceived += (_, e) => { if (e.Data != null) Emit(e.Data); };
                  process.Exited += (_, _) =>
 diff --git a/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs b/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
-index bffc31d..82755db 100644
+index 49c5560..de7e2bd 100644
 --- a/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
 @@ -46,7 +46,7 @@ namespace BloodborneLauncher.Core
@@ -231,42 +215,16 @@ index bffc31d..82755db 100644
 -            ["check_updates"] = true,
 +            ["check_updates"] = false,
              ["save_backups"] = true,
-             ["safe_mode_next"] = false,
-             ["memory_check_off"] = false,
-diff --git a/launcher/windows/BloodborneLauncher/Core/Mods.cs b/launcher/windows/BloodborneLauncher/Core/Mods.cs
-index 4161f1e..4451baa 100644
---- a/launcher/windows/BloodborneLauncher/Core/Mods.cs
-+++ b/launcher/windows/BloodborneLauncher/Core/Mods.cs
-@@ -158,7 +158,7 @@ namespace BloodborneLauncher.Core
-         {
-             try
-             {
--                var xml = XDocument.Load(Path.Combine(Paths.PortDir, "patches", "Bloodborne.xml"));
-+                var xml = XDocument.Load(Path.Combine(Paths.EngineDir, "patches", "Bloodborne.xml"));
-                 var template = xml.Descendants("Metadata").FirstOrDefault(m => (string?)m.Attribute("Name") == ResolutionTemplate);
-                 return template?.Descendants("Line").Select(Range).Where(r => r.HasValue).Select(r => r!.Value).ToList() ?? new();
-             }
-@@ -215,7 +215,7 @@ namespace BloodborneLauncher.Core
-             if (!Directory.Exists(directory))
-                 return found;
- 
--            var builtIn = Path.GetFullPath(Path.Combine(Paths.PortDir, "patches", "Bloodborne.xml"));
-+            var builtIn = Path.GetFullPath(Path.Combine(Paths.EngineDir, "patches", "Bloodborne.xml"));
-             var footprint = ResolutionFootprint();
-             // The built-in file first (it lives in the package's patches folder; updates replace it):
-             // its optional patches, off until switched on here.
+             ["discord_status"] = "off",
+             ["discord_timer"] = true,
 diff --git a/launcher/windows/BloodborneLauncher/Core/Paths.cs b/launcher/windows/BloodborneLauncher/Core/Paths.cs
-index 73c3cf4..df45240 100644
+index 8d56324..466119c 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Paths.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Paths.cs
-@@ -4,15 +4,15 @@ using BloodborneLauncher.Build;
- namespace BloodborneLauncher.Core
- {
-     /// <summary>
--    /// Where things live. The engine folder holds out\bb-probe.exe, scripts\run_windows.py and a
-+    /// Where things live. The package holds the runtime under engine\: out\bb-probe.exe, scripts\run_windows.py and a
-     /// bundled Python; bbport.ini, mods.json and patches.json live in its data folder (BB_DATA_DIR,
-     /// by default the engine folder itself), as run_windows.py expects them.
+@@ -8,12 +8,12 @@ namespace BloodborneLauncher.Core
+     /// player's files - bbport.ini, mods.json, patches.json, user, mods, logs (its data folder,
+     /// BB_DATA_DIR) - and the engine in engine\: out\bb-probe.exe, scripts\run_windows.py and a
+     /// bundled Python. Older packages had the engine at the top (EngineDirOf handles both).
 -    /// Launcher settings are per-user, in %APPDATA%\bbport-launcher\settings.json.
 +    /// Launcher settings are per-user, in %APPDATA%\bbport-launcher-psychov30\settings.json.
      /// </summary>
@@ -278,85 +236,56 @@ index 73c3cf4..df45240 100644
  
          public static readonly string ConfigFile = Path.Combine(ConfigDir, "settings.json");
  
-@@ -28,15 +28,21 @@ namespace BloodborneLauncher.Core
-                 : Path.Combine(DataDir, "bbport.ini");
- 
-         /// <summary>The engine and its DLLs.</summary>
--        public static string BinariesDir => Path.Combine(PortDir, "out");
-+        public static string EngineDirOf(string dir) =>
-+            File.Exists(Path.Combine(dir, "engine", "out", "bb-probe.exe"))
-+                ? Path.Combine(dir, "engine") : dir;
-+
-+        public static string EngineDir => EngineDirOf(PortDir);
-+
-+        public static string BinariesDir => Path.Combine(EngineDir, "out");
- 
-         /// <summary>The Bloodborne PC engine: scripts\run_windows.py and out\bb-probe.exe.</summary>
-         public static bool IsPortDir(string? dir) =>
-             !string.IsNullOrWhiteSpace(dir) &&
--            File.Exists(Path.Combine(dir, "scripts", "run_windows.py")) &&
--            File.Exists(Path.Combine(dir, "out", "bb-probe.exe"));
-+            File.Exists(Path.Combine(EngineDirOf(dir), "scripts", "run_windows.py")) &&
-+            File.Exists(Path.Combine(EngineDirOf(dir), "out", "bb-probe.exe"));
- 
--        public static string Python => Path.Combine(PortDir, "tools", "python", "python.exe");
-+        public static string Python => Path.Combine(EngineDir, "tools", "python", "python.exe");
- 
-         /// <summary>The port next to the game folder (its usual layout: &lt;port&gt;\CUSA03173).</summary>
-         public static string? PortBesideGame(string gameDir)
-@@ -63,7 +69,7 @@ namespace BloodborneLauncher.Core
-                 return Directory.GetDirectories(parent)
-                     .Where(IsPortDir)
-                     .OrderByDescending(dir => new[] { "bin", "out" }
--                        .Select(b => new FileInfo(Path.Combine(dir, b, "bb-probe.exe")))
-+                        .Select(b => new FileInfo(Path.Combine(EngineDirOf(dir), b, "bb-probe.exe")))
-                         .Where(f => f.Exists).Select(f => f.LastWriteTimeUtc).DefaultIfEmpty(DateTime.MinValue).Max())
-                     .FirstOrDefault();
-             }
 diff --git a/launcher/windows/BloodborneLauncher/Core/Updater.cs b/launcher/windows/BloodborneLauncher/Core/Updater.cs
-index d9a42d4..ecdfede 100644
+index 6523914..b085117 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Updater.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Updater.cs
 @@ -22,11 +22,11 @@ namespace BloodborneLauncher.Core
      /// </summary>
      public static class Updater
      {
--        public const string Repository = "Awakenchan/BloodBorneButPc";
+-        public const string Repository = "Awakenchan/LanternEngine";
 +        public const string Repository = "Cham17-dev/LanternEngine";
          public static string ReleasesPage => $"https://github.com/{Repository}/releases";
  
          /// <summary>The engine build this launcher is made for (package.json "engine").</summary>
--        public const string EngineId = "bbhost-0.4.0-fps49";
-+        public const string EngineId = "lantern-6c2fbf48-psychov30-v1";
+-        public const string EngineId = "bbhost-0.4.0-fps80";
++        public const string EngineId = "lantern-69018af-psychov30-v1";
  
-         private const string ExeName = "Bloodborne Launcher.exe";
-         private const string PackageFile = "package.json";
+         public const string ExeName = "Lantern Engine.exe";
+         /// <summary>The launcher's name before 0.9.34 beta 8 (now a forwarder to ExeName).</summary>
 diff --git a/launcher/windows/BloodborneLauncher/MainWindow.xaml b/launcher/windows/BloodborneLauncher/MainWindow.xaml
-index 4d0e497..e41efb9 100644
+index 36bb7f0..40f1d51 100644
 --- a/launcher/windows/BloodborneLauncher/MainWindow.xaml
 +++ b/launcher/windows/BloodborneLauncher/MainWindow.xaml
 @@ -4,7 +4,7 @@
                   xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                   xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
                   xmlns:views="clr-namespace:BloodborneLauncher.Views"
--                 Title="Bloodborne Launcher"
+-                 Title="Lantern Engine"
 +                 Title="Lantern Engine + PsychoV30"
                   Icon="app.ico"
                   Height="780" Width="1040"
                   MinHeight="560" MinWidth="820"
-@@ -195,7 +195,7 @@
-                 </StackPanel>
+@@ -340,7 +340,7 @@
+                 </Grid>
  
                  <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" IsHitTestVisible="False">
--                    <Run Text="Bloodborne Launcher" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+-                    <Run Text="Lantern Engine" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
 +                    <Run Text="Lantern Engine + PsychoV30" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                      <Run x:Name="TitlePage" Text="" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
                  </TextBlock>
  
 diff --git a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
-index 1539827..88f5166 100644
+index d010057..22e520a 100644
 --- a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 +++ b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
+@@ -1,4 +1,4 @@
+-﻿using BloodborneLauncher.Core;
++using BloodborneLauncher.Core;
+ using Wpf.Ui.Controls;
+ using System.Windows;
+ using System.Windows.Controls;
 @@ -10,8 +10,34 @@ namespace BloodborneLauncher.Views
      {
          private readonly ComboBox _monitor = new() { Width = 360, VerticalAlignment = VerticalAlignment.Center };
@@ -393,7 +322,7 @@ index 1539827..88f5166 100644
  
          private void RefreshMonitors()
          {
-@@ -71,22 +97,49 @@ namespace BloodborneLauncher.Views
+@@ -128,23 +154,50 @@ namespace BloodborneLauncher.Views
                      : "This display shows no HDR";
              IniToggle(SymbolRegular.Hdr24, "HDR output", hdrHint, "hdr");
              ComboRow(SymbolRegular.Lightbulb24, "HDR source",
@@ -410,10 +339,9 @@ index 1539827..88f5166 100644
 +            var paperWhite = SliderRow(SymbolRegular.BrightnessHigh24, "Paper white", "How bright the game's white is, in nits. Default: 203. Range: 10–500",
 +                10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", ""), DefaultPaperWhite),
                  v => Ini.Set("hdr_paper_white", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
--                format: "0' nits'", valueWidth: 82);
+                 format: "0' nits'", valueWidth: 82);
 -            SliderRow(SymbolRegular.WeatherSunny24, "Peak brightness", "Your display's peak brightness, in nits. Range: 10–4000",
 -                10, 4000, 10, () => ParseDouble(Ini.Get("hdr_peak", "1000"), 1000),
-+                format: "0' nits'", valueWidth: 82, inputUnit: "nits");
 +            if (paperWhite.Parent is Panel paperWhiteRow)
 +                paperWhiteRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24, "Reset to 203 nits",
 +                    (_, _) => paperWhite.Value = DefaultPaperWhite));
@@ -424,22 +352,14 @@ index 1539827..88f5166 100644
 +            var peak = SliderRow(SymbolRegular.WeatherSunny24, "Peak brightness", peakHint,
 +                10, 4000, 1, () => ParseDouble(Ini.Get("hdr_peak", ""), DetectedPeak()),
                  v => Ini.Set("hdr_peak", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
--                format: "0' nits'", valueWidth: 82);
-+                format: "0' nits'", valueWidth: 82, inputUnit: "nits");
+                 format: "0' nits'", valueWidth: 82);
 +            if (peak.Parent is Panel peakRow)
 +                peakRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24,
 +                    "Reset to the peak Windows reports for this display (1000 when it reports none)",
 +                    (_, _) => peak.Value = Math.Clamp(DetectedPeak(), peak.Minimum, peak.Maximum)));
              ComboRow(SymbolRegular.Sparkle24, "Highlight boost", "Off keeps the game's own look; higher makes lamps, fire and the sky brighter",
                  Choices.HdrBoost, () => Ini.Get("hdr_boost", "0.25"), v => Ini.Set("hdr_boost", v));
--            ComboRow(SymbolRegular.TextFont24, "UI brightness", "Native source only: how bright the HUD, menus and subtitles are, against paper white",
 +            _hdrBoostRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
-+            ComboRow(SymbolRegular.TextFont24, "UI brightness", "Native and PsychoV30: HUD brightness relative to paper white. Paper white is 1x; Brighter is 1.25x; Much brighter is 1.5x.",
-                 Choices.HdrUiBrightness, () => Ini.Get("hdr_ui_brightness", "1"), v => Ini.Set("hdr_ui_brightness", v));
-+            _hdrBrightnessRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
-             ComboRow(SymbolRegular.Color24, "UI colour", "Native source only: Vivid shows the HUD and menus with the colours a wide-gamut monitor gives SDR; Exact keeps sRGB's",
-                 Choices.HdrUiColor, () => Ini.Get("hdr_ui_color", "1"), v => Ini.Set("hdr_ui_color", v));
-+            _hdrColourRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
 +            ComboRow(SymbolRegular.Lightbulb24, "Tone mapper",
 +                "PsychoV30 only. PsychoV-30: as RenoDX's mods, its own shadows. Hybrid: the shadows matched to the game's below mid grey; compare them in dark interiors and fog. Vanilla: the game's own look. Also in the in-game menu, live",
 +                Choices.HdrToneMapper, () => Ini.Get("hdr_tonemapper", "4"), v => Ini.Set("hdr_tonemapper", v));
@@ -448,12 +368,20 @@ index 1539827..88f5166 100644
 +                "PsychoV30 only: the color volume it fits the picture into. BT.2020 is RenoDX's HDR default; compare with BT.709 on saturated lights (lanterns, fire, blue lights). Also in the in-game menu, live",
 +                Choices.HdrGamut, () => Ini.Get("hdr_gamut", "bt2020"), v => Ini.Set("hdr_gamut", v));
 +            _hdrGamutRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
+             var hdrMore = Advanced();
+-            ComboRow(SymbolRegular.TextFont24, "UI brightness", "Native source only: how bright the HUD, menus and subtitles are, against paper white",
++            ComboRow(SymbolRegular.TextFont24, "UI brightness", "Native and PsychoV30: how bright the HUD, menus and subtitles are, against paper white",
+                 Choices.HdrUiBrightness, () => Ini.Get("hdr_ui_brightness", "1"), v => Ini.Set("hdr_ui_brightness", v), hdrMore);
++            _hdrBrightnessRow = (FrameworkElement)hdrMore.Children[hdrMore.Children.Count - 1];
+             ComboRow(SymbolRegular.Color24, "UI colour", "Native source only: Vivid shows the HUD and menus with the colours a wide-gamut monitor gives SDR; Exact keeps sRGB's",
+                 Choices.HdrUiColor, () => Ini.Get("hdr_ui_color", "1"), v => Ini.Set("hdr_ui_color", v), hdrMore);
++            _hdrColourRow = (FrameworkElement)hdrMore.Children[hdrMore.Children.Count - 1];
 +            RefreshHdrRows();
  
-             Group("Frame rate");
-             SettingCombo(SymbolRegular.Gauge24, "Frame rate", "30, 60, 90, 120 and 144 are the game's frame-rate patches for that rate; Uncapped uses the community uncapped patch", Choices.FpsModes, "fps_mode");
+             Group("Language");
+             ComboRow(SymbolRegular.LocalLanguage24, "In-game menu language", "The port's settings menu (Insert or L3 + R3)",
 diff --git a/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs b/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
-index 9feac0d..a3c4f0f 100644
+index b904387..05cb726 100644
 --- a/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
 +++ b/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
 @@ -1,4 +1,4 @@
@@ -462,93 +390,3 @@ index 9feac0d..a3c4f0f 100644
  using System.Windows.Controls;
  using BloodborneLauncher.Core;
  using Wpf.Ui.Controls;
-@@ -143,7 +143,7 @@ namespace BloodborneLauncher.Views
-             var value = Ini.Get("upscaler");
-             string? hint = value switch
-             {
--                "fsr4" => Directory.Exists(Path.Combine(Paths.PortDir, "fsr4_shaders"))
-+                "fsr4" => Directory.Exists(Path.Combine(Paths.EngineDir, "fsr4_shaders"))
-                     ? "Assets found. GPUs without the needed shader features fall back to FSR 3.1"
-                     : "fsr4_shaders is missing from the port folder: the game falls back to FSR 3.1",
-                 "fsr411" when Fsr4VkFound() =>
-@@ -171,13 +171,13 @@ namespace BloodborneLauncher.Views
- 
-         /// <summary>The fsr4vk provider the package ships (FSR 4.1.1 on any GPU, vk_fsr4vk.cpp).</summary>
-         private static bool Fsr4VkFound() =>
--            File.Exists(Path.Combine(Paths.PortDir, "fsr4vk", "amd_fidelityfx_upscaler_vk.dll"));
-+            File.Exists(Path.Combine(Paths.EngineDir, "fsr4vk", "amd_fidelityfx_upscaler_vk.dll"));
- 
-         private static string Fsr411Dir()
-         {
-             var env = Environment.GetEnvironmentVariable("BB_FSR411_DIR");
-             if (!string.IsNullOrEmpty(env)) return env;
--            var local = Path.Combine(Paths.PortDir, "fsr4_411");
-+            var local = Path.Combine(Paths.EngineDir, "fsr4_411");
-             return Directory.Exists(local) ? local : Path.Combine(Paths.DataDir, "fsr4_411");
-         }
- 
-diff --git a/launcher/windows/BloodborneLauncher/Views/LauncherPage.cs b/launcher/windows/BloodborneLauncher/Views/LauncherPage.cs
-index 36b0d24..dff3352 100644
---- a/launcher/windows/BloodborneLauncher/Views/LauncherPage.cs
-+++ b/launcher/windows/BloodborneLauncher/Views/LauncherPage.cs
-@@ -422,7 +422,8 @@ namespace BloodborneLauncher.Views
- 
-         /// <summary>A slider with its value printed beside it.</summary>
-         protected Slider SliderRow(SymbolRegular icon, string title, string? hint, double min, double max, double step,
--            Func<double> get, Action<double> set, string format = "0.00", Panel? into = null, double valueWidth = 44)
-+            Func<double> get, Action<double> set, string format = "0.00", Panel? into = null, double valueWidth = 44,
-+            string? inputUnit = null)
-         {
-             var slider = new Slider
-             {
-@@ -451,7 +452,49 @@ namespace BloodborneLauncher.Views
-                 set(slider.Value);
-                 Ws.SaveSoon();
-             };
--            Add(Card(icon, title, hint, Row(value, slider), out _), into);
-+            FrameworkElement valueControl = value;
-+            if (inputUnit != null)
-+            {
-+                var input = new TextBox
-+                {
-+                    Width = valueWidth,
-+                    TextAlignment = TextAlignment.Right,
-+                    VerticalAlignment = VerticalAlignment.Center,
-+                    ToolTip = "Type an exact value, then press Enter. Escape cancels the edit.",
-+                };
-+                input.SetResourceReference(TextBox.FontFamilyProperty, "MonoFont");
-+                void RefreshValue() => input.Text = slider.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
-+                void CommitValue()
-+                {
-+                    var valid = double.TryParse(input.Text, System.Globalization.NumberStyles.Float,
-+                        System.Globalization.CultureInfo.InvariantCulture, out var number) ||
-+                        double.TryParse(input.Text, System.Globalization.NumberStyles.Float,
-+                            System.Globalization.CultureInfo.CurrentCulture, out number);
-+                    if (valid && double.IsFinite(number))
-+                    {
-+                        number = Math.Clamp(number, min, max);
-+                        slider.Value = Math.Clamp(min + Math.Round((number - min) / step,
-+                            MidpointRounding.AwayFromZero) * step, min, max);
-+                    }
-+                    RefreshValue();
-+                }
-+                RefreshValue();
-+                input.GotKeyboardFocus += (_, _) => input.SelectAll();
-+                input.LostKeyboardFocus += (_, _) => CommitValue();
-+                input.KeyDown += (_, e) =>
-+                {
-+                    if (e.Key == Key.Enter) { CommitValue(); e.Handled = true; }
-+                    else if (e.Key == Key.Escape) { RefreshValue(); input.SelectAll(); e.Handled = true; }
-+                };
-+                slider.ValueChanged += (_, _) => RefreshValue();
-+                valueControl = Row(input, new TextBlock
-+                {
-+                    Text = inputUnit,
-+                    Margin = new Thickness(6, 0, 10, 0),
-+                    VerticalAlignment = VerticalAlignment.Center,
-+                });
-+            }
-+            Add(Card(icon, title, hint, Row(valueControl, slider), out _), into);
-             return slider;
-         }
- 

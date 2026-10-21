@@ -58,6 +58,10 @@ namespace BloodborneLauncher.Views
         private TrophyToast(Trophy trophy, string corner)
         {
             _corner = corner;
+            // Crisp text, as the main window's (a window does not inherit them).
+            System.Windows.Media.TextOptions.SetTextFormattingMode(this, System.Windows.Media.TextFormattingMode.Display);
+            System.Windows.Media.TextOptions.SetTextHintingMode(this, System.Windows.Media.TextHintingMode.Fixed);
+            UseLayoutRounding = true;
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
             Background = Brushes.Transparent;

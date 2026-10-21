@@ -13,8 +13,8 @@ import urllib.request
 from zipfile import ZipFile
 
 BASE_URL = ('https://github.com/Awakenchan/LanternEngine/releases/download/'
-            'v0.9.34-beta.9.3/BloodbornePC-v0.9.34-beta.9.3-win64.zip')
-BASE_SHA = 'bd5501bb2c12988fd1772828a36ceeda4e2bc04bd82801924f3fe65ec29bf90d'
+            'v0.9.34-beta.9.8/LanternEngine-v0.9.34-beta.9.8-win64.zip')
+BASE_SHA = '52d6eec988340f18dd6fca33c1ba6f8930232676207ba50cc928380adf8a61de'
 PYTHON_URL = 'https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip'
 PYTHON_SHA = '4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3'
 
@@ -69,9 +69,9 @@ def assemble(engine, overlay, destination, cache):
     # Embedded Python ignores the script directory unless explicitly added to its _pth.
     (python / 'python312._pth').write_text('python312.zip\n.\n../../scripts\n', encoding='ascii')
     (destination / 'package.json').write_text(json.dumps({
-        'version': '0.9.34-psychov30', 'engine': 'lantern-6c2fbf48-psychov30-v1',
+        'version': '0.9.34-psychov30', 'engine': 'lantern-69018af-psychov30-v1',
         'source': 'https://github.com/Cham17-dev/LanternEngine/tree/lantern-psychov30',
-        'runtime_resources': 'v0.9.34-beta.9.3', 'python': '3.12.10',
+        'runtime_resources': 'v0.9.34-beta.9.8', 'python': '3.12.10',
     }, indent=2), encoding='utf-8')
     # Explicit shipped HDR defaults, without replacing any player's existing INI.
     ini = destination / 'bbport.ini'
@@ -82,7 +82,7 @@ def assemble(engine, overlay, destination, cache):
     lines = [line for line in ini.read_text(encoding='utf-8-sig').splitlines()
              if line.split('=', 1)[0].strip() not in defaults.keys() | unset]
     ini.write_text('\n'.join(lines + [f'{k}={v}' for k, v in defaults.items()]) + '\n', encoding='utf-8')
-    required = ['Lantern Engine.exe', 'Bloodborne.exe', 'engine/out/bb-probe.exe',
+    required = ['Lantern Engine.exe', 'Bloodborne.exe', 'engine/out/bb-probe.exe', 'engine/out/bb-start.exe',
                 'engine/out/bb-engine-assets.exe', 'engine/out/bb-gpu-capabilities.exe',
                 'engine/out/nvngx_dlss.dll', 'engine/scripts/run_windows.py',
                 'engine/patches/redzone.json', 'engine/tools/python/python.exe',

@@ -51,7 +51,7 @@
     </LinearGradientBrush>
 
     <SolidColorBrush x:Key="TextFillColorPrimaryBrush" Color="#FFF5F6F8" />
-    <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#CCE4E6EA" />
-    <SolidColorBrush x:Key="TextFillColorTertiaryBrush" Color="#99D8DBE0" />
+    <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#FFC2C5CA" />
+    <SolidColorBrush x:Key="TextFillColorTertiaryBrush" Color="#FF9A9DA3" />
 
 </ResourceDictionary>

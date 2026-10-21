@@ -18,6 +18,14 @@
             new("Off", "off"),
         };
 
+        /// <summary>frame_gen in bbport.ini: a generated frame between the game's own (the engine's
+        /// vk_frame_generation.h). Off by default.</summary>
+        public static readonly Choice[] FrameGeneration =
+        {
+            new("Off", "off"),
+            new("FSR 3.1 (2x)", "fsr3", "Needs an upscaler. Not in menus, movies or with HDR output"),
+        };
+
         public static readonly Choice[] Presets =
         {
             new("Native AA (no upscaling; DLAA with DLSS)", "0"),
@@ -30,6 +38,7 @@
         public static readonly Choice[] OutputResolutions =
         {
             new("1280 × 720 (Steam Deck)", "1280x720"),
+            new("1600 × 900", "1600x900"),
             new("1920 × 1080", "1920x1080"),
             new("2560 × 1440", "2560x1440"),
             new("3840 × 2160", "3840x2160"),
@@ -41,9 +50,21 @@
             new("3840 × 1080 (32:9)", "3840x1080"),
             new("5120 × 1440 (32:9)", "5120x1440"),
             new("7680 × 2160 (32:9)", "7680x2160"),
+            // Narrower than 16:9: the camera and UI made taller to fill it (Widescreen).
+            new("1280 × 1024 (5:4)", "1280x1024"),
+            new("1680 × 1050 (16:10)", "1680x1050"),
+            new("1920 × 1200 (16:10)", "1920x1200"),
+            new("2560 × 1600 (16:10)", "2560x1600"),
             // Any other display: its own size, the camera and UI widened to fill it.
             new("Display (auto)", "auto", "Your display's own resolution, whatever its shape: the picture fills the screen"),
+            new("Custom", Custom, "Any width and height: set them below"),
         };
+
+        /// <summary>The Output resolution list's entry for a size it does not name.</summary>
+        public const string Custom = "custom";
+
+        /// <summary>A size the engine takes as a custom output: 640 × 360 to 16384 × 8640, even.</summary>
+        public static bool ValidCustomSize(int w, int h) => w >= 640 && h >= 360 && w <= 16384 && h <= 8640;
 
         /// <summary>The size an output_res value names; "auto" is the display's own (1920 × 1080
         /// when it is unknown), as the engine reads it at start (scripts/run_windows.py).</summary>
@@ -79,6 +100,12 @@
                 "Left touchpad / Tab. Needs the adhoc folder from Nexus mod #253 (adhoc/font) in the game's dvdroot_ps4 or as a mod; without it the patch is not applied"),
         };
 
+        public static readonly Choice[] CameraTuning =
+        {
+            new("Original (the game's camera)", "original", "As the game has it, at any frame rate"),
+            new("FPS++ retune", "fps++", "Kyo's 60 FPS++ camera: further back and slower to follow"),
+        };
+
         public static readonly Choice[] ModelLod =
         {
             new("As in the game", "0"),
@@ -95,6 +122,22 @@
             new("144 FPS", "144", "The 90 FPS patch made for 144"),
             new("Uncapped", "uncap", "The community uncapped patch, no limit. It can freeze at the end of a boss intro (Vicar Amelia's); 120 and 144 use another patch"),
             new("30 FPS (as on PS4)", "30"),
+        };
+
+        /// <summary>The DLSS model (BB_DLSS_PRESET): NVIDIA's render presets.</summary>
+        public static readonly Choice[] DlssModels =
+        {
+            new("Transformer (preset K)", "k", "The newer model: steadier thin and moving objects (a weapon on the back, railings)"),
+            new("CNN (preset E)", "e", "The older model: a little faster on RTX 20 and 30 cards, softer and more ghosting in motion"),
+            new("The DLL's default", "default", "Whatever the included DLSS version picks for each quality mode"),
+        };
+
+        /// <summary>What opens the port's in-game settings menu (BB_OVERLAY_KEYS).</summary>
+        public static readonly Choice[] OverlayKeys =
+        {
+            new("Insert or L3 + R3", "both", "The keyboard's Insert key, or both sticks pressed on a controller"),
+            new("Insert only", "insert", "Pressing both sticks in a fight no longer opens it"),
+            new("Off", "off", "The menu never opens; settings stay in the launcher and the game's PC menus"),
         };
 
         /// <summary>The port's in-game settings menu (Insert / L3+R3).</summary>
@@ -156,6 +199,11 @@
         };
 
         /// <summary>pad_icons: the game's controller icons as they are (PlayStation's) or as an Xbox controller's buttons; automatic follows the controller in use.</summary>
+        public static readonly Choice[] DiscordStatus =
+        {
+            new("Off", "off"), new("Lantern Engine", "lantern"), new("Custom", "custom"),
+        };
+
         public static readonly Choice[] PadIcons =
         {
             new("Automatic (default)", "auto"), new("PlayStation", "playstation"), new("Xbox", "xbox"),
@@ -229,7 +277,7 @@
 
         public static readonly Choice[] LaunchMethods =
         {
-            new("Bloodborne PC engine", "windows", "Prepares mods and patches, then starts the engine (out\\bb-probe.exe)"),
+            new("Lantern Engine", "windows", "Prepares mods and patches, then starts the engine (out\\bb-probe.exe)"),
             new("Custom command", "custom", "Runs a program of your choice with the settings as environment variables"),
         };
 

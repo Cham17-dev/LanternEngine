@@ -64,16 +64,32 @@ namespace BloodborneLauncher.Views
             RefreshPatches();
         }
 
-        private void RefreshMods()
+        private int _modReads, _patchReads;
+        private string? _modsShown, _patchesShown;
+
+        /// <summary>Reads the mods folder on a worker thread; the list is made again only when it changed.</summary>
+        private async void RefreshMods()
         {
+            var read = ++_modReads;
             var dir = GameEnvironment.ModsDir(S);
-            _mods = Mods.Load(dir);
+            List<Mods.Entry> mods;
+            try { mods = await Task.Run(() => Mods.Load(dir)); }
+            catch (Exception e)
+            {
+                Ws.Log("Could not read the mods folder: " + e.Message, LogLevel.Warn);
+                return;
+            }
+            if (read != _modReads) return;
+            _mods = mods;
             SetHint(_modsHint, _mods.Count == 0 ? $"{dir} — no mods" : $"{dir} — {_mods.Count} mod{(_mods.Count == 1 ? "" : "s")}");
+            var shown = string.Join("|", _mods.Select(m => $"{m.Name}={m.Enabled}"));
+            if (shown == _modsShown) return;
             DrawMods();
         }
 
         private void DrawMods()
         {
+            _modsShown = string.Join("|", _mods.Select(m => $"{m.Name}={m.Enabled}"));
             _modList.Children.Clear();
             for (var i = 0; i < _mods.Count; i++)
             {
@@ -117,12 +133,32 @@ namespace BloodborneLauncher.Views
             }
         }
 
-        private void RefreshPatches()
+        /// <summary>Reads the patch files on a worker thread (every XML in the folder is parsed); the
+        /// list is made again only when it changed.</summary>
+        private async void RefreshPatches()
         {
+            var read = ++_patchReads;
             var dir = GameEnvironment.PatchesDir(S);
-            var profile = Patches.LoadProfile();
-            _patches = Patches.Discover(dir).Select(p => (p, Patches.IsOn(p, profile))).ToList();
+            List<(Patches.Patch, bool)> patches;
+            try
+            {
+                patches = await Task.Run(() =>
+                {
+                    var profile = Patches.LoadProfile();
+                    return Patches.Discover(dir).Select(p => (p, Patches.IsOn(p, profile))).ToList();
+                });
+            }
+            catch (Exception e)
+            {
+                Ws.Log("Could not read the patches folder: " + e.Message, LogLevel.Warn);
+                return;
+            }
+            if (read != _patchReads) return;
+            _patches = patches;
             SetHint(_patchesHint, _patches.Count == 0 ? $"{dir} — no patches" : dir);
+            var shown = string.Join("\u0001", _patches.Select(p => $"{p.Patch.Key}|{p.Patch.Name}|{p.Patch.File}|{p.Patch.Author}|{p.Patch.Note}={p.On}"));
+            if (shown == _patchesShown) return;
+            _patchesShown = shown;
 
             _patchList.Children.Clear();
             for (var i = 0; i < _patches.Count; i++)

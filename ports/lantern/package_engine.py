@@ -12,7 +12,8 @@ out = stage / 'out'
 out.mkdir(exist_ok=True)
 clang_bin = Path(os.environ['BB_CLANG_BIN'])
 queue = []
-for name in ['bb-probe.exe', 'bb-gpu-capabilities.exe', 'bb-engine-assets.exe']:
+# bb-start.exe: the native start (boot image, mods, patches, then bb-probe), as Lantern 9.8 runs.
+for name in ['bb-probe.exe', 'bb-start.exe', 'bb-gpu-capabilities.exe', 'bb-engine-assets.exe']:
     src = engine / 'out' / name
     if not src.is_file():
         raise RuntimeError(f'Missing build output: {src}')

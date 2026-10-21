@@ -73,7 +73,7 @@ table, and bring the lights up to your display's peak.
 
 Pinned inputs:
 
-- LanternEngine `6c2fbf48d0a84dd6e3fc88fee240e326b66a4e4f`.
+- LanternEngine `69018af24313407684cea267b107d2fb3fe86d5f` (0.9.34 beta 9.8).
 - Its starting point, DarkIzuku/bloodborne_pc `8ecba9a4abdd54747e31d7fee54982e422b5f8e2`
   (`v0.4.0-darkizuku-preview.1`).
 - The mode 5 / PsychoV30 implementation from Cham17-dev/bloodborne_pc `hdr` at `0dce9f4`.
@@ -82,8 +82,9 @@ Pinned inputs:
 then applies `psychov30-engine.patch`; the launcher is built from `launcher/`
 (`psychov30-launcher.patch` is its diff against Lantern). The Windows workflow builds the engine
 and launcher and packages them; its manual `baseline_check` option compiles stock Lantern first.
-The package reuses the official beta 9.3 runtime resources, DLLs, notices and defaults with
-SHA-256 checks, and ships embedded Python 3.12.10 with the preparation scripts. CI checks both
+The package reuses the official beta 9.8 runtime resources, DLLs, notices and defaults with
+SHA-256 checks. The game starts through `bb-start.exe` (built here, as Lantern 9.8); the embedded
+Python 3.12.10 and the preparation scripts stay as a fallback. CI checks both
 folder layouts and runs the shipped Python through imports and game detection.
 
 ### Rendering
@@ -109,6 +110,8 @@ folder layouts and runs the shipped Python through imports and game detection.
   - final pass: the negative part is decoded with its sign and added after Black Floor.
   Debug probe 6 shows magenta where a channel reaches the final pass below 0. At neutral
   settings the game produces almost no colors outside BT.709; they appear with more Saturation.
+- **Frame generation.** Lantern's FSR 3.1 frame generation turns itself off while HDR output is
+  on (8-bit display buffers only), and so with PsychoV30.
 - **Accuracy.** The GLSL PsychoV30 matches RenoDX's test30 within 5.3e-4 relative with every
   setting this port uses (`docs/hdr-tools/psychov30_check`).
 

@@ -27,6 +27,10 @@ namespace BloodborneLauncher.Views
         {
             var owner = Application.Current.MainWindow is { IsLoaded: true } main && main.WindowState != WindowState.Minimized ? main : null;
             Owner = owner;
+            // Crisp text, as the main window's (a window does not inherit them).
+            System.Windows.Media.TextOptions.SetTextFormattingMode(this, System.Windows.Media.TextFormattingMode.Display);
+            System.Windows.Media.TextOptions.SetTextHintingMode(this, System.Windows.Media.TextHintingMode.Fixed);
+            UseLayoutRounding = true;
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
             AllowsTransparency = true;
