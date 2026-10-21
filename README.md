@@ -132,6 +132,9 @@ folder layouts and runs the shipped Python through imports and game detection.
   bytes and needs **176 bytes** of Vulkan push constants (checked at startup). In the composite,
   `bb_hdr2a` holds peak, exposure, highlights and shadows, `bb_hdr2b` contrast, saturation, the
   gamut with the tone mapper, and the two compressions (see the shader for the encoding).
+- PsychoV30 keeps the legacy shader compiler: with the native one (the launcher's Legacy shader
+  compiler off) the game's constant buffers become uniform buffers, which the composite and
+  tonemap replacements do not take. The engine turns native shaders off in this mode and logs it.
 - Lantern's point-sampler fallback to an 8-bit guest image is disabled in mode 5, so HDR values
   are not clipped; this may change some effects at reduced presets. Composite pipelines with an
   HDR companion compile together.

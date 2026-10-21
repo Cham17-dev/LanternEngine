@@ -5417,7 +5417,7 @@ index 571167a..ded4e3b 100644
      return s.hdr_output.load(std::memory_order_relaxed) != BbSettings::HdrOutputOff &&
             s.hdr_mode.load(std::memory_order_relaxed) == BbSettings::HdrModeNative;
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index 620920f..00056ac 100644
+index 620920f..5e2b582 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 @@ -11,6 +11,8 @@
@@ -5450,7 +5450,27 @@ index 620920f..00056ac 100644
      sel.regs = &liverpool->regs;
      const auto& vk12_props = instance.GetVk12Properties();
      profile = Shader::Profile{
-@@ -707,6 +714,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
+@@ -458,10 +465,18 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
+         // bbport: native shaders, on unless BB_NATIVE_SHADERS=0 (the launcher's "Legacy shader
+         // compiler"). Uniform buffers need the per-buffer offset in the push data (a 64-byte
+         // uniform alignment can leave a remainder) and the 64 KiB range the shaders declare.
++        // PsychoV30 (mode 5): never. Its composite and tonemap replacements take the game
++        // shader's constant buffer as a storage buffer (vk_hdr_channel.cpp BuildComposite).
+         .uniform_constant_buffers =
+             [] {
+                 const char* env = std::getenv("BB_NATIVE_SHADERS");
+-                return !(env && env[0] == '0');
++                const bool wanted = !(env && env[0] == '0');
++                if (wanted && HdrChannel::Native16()) {
++                    std::printf("Native shaders: off in HDR mode PsychoV30 (its shaders need the "
++                                "legacy compiler's constant buffers)\n");
++                    return false;
++                }
++                return wanted;
+             }() &&
+             instance.StorageMinAlignment() > 4 && instance.UniformMinAlignment() <= 256 &&
+             instance.GetPhysicalDevice().getProperties().limits.maxUniformBufferRange >= 65536,
+@@ -707,6 +722,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
          color_buffer.data_format = col_buf.GetDataFmt();
          color_buffer.num_format = col_buf.GetNumberFmt();
          color_buffer.num_conversion = col_buf.GetNumberConversion();
@@ -5467,7 +5487,7 @@ index 620920f..00056ac 100644
          color_buffer.export_format = regs.color_export_format.GetFormat(cb);
          color_buffer.swizzle = col_buf.Swizzle();
  
-@@ -979,6 +996,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
+@@ -979,6 +1004,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
      auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, runtime_info, ir_program, binding);
      DumpShader(spv, info.pgm_hash, info.hw_stage, perm_idx, "spv");
  

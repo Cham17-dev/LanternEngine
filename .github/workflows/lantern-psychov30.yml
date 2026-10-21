@@ -2,7 +2,7 @@ name: Lantern PsychoV30 port
 
 on:
   push:
-    branches: [lantern-psychov30, lantern-psychov30-beta98]
+    branches: [lantern-psychov30, lantern-psychov30-beta]
     paths: ['ports/lantern/**', 'launcher/**', 'engine/**', 'README.md', '.github/workflows/lantern-psychov30.yml']
   workflow_dispatch:
     inputs:
