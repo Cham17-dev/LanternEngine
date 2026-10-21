@@ -60,7 +60,11 @@ def assemble(engine, overlay, destination, cache):
     shutil.copytree(overlay / 'out', runtime / 'out', dirs_exist_ok=True)
     shutil.copytree(overlay / 'licenses', destination / 'licenses', dirs_exist_ok=True)
     shutil.copy2(overlay / 'README-PsychoV30.md', destination / 'README-PsychoV30.md')
-    shutil.copy2(overlay / 'Bloodborne Launcher.exe', destination / 'Lantern Engine.exe')
+    # The launcher build is Lantern Engine.exe since Lantern 9.8 (Bloodborne Launcher.exe before).
+    launcher = overlay / 'Lantern Engine.exe'
+    if not launcher.is_file():
+        launcher = overlay / 'Bloodborne Launcher.exe'
+    shutil.copy2(launcher, destination / 'Lantern Engine.exe')
     # The native Bloodborne.exe forwarder from this release starts Lantern Engine.exe --play.
     python = runtime / 'tools/python'
     python.mkdir(parents=True)
