@@ -144,6 +144,12 @@ between releases report it.
   - final pass: the negative part is decoded with its sign and added after Black Floor.
   Debug probe 6 shows magenta where a channel reaches the final pass below 0. At neutral
   settings the game produces almost no colors outside BT.709; they appear with more Saturation.
+- **HUD.** The engine copies the output-size frame just before the game's first UI draw. At the
+  display pass, before the game's brightness curve, `hdr_ui_mask.comp` compares the frame with
+  its UI against that copy: the pixels the UI changed are the HUD's (a mask in the copy's alpha),
+  shown as the game's SDR at UI Brightness; the others are the scene, in HDR. Without the mask
+  (a frame without a UI image) the final pass falls back to comparing luminance with a
+  tolerance. Debug probe 7 shows the pixels taken as the HUD in red.
 - **Frame generation.** Lantern's FSR 3.1 frame generation turns itself off while HDR output is
   on (8-bit display buffers only), and so with PsychoV30.
 - **Accuracy.** The GLSL PsychoV30 matches RenoDX's test30 within 5.3e-4 relative with every
