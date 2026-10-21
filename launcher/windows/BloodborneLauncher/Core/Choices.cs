@@ -235,10 +235,6 @@ namespace BloodborneLauncher.Core
             new(L.T("Off"), "0"), new(L.T("Low (default)"), "0.25"), new(L.T("Medium"), "0.5"), new(L.T("High"), "1"),
         };
 
-        public static readonly Choice[] HdrUiBrightness =
-        {
-            new(L.T("Dimmer"), "0.75"), new(L.T("Paper white (default)"), "1"), new(L.T("Brighter"), "1.25"), new(L.T("Much brighter"), "1.5"),
-        };
 
         public static readonly Choice[] HdrUiColor =
         {

@@ -1,5 +1,5 @@
 diff --git a/launcher/windows/BloodborneLauncher/Core/Choices.cs b/launcher/windows/BloodborneLauncher/Core/Choices.cs
-index c8c7cdf..2210d7b 100644
+index c8c7cdf..91dfda2 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Choices.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Choices.cs
 @@ -1,4 +1,4 @@
@@ -17,7 +17,7 @@ index c8c7cdf..2210d7b 100644
              new(L.T("250 nits"), "250"), new(L.T("300 nits"), "300"), new(L.T("400 nits"), "400"),
          };
  
-@@ -212,7 +212,22 @@
+@@ -212,19 +212,30 @@
  
          public static readonly Choice[] HdrMode =
          {
@@ -25,11 +25,13 @@ index c8c7cdf..2210d7b 100644
 +            new(L.T("Native"), "native"), new(L.T("Expanded"), "expand"),
 +            new("PsychoV30 (16-bit, restart)", "psychov30",
 +                "PsychoV30 — RenoDX · © 2026 Carlos Lopez · MIT License. GLSL adaptation for bbport. github.com/clshortfuse/renodx"),
-+        };
-+
+         };
+ 
+-        public static readonly Choice[] HdrBoost =
 +        /// <summary>hdr_tonemapper with PsychoV30 (bbport_settings.h): 4 PsychoV-30 (as RenoDX's mods), 3 Hybrid (its shadows matched to the game's), 2 Vanilla.</summary>
 +        public static readonly Choice[] HdrToneMapper =
-+        {
+         {
+-            new(L.T("Off"), "0"), new(L.T("Low (default)"), "0.25"), new(L.T("Medium"), "0.5"), new(L.T("High"), "1"),
 +            // The segmented buttons show the label up to " (".
 +            new("PsychoV-30 (default)", "4"), new("Hybrid (the game's shadows)", "3"), new("Vanilla (the game's own look)", "2"),
 +        };
@@ -40,7 +42,17 @@ index c8c7cdf..2210d7b 100644
 +            new("BT.2020 (default)", "bt2020"), new("BT.709", "bt709"),
          };
  
-         public static readonly Choice[] HdrBoost =
+-        public static readonly Choice[] HdrUiBrightness =
++        public static readonly Choice[] HdrBoost =
+         {
+-            new(L.T("Dimmer"), "0.75"), new(L.T("Paper white (default)"), "1"), new(L.T("Brighter"), "1.25"), new(L.T("Much brighter"), "1.5"),
++            new(L.T("Off"), "0"), new(L.T("Low (default)"), "0.25"), new(L.T("Medium"), "0.5"), new(L.T("High"), "1"),
+         };
+ 
++
+         public static readonly Choice[] HdrUiColor =
+         {
+             new(L.T("Exact (sRGB)"), "0"), new(L.T("In between"), "0.5"), new(L.T("Vivid (default)"), "1"),
 diff --git a/launcher/windows/BloodborneLauncher/Core/DisplayPeak.cs b/launcher/windows/BloodborneLauncher/Core/DisplayPeak.cs
 new file mode 100644
 index 0000000..e5cbd26
@@ -289,7 +301,7 @@ index f30035a..dadec91 100644
                  </TextBlock>
  
 diff --git a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
-index 290c9e1..b1ac223 100644
+index 290c9e1..7183d29 100644
 --- a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 +++ b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 @@ -1,4 +1,4 @@
@@ -334,7 +346,7 @@ index 290c9e1..b1ac223 100644
  
          private void RefreshMonitors()
          {
-@@ -128,23 +154,50 @@ namespace BloodborneLauncher.Views
+@@ -128,23 +154,71 @@ namespace BloodborneLauncher.Views
                      : L.T("This display shows no HDR");
              IniToggle(SymbolRegular.Hdr24, L.T("HDR output"), hdrHint, "hdr");
              ComboRow(SymbolRegular.Lightbulb24, L.T("HDR source"),
@@ -369,6 +381,30 @@ index 290c9e1..b1ac223 100644
 +                peakRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24,
 +                    "Reset to the peak Windows reports for this display (1000 when it reports none)",
 +                    (_, _) => peak.Value = Math.Clamp(DetectedPeak(), peak.Minimum, peak.Maximum)));
++            // UI brightness in nits, as RenoDX's (48..500, 203 by default), whatever Paper white. An
++            // older bbport.ini's hdr_ui_brightness (times paper white) shows converted, as the
++            // engine reads it, and goes once this is set.
++            const double DefaultUiNits = 203;
++            double UiNits()
++            {
++                if (Ini.Raw("hdr_ui_nits") is { } nits) return ParseDouble(nits, DefaultUiNits);
++                if (Ini.Raw("hdr_ui_brightness") is { } ratio)
++                    return Math.Round(ParseDouble(ratio, 1) * ParseDouble(Ini.Get("hdr_paper_white", ""), DefaultPaperWhite));
++                return DefaultUiNits;
++            }
++            var uiNits = SliderRow(SymbolRegular.TextFont24, L.T("UI brightness"),
++                "Native and PsychoV30: how bright the HUD, menus and subtitles are, in nits, whatever Paper white. Default: 203. Range: 48–500. Also in the in-game menu, live",
++                48, 500, 1, UiNits,
++                v =>
++                {
++                    Ini.Set("hdr_ui_nits", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
++                    Ini.Set("hdr_ui_brightness", null);
++                },
++                format: L.T("0' nits'"), valueWidth: 82);
++            _hdrBrightnessRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
++            if (uiNits.Parent is Panel uiNitsRow)
++                uiNitsRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24, "Reset to 203 nits",
++                    (_, _) => uiNits.Value = DefaultUiNits));
              ComboRow(SymbolRegular.Sparkle24, L.T("Highlight boost"), L.T("Off keeps the game's own look; higher makes lamps, fire and the sky brighter"),
                  Choices.HdrBoost, () => Ini.Get("hdr_boost", "0.25"), v => Ini.Set("hdr_boost", v));
 +            _hdrBoostRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
@@ -382,9 +418,7 @@ index 290c9e1..b1ac223 100644
 +            _hdrGamutRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
              var hdrMore = Advanced();
 -            ComboRow(SymbolRegular.TextFont24, L.T("UI brightness"), L.T("Native source only: how bright the HUD, menus and subtitles are, against paper white"),
-+            ComboRow(SymbolRegular.TextFont24, L.T("UI brightness"), "Native and PsychoV30: how bright the HUD, menus and subtitles are, against paper white",
-                 Choices.HdrUiBrightness, () => Ini.Get("hdr_ui_brightness", "1"), v => Ini.Set("hdr_ui_brightness", v), hdrMore);
-+            _hdrBrightnessRow = (FrameworkElement)hdrMore.Children[hdrMore.Children.Count - 1];
+-                Choices.HdrUiBrightness, () => Ini.Get("hdr_ui_brightness", "1"), v => Ini.Set("hdr_ui_brightness", v), hdrMore);
              ComboRow(SymbolRegular.Color24, L.T("UI colour"), L.T("Native source only: Vivid shows the HUD and menus with the colours a wide-gamut monitor gives SDR; Exact keeps sRGB's"),
                  Choices.HdrUiColor, () => Ini.Get("hdr_ui_color", "1"), v => Ini.Set("hdr_ui_color", v), hdrMore);
 +            _hdrColourRow = (FrameworkElement)hdrMore.Children[hdrMore.Children.Count - 1];
