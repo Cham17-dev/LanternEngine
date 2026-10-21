@@ -1091,10 +1091,10 @@ index 0000000..5bbaf8f
 +#endif // BBPORT_BB_COMPOSITE_GLSL
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag
 new file mode 100644
-index 0000000..ce757c0
+index 0000000..2b8b1ee
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag
-@@ -0,0 +1,327 @@
+@@ -0,0 +1,333 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -1347,27 +1347,33 @@ index 0000000..ce757c0
 +            target = has_hdr ? bb_grade(o, hdr_screen_k).zyx
 +                             : clamp(bb_grade(o, sdr_screen_k).zyx, 0.0, 1.0);
 +        }
++        // The game's own output in the target (the delta goes over it), and the HDR one.
++        vec3 game_out = BB_GAMMA ? exp2(bb_c(808u) * log2(clamp(sdr_graded + BB_EPS, 0.0, 1.0)))
++                                 : clamp(sdr_graded, 0.0, 1.0);
++        vec3 hdr_out = game_out;
 +        vec3 delta = vec3(0.0);
 +        if (has_hdr || scaled) {
 +            // PsychoV30 (scene) with a BT.2020 target: channels below 0 kept, signed (the
 +            // target holds the game's color plus this delta: RGBA16F, additive blending).
 +            if (BB_GAMMA) {
-+                vec3 hdr_encoded = psycho_scene
-+                    ? bb_encode_signed(target, bb_c(808u))
-+                    : exp2(bb_c(808u) * log2(max(target, 0.0) + BB_EPS));
-+                vec3 sdr_game = exp2(bb_c(808u) * log2(clamp(sdr_graded + BB_EPS, 0.0, 1.0)));
-+                delta = hdr_encoded - sdr_game;
++                hdr_out = psycho_scene ? bb_encode_signed(target, bb_c(808u))
++                                       : exp2(bb_c(808u) * log2(max(target, 0.0) + BB_EPS));
 +            } else {
-+                delta = (psycho_scene ? target : max(target, 0.0)) - clamp(sdr_graded, 0.0, 1.0);
++                hdr_out = psycho_scene ? target : max(target, 0.0);
 +            }
++            delta = hdr_out - game_out;
 +        }
 +        // PsychoV30 (scene) replaces the game's curve, so it may also darken.
 +        frag_color0 = vec4((scaled || psycho_scene) ? delta : max(delta, 0.0), 0.0);
-+        // Chain probe (in-game menu, test; bb_hdr.z set for this draw by bbport): green
-+        // where this draw adds light above the game's white (red and blue pushed far below 0,
-+        // so the green stays whatever is added later).
-+        if (push_data.bb_hdr.z == 1u && max(max(delta.x, delta.y), delta.z) > 0.01) {
-+            frag_color0 = vec4(-64.0, 8.0, -64.0, 0.0);
++        // Chain probe (in-game menu, test; bb_hdr.z set for this draw by bbport): green where
++        // the HDR image is above the game's white (PsychoV30), or where this draw adds light
++        // to it (the other tone mappers). The delta makes the target exactly green at white: a
++        // plain, positive color the passes after (the color table's gamut bridge, the upscalers)
++        // keep green (pushing red and blue far below 0 turned it black through them).
++        bool hdr_part = psycho_scene ? max(max(hdr_out.x, hdr_out.y), hdr_out.z) > 1.001
++                                     : max(max(delta.x, delta.y), delta.z) > 0.01;
++        if (push_data.bb_hdr.z == 1u && hdr_part) {
++            frag_color0 = vec4(vec3(0.0, 1.0, 0.0) - game_out, 0.0);
 +        }
 +        // Mode 5 has a single color target; the side-channel ratios below are not used.
 +        frag_aux = vec4(1.0);
@@ -3101,7 +3107,7 @@ index 0000000..d51e40b
 +
 +#endif
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr_output.frag b/gpu/shadps4/video_core/host_shaders/hdr_output.frag
-index b3d6246..cccb5a6 100644
+index b3d6246..f3182b1 100644
 --- a/gpu/shadps4/video_core/host_shaders/hdr_output.frag
 +++ b/gpu/shadps4/video_core/host_shaders/hdr_output.frag
 @@ -13,6 +13,7 @@
@@ -3134,7 +3140,7 @@ index b3d6246..cccb5a6 100644
  
  // Linear brightness (SDR white = 1) above which the highlights are expanded: high, so large
  // bright areas (fog, sky) stay near paper white and only lamps, fire and sparks reach the peak.
-@@ -91,9 +100,336 @@ vec3 Heat(float t) {
+@@ -91,9 +100,334 @@ vec3 Heat(float t) {
                        1.5 - abs(4.0 * t - 1.0)), 0.0, 1.0);
  }
  
@@ -3150,7 +3156,7 @@ index b3d6246..cccb5a6 100644
 +    float hdr_peak_nits;   // bbport: peak luminance
 +    float hdr_strength;    // bbport: exponent of the channel's gains (1 = as computed)
 +    float hdr_boost;       // bbport: boost of the scene's SDR highlights (0 .. 1: white to peak)
-+    uint hdr_compare;      // bbport: 0 HDR, 1 the game's SDR, 2 split (SDR left, HDR right)
++    uint hdr_compare;      // bbport: 0 HDR, 1 the game's SDR
 +    float hdr_ui_nits;     // bbport: nits of the HUD's white (pixels taken as UI)
 +    // bbport: the scene's grading, live (in-game menu, like RenoDX's): exposure (1 neutral),
 +    // contrast, highlights, shadows, saturation, highlight saturation (-1 .. 1, 0 neutral),
@@ -3286,7 +3292,7 @@ index b3d6246..cccb5a6 100644
 +}
 +
 +bool sdr_reference() {
-+    return pp.hdr_compare == 1u || (pp.hdr_compare == 2u && uv.x < 0.5) ||
++    return pp.hdr_compare == 1u ||
 +           pp.hdr_tonemapper == TONEMAPPER_VANILLA;
 +}
 +
@@ -3453,8 +3459,6 @@ index b3d6246..cccb5a6 100644
 +            min(min(game_srgb.r, game_srgb.g), game_srgb.b) < -1e-3) {
 +            nits = vec3(hdr.paper_white, 0.0, hdr.paper_white);
 +        }
-+        if (hdr.compare == 2u && abs(uv.x - 0.5) * float(textureSize(game, 0).x) < 1.5)
-+            nits = vec3(hdr.paper_white);
 +        if ((hdr.flags & FLAG_OVERLAY) != 0u) {
 +            vec4 menu = texelFetch(overlay, pixel, 0);
 +            vec3 menu_signal = clamp(menu.rgb + min(game_srgb, 1.0) * (1.0 - menu.a), 0.0, 1.0);
@@ -7925,10 +7929,10 @@ index d6ecf12..b5f8b65 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 7ddd461..ced4a05 100644
+index 7ddd461..2f542c3 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
-@@ -298,6 +298,304 @@ void CheatStats() {
+@@ -298,6 +298,303 @@ void CheatStats() {
      CheatUnavailable(BbEngine::Cheats::Echoes);
  }
  
@@ -8199,14 +8203,13 @@ index 7ddd461..ced4a05 100644
 +
 +    if (level >= 2) {
 +        ImGui::SeparatorText("Debug");
-+        static const char* compares[] = {"HDR", "SDR (the game's image)",
-+                                         "Split: SDR left | HDR right"};
-+        s.hdr_compare = ComboIndex("Compare", s.hdr_compare, compares, 3, 0);
++        static const char* compares[] = {"HDR", "SDR (the game's image)"};
++        s.hdr_compare = ComboIndex("Compare", s.hdr_compare, compares, 2, 0);
 +        Hint(BbSettings::MenuText(
-+            "F9 switches it with the menu closed. SDR draws the game's own picture. Split is "
-+            "approximate: its SDR half is the HDR picture clipped at white. Not saved.",
-+            "F9 переключает при закрытом меню. SDR рисует собственную картинку игры. Split "
-+            "приблизителен: его SDR-половина — HDR-картинка, обрезанная по белому. Не сохраняется."));
++            "F9 switches it with the menu closed. SDR draws the game's own picture (its own tone "
++            "curve, at Game Brightness). Not saved.",
++            "F9 переключает при закрытом меню. SDR рисует собственную картинку игры (её кривая, "
++            "при яркости игры). Не сохраняется."));
 +        static const char* probes[] = {"Off", "1. Composite: HDR part", "2. Final image above white",
 +                                       "3. Color grading input above white", "4. Color grading area",
 +                                       "5. Copy above white",
@@ -8233,7 +8236,7 @@ index 7ddd461..ced4a05 100644
  // HDR output (bbport.ini hdr*): on/off on restart; paper white, peak and boost live.
  void HdrSection() {
      auto& s = BbSettings::Get();
-@@ -332,11 +630,26 @@ void HdrSection() {
+@@ -332,11 +629,26 @@ void HdrSection() {
      const char* modes[BbSettings::HdrModeCount] = {
          BbSettings::MenuText("Native (from the game's HDR scene)", "Нативный (из HDR-сцены игры)"),
          BbSettings::MenuText("Expand (from the SDR picture)", "Расширение (из SDR-картинки)"),
@@ -8260,7 +8263,7 @@ index 7ddd461..ced4a05 100644
      Hint(BbSettings::MenuText(
          "Native: the brightness of lamps, fire, the moon and other highlights comes from the "
          "game's own HDR scene, before its tonemap clipped it to SDR white. Midtones, colours and "
-@@ -355,17 +668,17 @@ void HdrSection() {
+@@ -355,17 +667,17 @@ void HdrSection() {
      Slider(BbSettings::MenuText("Highlight boost", "Усиление светлых участков"), s.hdr_boost, 0.0f,
             1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
      if (mode == BbSettings::HdrModeNative) {
@@ -8282,7 +8285,7 @@ index 7ddd461..ced4a05 100644
              "1 — более насыщенные, как на мониторе с широким охватом в SDR (привычный вид; точный sRGB "
              "рядом с ним может казаться блёклым). Меняются сразу."));
      }
-@@ -398,13 +711,20 @@ void PictureSection() {
+@@ -398,13 +710,20 @@ void PictureSection() {
      // A moved setting turns Picture tuning on: it gates them all.
      const bool vignette = s.graphics_vignette;
      // The useful range on the slider; Ctrl+click types any value (bbport_settings.cpp keeps it
@@ -8308,7 +8311,7 @@ index 7ddd461..ced4a05 100644
      Checkbox(BbSettings::MenuText("Vignette", "Виньетка"), s.graphics_vignette);
      moved |= vignette != s.graphics_vignette;
      moved |= Slider(BbSettings::MenuText("Ambient occlusion strength", "Сила затенения (AO)"), s.graphics_ao_strength,
-@@ -425,6 +745,16 @@ void PictureSection() {
+@@ -425,6 +744,16 @@ void PictureSection() {
          Store(s.graphics_shadow_scale, 1.0f, true);
      }
      ImGui::EndDisabled();
@@ -8325,7 +8328,7 @@ index 7ddd461..ced4a05 100644
      Hint(BbSettings::MenuText(
          "Changes apply live, Picture tuning too, to the game's own colour, fog and lighting of each area "
          "(the HUD and menus keep theirs). Moving one turns Picture tuning on; off: the game's own picture. 1.00 and Hue 0 are the game's. Fog 0 clears the haze over distant streets. The "
-@@ -801,6 +1131,7 @@ void Menu() {
+@@ -801,6 +1130,7 @@ void Menu() {
      bool restart =
          s.object_motion != s.startup_object_motion || s.model_lod != s.startup_model_lod ||
          s.live_resolution != s.startup_live_resolution || s.hdr != s.startup_hdr ||
@@ -8333,20 +8336,20 @@ index 7ddd461..ced4a05 100644
          BbSettings::ResolutionNeedsRestart();
      for (int e = 0; e < BbSettings::EffectCount; ++e) {
          restart |= s.effects[e] != s.startup_effects[e];
-@@ -1219,6 +1550,11 @@ bool HandleEvent(const SDL_Event& event) {
+@@ -1219,6 +1549,11 @@ bool HandleEvent(const SDL_Event& event) {
      case SDL_EVENT_KEY_DOWN:
      case SDL_EVENT_KEY_UP: {
          const bool down = event.type == SDL_EVENT_KEY_DOWN;
 +        if (down && !event.key.repeat && event.key.key == SDLK_F9 && BbSettings::Get().startup_psychov30) {
 +            auto& compare = BbSettings::Get().hdr_compare;
-+            compare = (compare.load() + 1) % 3;
++            compare = (compare.load() + 1) % BbSettings::Values::HdrCompareCount;
 +            return true;
 +        }
          if (down && !event.key.repeat &&
              ((event.key.key == SDLK_INSERT && (is_open || MenuKeys() != OverlayKeys::Off)) ||
               (is_open && event.key.key == SDLK_ESCAPE))) {
 diff --git a/gpu/shim/bbport_settings.cpp b/gpu/shim/bbport_settings.cpp
-index e8557fe..2ee1226 100644
+index e8557fe..aca02c2 100644
 --- a/gpu/shim/bbport_settings.cpp
 +++ b/gpu/shim/bbport_settings.cpp
 @@ -10,11 +10,14 @@
@@ -8440,7 +8443,7 @@ index e8557fe..2ee1226 100644
 +    } else if (key == "hdr_gamut") {
 +        v.hdr_gamut = value == "bt709" ? HdrGamutBt709 : HdrGamutBt2020;
 +    } else if (key == "hdr_compare") {
-+        v.hdr_compare = std::clamp(i, 0, 2);
++        v.hdr_compare = std::clamp(i, 0, 1);
      } else if (key == "live_resolution") {
          v.live_resolution = value == "auto" ? -1 : std::clamp(i, 0, 1);
      } else if (key == "cheat_vials") {
@@ -8670,7 +8673,7 @@ index e8557fe..2ee1226 100644
                                               [&](const auto& k) { return k.first == key; });
                  if (it != keys.end()) {
 diff --git a/gpu/shim/bbport_settings.h b/gpu/shim/bbport_settings.h
-index 926f484..9387a78 100644
+index 926f484..b14ba26 100644
 --- a/gpu/shim/bbport_settings.h
 +++ b/gpu/shim/bbport_settings.h
 @@ -8,6 +8,15 @@
@@ -8726,7 +8729,7 @@ index 926f484..9387a78 100644
      /// HdrMode (hdr_mode, BB_HDR_MODE); live. In native mode boost is the share of the scene's
      /// highlight range shown: sqrt(boost) of it in log2 (0.25: half, 1: all of it).
      std::atomic<int> hdr_mode{HdrModeNative};
-@@ -217,6 +229,54 @@ struct Values {
+@@ -217,6 +229,53 @@ struct Values {
      int startup_model_lod = 0;
      int startup_output_res = OutputDefault;
      int startup_live_resolution = 0;
@@ -8756,8 +8759,7 @@ index 926f484..9387a78 100644
 +    /// Set by the presenter: the all-areas HDR highlights are on (strength and boost apply).
 +    std::atomic<bool> hdr_highlights{false};
 +    // HDR tests (in-game menu, this session only; BB_HDR_DEBUG / BB_HDR_TEST_PATTERN at start).
-+    enum HdrCompare : int { HdrCompareHdr = 0, HdrCompareSdr = 1, HdrCompareSplit = 2,
-+                            HdrCompareCount };
++    enum HdrCompare : int { HdrCompareHdr = 0, HdrCompareSdr = 1, HdrCompareCount };
 +    std::atomic<int> hdr_compare{HdrCompareHdr}; ///< F9 cycles
 +    std::atomic<int> hdr_debug{0};               ///< 1 gain as colors, 2 pixels taken as UI
 +    std::atomic<bool> hdr_test_pattern{false};
@@ -8781,7 +8783,7 @@ index 926f484..9387a78 100644
      bool startup_hdr = false;
  };
  
-@@ -235,9 +295,25 @@ void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss = false);
+@@ -235,9 +294,25 @@ void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss = false);
  bool FixedRenderSession();
  int RenderPreset();
  bool ResolutionNeedsRestart();

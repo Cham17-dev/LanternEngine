@@ -58,7 +58,7 @@ tools last for the session only.
 | **Effects** | | |
 | Bloom | 0 to 100 (50) | The glow around lights: 50 is the game's. |
 | Reset all | | Every setting of the preset back to its default. |
-| Debug *(Advanced)* | | Compare (F9: HDR / SDR / split), 16-bit chain probes, chain log. |
+| Debug *(Advanced)* | | Compare (F9: HDR / the game's SDR image), 16-bit chain probes, chain log. |
 
 The launcher's Display page shows Tone mapper, Target gamut, Peak brightness, Paper white and UI
 brightness (in nits), with the same defaults; Peak brightness follows the monitor chosen there,
