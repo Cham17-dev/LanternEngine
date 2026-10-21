@@ -1,24 +1,19 @@
 diff --git a/docs/hdr-tools/gamut_bridge_check/glob.h b/docs/hdr-tools/gamut_bridge_check/glob.h
 new file mode 100644
-index 0000000..7a3c197
+index 0000000..041ff71
 --- /dev/null
 +++ b/docs/hdr-tools/gamut_bridge_check/glob.h
-@@ -0,0 +1,9 @@
+@@ -0,0 +1,4 @@
 +#pragma once
 +#include <glm/glm.hpp>
-+// The check's push constant: which value the shaders output (main.cpp).
-+struct PCData {
-+    int mode;
-+};
 +extern glm::vec4* g_in;
 +extern glm::vec4* g_out;
-+extern PCData g_pc;
 diff --git a/docs/hdr-tools/gamut_bridge_check/main.cpp b/docs/hdr-tools/gamut_bridge_check/main.cpp
 new file mode 100644
-index 0000000..2f25ae6
+index 0000000..2bc3b04
 --- /dev/null
 +++ b/docs/hdr-tools/gamut_bridge_check/main.cpp
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,78 @@
 +#include "spirv_cross/external_interface.h"
 +#define GLM_FORCE_SWIZZLE
 +#include <glm/glm.hpp>
@@ -26,7 +21,7 @@ index 0000000..2f25ae6
 +#include <cstdio>
 +#include <vector>
 +#include "glob.h"
-+glm::vec4* g_in; glm::vec4* g_out; PCData g_pc;
++glm::vec4* g_in; glm::vec4* g_out;
 +extern "C" const spirv_cross_interface* orig_iface(void);
 +extern "C" const spirv_cross_interface* port_iface(void);
 +
@@ -59,7 +54,7 @@ index 0000000..2f25ae6
 +                           "Neutwo max-channel scale"};
 +    int bad = 0;
 +    for (int mode = 0; mode < 4; ++mode) {
-+        g_pc = PCData{mode};
++        for (auto& v : in) v.w = float(mode);
 +        run(orig_iface(), in, a); run(port_iface(), in, b);
 +        double worst = 0; int worst_i = 0, nan_mismatch = 0;
 +        for (size_t i = 0; i < in.size(); ++i) {
@@ -81,8 +76,10 @@ index 0000000..2f25ae6
 +    }
 +    // What the bridge does to colors outside BT.709 (RenoDX's own code): their compression scale
 +    // and the most negative channel left after it.
-+    g_pc.mode = 0; run(orig_iface(), in, a);
-+    g_pc.mode = 1; run(orig_iface(), in, b);
++    for (auto& v : in) v.w = 0.f;
++    run(orig_iface(), in, a);
++    for (auto& v : in) v.w = 1.f;
++    run(orig_iface(), in, b);
 +    int outside = 0, compressed = 0; float worst_neg = 0;
 +    for (size_t i = 0; i < in.size(); ++i) {
 +        if (std::min({in[i].x, in[i].y, in[i].z}) < 0) {
@@ -97,55 +94,55 @@ index 0000000..2f25ae6
 +}
 diff --git a/docs/hdr-tools/gamut_bridge_check/orig.hlsl b/docs/hdr-tools/gamut_bridge_check/orig.hlsl
 new file mode 100644
-index 0000000..32e0f00
+index 0000000..212b610
 --- /dev/null
 +++ b/docs/hdr-tools/gamut_bridge_check/orig.hlsl
-@@ -0,0 +1,19 @@
+@@ -0,0 +1,18 @@
 +#include "color/gamut.hlsl"
++// The input's w is which value to output (main.cpp): 0 the compression scale, 1 the compressed
++// color, 2 compressed then decompressed, 3 Neutwo's max-channel scale.
 +StructuredBuffer<float4> inputs : register(t0);
 +RWStructuredBuffer<float4> outputs : register(u1);
-+struct P {
-+  int mode;
-+};
-+[[vk::push_constant]] P pc;
 +[numthreads(64, 1, 1)]
 +void main(uint3 id : SV_DispatchThreadID) {
 +  float3 c = inputs[id.x].xyz;
++  int mode = int(inputs[id.x].w);
 +  float3 adaptive = lms_from_BT709(float3(1.f, 1.f, 1.f));
 +  float scale = ComputeGamutCompressionScaleBT709AdaptiveD65(c, adaptive, 1.f);
 +  float3 compressed = GamutCompressBT709AdaptiveD65(c, adaptive, scale);
 +  float4 o = float4(scale, 0.f, 0.f, 1.f);
-+  if (pc.mode == 1) o = float4(compressed, 1.f);
-+  if (pc.mode == 2) o = float4(GamutDecompressBT709AdaptiveD65(compressed, adaptive, scale), 1.f);
-+  if (pc.mode == 3) o = float4(ComputeMaxChannelScale(c), 0.f, 0.f, 1.f);
++  if (mode == 1) o = float4(compressed, 1.f);
++  if (mode == 2) o = float4(GamutDecompressBT709AdaptiveD65(compressed, adaptive, scale), 1.f);
++  if (mode == 3) o = float4(ComputeMaxChannelScale(c), 0.f, 0.f, 1.f);
 +  outputs[id.x] = o;
 +}
+\ No newline at end of file
 diff --git a/docs/hdr-tools/gamut_bridge_check/port.comp b/docs/hdr-tools/gamut_bridge_check/port.comp
 new file mode 100644
-index 0000000..61e589d
+index 0000000..84f76f1
 --- /dev/null
 +++ b/docs/hdr-tools/gamut_bridge_check/port.comp
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,19 @@
 +#version 450
 +#extension GL_GOOGLE_include_directive : require
 +#include "gamut_bridge.glsl"
++// The input's w is which value to output (main.cpp), as orig.hlsl.
 +layout(local_size_x = 64) in;
 +layout(std430, binding = 0) readonly buffer In { vec4 inputs[]; };
 +layout(std430, binding = 1) writeonly buffer Out { vec4 outputs[]; };
-+layout(push_constant) uniform P {
-+    int mode;
-+} pc;
 +void main() {
 +    uint i = gl_GlobalInvocationID.x;
 +    vec3 c = inputs[i].xyz;
++    int mode = int(inputs[i].w);
 +    float scale = bb_gamut_compression_scale(c);
 +    vec3 compressed = bb_gamut_compress(c, scale);
 +    vec4 o = vec4(scale, 0.0, 0.0, 1.0);
-+    if (pc.mode == 1) o = vec4(compressed, 1.0);
-+    if (pc.mode == 2) o = vec4(bb_gamut_decompress(compressed, scale), 1.0);
-+    if (pc.mode == 3) o = vec4(bb_neutwo_max_channel_scale(c), 0.0, 0.0, 1.0);
++    if (mode == 1) o = vec4(compressed, 1.0);
++    if (mode == 2) o = vec4(bb_gamut_decompress(compressed, scale), 1.0);
++    if (mode == 3) o = vec4(bb_neutwo_max_channel_scale(c), 0.0, 0.0, 1.0);
 +    outputs[i] = o;
 +}
+\ No newline at end of file
 diff --git a/docs/hdr-tools/gamut_bridge_check/prepare_gamut.py b/docs/hdr-tools/gamut_bridge_check/prepare_gamut.py
 new file mode 100644
 index 0000000..d1d51ee
@@ -241,10 +238,10 @@ index 0000000..d1d51ee
 +open(os.path.join(out, 'color', 'mb_shim.hlsl'), 'w').write(shim)
 diff --git a/docs/hdr-tools/gamut_bridge_check/run.py b/docs/hdr-tools/gamut_bridge_check/run.py
 new file mode 100644
-index 0000000..b559b5b
+index 0000000..e863641
 --- /dev/null
 +++ b/docs/hdr-tools/gamut_bridge_check/run.py
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,65 @@
 +#!/usr/bin/env python3
 +"""Check gamut_bridge.glsl (the color table's gamut bridge) against RenoDX's HLSL.
 +
@@ -292,12 +289,11 @@ index 0000000..b559b5b
 +        run(os.environ.get('SPIRV_CROSS', 'spirv-cross'), work / f'{name}.spv', '--cpp', '--output', cpp)
 +        source = cpp.read_text()
 +        source = source.replace('#include <stdint.h>', '#include <stdint.h>\n#include "glob.h"', 1)
-+        source = source.replace('inputs._data[', 'g_in[').replace('outputs._data[', 'g_out[')
-+        source = re.sub(r'_\d+\.inputs\[', 'g_in[', source)
-+        source = re.sub(r'_\d+\.outputs\[', 'g_out[', source)
-+        source = re.sub(r'_\d+\.pc\.', 'g_pc.', source)
-+        source = source.replace('#define pc __res->pc.get()', '#define pc g_pc')
-+        source = source.replace('s.register_push_constant(pc__);', '')
++        for resource, pointer in [('inputs', 'g_in'), ('outputs', 'g_out')]:
++            source, count = re.subn(rf'_\d+\.{resource}\[', pointer + '[', source)
++            source, count2 = re.subn(rf'{resource}\._data\[', pointer + '[', source)
++            if count + count2 == 0:
++                raise RuntimeError(f'SPIRV-Cross resource {resource} not found in {cpp.name}')
 +        cpp.write_text(source)
 +        # Two SPIRV-Cross modules in one program: their entry points renamed apart.
 +        run(cxx, '-std=c++17', '-O1', '-w', '-DGLM_FORCE_SWIZZLE', *includes,
