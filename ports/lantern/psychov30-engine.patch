@@ -274,7 +274,7 @@ index 0000000..668262d
 +        *includes, cpp, here / 'main.cpp', '-o', work / 'check')
 +    run(work / 'check')
 diff --git a/gpu/CMakeLists.txt b/gpu/CMakeLists.txt
-index fb7d43c..2ace469 100644
+index ff0a591..1045e34 100644
 --- a/gpu/CMakeLists.txt
 +++ b/gpu/CMakeLists.txt
 @@ -152,6 +152,13 @@ function(add_host_shader FILENAME SHADER_NAME)
@@ -291,7 +291,7 @@ index fb7d43c..2ace469 100644
  add_host_shader(color_to_ms_depth.frag color_to_ms_depth_frag)
  add_host_shader(ms_image_blit.frag ms_image_blit_frag)
  add_host_shader(ms_image_blit.frag ms_image_blit_msaa_frag SRC_MSAA=1)
-@@ -247,6 +254,8 @@ if (WIN32)
+@@ -248,6 +255,8 @@ if (WIN32)
      # Windows headers: no min/max macros, no winsock 1 clash; Windows 10+ APIs (SetThreadDescription).
      target_compile_definitions(bbgpu PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
      target_link_libraries(bbgpu PUBLIC xbyak::xbyak)
@@ -5417,7 +5417,7 @@ index 571167a..ded4e3b 100644
      return s.hdr_output.load(std::memory_order_relaxed) != BbSettings::HdrOutputOff &&
             s.hdr_mode.load(std::memory_order_relaxed) == BbSettings::HdrModeNative;
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index d3dd420..0b9577a 100644
+index 620920f..00056ac 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 @@ -11,6 +11,8 @@
@@ -5440,7 +5440,7 @@ index d3dd420..0b9577a 100644
  }
  } // namespace
  
-@@ -390,6 +394,9 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
+@@ -392,6 +396,9 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
                               AmdGpu::Liverpool* liverpool_, u32 sparse_page_shift)
      : instance{instance_}, scheduler{scheduler_}, liverpool{liverpool_},
        desc_heap{instance, scheduler.GetWorkSemaphore(), DescriptorHeapSizes} {
@@ -5450,7 +5450,7 @@ index d3dd420..0b9577a 100644
      sel.regs = &liverpool->regs;
      const auto& vk12_props = instance.GetVk12Properties();
      profile = Shader::Profile{
-@@ -654,6 +661,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
+@@ -707,6 +714,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
          color_buffer.data_format = col_buf.GetDataFmt();
          color_buffer.num_format = col_buf.GetNumberFmt();
          color_buffer.num_conversion = col_buf.GetNumberConversion();
@@ -5467,7 +5467,7 @@ index d3dd420..0b9577a 100644
          color_buffer.export_format = regs.color_export_format.GetFormat(cb);
          color_buffer.swizzle = col_buf.Swizzle();
  
-@@ -926,6 +943,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
+@@ -979,6 +996,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
      auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, runtime_info, ir_program, binding);
      DumpShader(spv, info.pgm_hash, info.hw_stage, perm_idx, "spv");
  
@@ -5499,7 +5499,7 @@ index 6bba722..b73e00d 100644
  
      // Bind descriptor set.
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_serialization.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
-index cbd9f36..be49c44 100644
+index 235f1e3..746e7bf 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
 @@ -16,6 +16,7 @@
@@ -5688,7 +5688,7 @@ index e388f5d..e58974b 100644
              Breadcrumbs::Mark(cmdbuf, stream, fsr_crumb, true);
              Breadcrumbs::Mark(cmdbuf, stream, pp_crumb, false);
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.h b/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.h
-index eb0cad6..c374096 100644
+index ab09c6b..32a3aa2 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.h
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.h
 @@ -55,6 +55,9 @@ struct Frame {
@@ -5702,7 +5702,7 @@ index eb0cad6..c374096 100644
  
  enum SchedulerType {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
-index f060497..30bce3f 100644
+index 5b27025..d8393fe 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
 @@ -1,3 +1,4 @@
@@ -5869,7 +5869,7 @@ index f060497..30bce3f 100644
      runtime.CopyColorAndDepth(&src_image, &dst_image);
      return true;
  }
-@@ -4074,6 +4199,9 @@ vk::Sampler Rasterizer::CachedSampler(const AmdGpu::Sampler& sharp, bool is_dept
+@@ -4114,6 +4239,9 @@ vk::Sampler Rasterizer::CachedSampler(const AmdGpu::Sampler& sharp, bool is_dept
  // The sampler that reads each image is not known here: any point sampler counts.
  // BB_PROXY_POINT_NATIVE=0 (or experiment bit 0): proxies are read regardless, as before.
  bool Rasterizer::PointReadsNative(const Shader::Info& stage, const PreparedStage* prepared) const {
@@ -5879,7 +5879,7 @@ index f060497..30bce3f 100644
      static const bool enabled = [] {
          const char* env = std::getenv("BB_PROXY_POINT_NATIVE");
          return !(env && env[0] == '0');
-@@ -4562,6 +4690,35 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
+@@ -4602,6 +4730,35 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
                            !same_size(texture_cache.GetImage(db_desc.first), 0))) {
          reduced = false;
      }
@@ -5915,7 +5915,7 @@ index f060497..30bce3f 100644
      if (debug_pass) {
          if (db_desc.first) {
              const auto& depth = texture_cache.GetImage(db_desc.first);
-@@ -4571,7 +4728,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
+@@ -4611,7 +4768,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
          }
          std::printf("Scene pass: reduced %d %s\n", reduced, why.c_str());
      }
@@ -5924,7 +5924,7 @@ index f060497..30bce3f 100644
      if (BbStats::enabled) {
          BbStats::reduced_draws.fetch_add(reduced, std::memory_order_relaxed);
          BbStats::scene_draws.fetch_add(scene_started, std::memory_order_relaxed);
-@@ -4787,13 +4944,13 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
+@@ -4827,13 +4984,13 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
          state.num_layers = 1;
      }
  
@@ -5940,7 +5940,7 @@ index f060497..30bce3f 100644
          ui_pass.active = false; // the memo keeps this scale for the pass
      }
      if (FrameCapture::Active()) {
-@@ -4819,8 +4976,18 @@ void Rasterizer::Resolve() {
+@@ -4859,8 +5016,18 @@ void Rasterizer::Resolve() {
      const auto& mrt1_hint = CbExtent(1);
      VideoCore::TextureCache::ImageDesc mrt0_desc{Regs().color_buffers[0], mrt0_hint};
      VideoCore::TextureCache::ImageDesc mrt1_desc{Regs().color_buffers[1], mrt1_hint};
@@ -5961,7 +5961,7 @@ index f060497..30bce3f 100644
  
      ScopeMarkerBegin(fmt::format("Resolve:MRT0={:#x}:MRT1={:#x}",
                                   Regs().color_buffers[0].Address(),
-@@ -5415,7 +5582,12 @@ void Rasterizer::UpdateRasterizationState() const {
+@@ -5455,7 +5622,12 @@ void Rasterizer::UpdateRasterizationState() const {
  void Rasterizer::UpdateColorBlendingState(const GraphicsPipeline* pipeline) const {
      const auto& regs = Regs();
      auto& dynamic_state = scheduler.GetDynamicState();
@@ -7211,10 +7211,10 @@ index d6ecf12..14a1d6d 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 93227f2..18f5bb6 100644
+index 7ddd461..1f6e02c 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
-@@ -272,6 +272,284 @@ void CheatStats() {
+@@ -298,6 +298,284 @@ void CheatStats() {
      CheatUnavailable(BbEngine::Cheats::Echoes);
  }
  
@@ -7499,7 +7499,7 @@ index 93227f2..18f5bb6 100644
  // HDR output (bbport.ini hdr*): on/off on restart; paper white, peak and boost live.
  void HdrSection() {
      auto& s = BbSettings::Get();
-@@ -306,11 +584,26 @@ void HdrSection() {
+@@ -332,11 +610,26 @@ void HdrSection() {
      const char* modes[BbSettings::HdrModeCount] = {
          BbSettings::MenuText("Native (from the game's HDR scene)", "Нативный (из HDR-сцены игры)"),
          BbSettings::MenuText("Expand (from the SDR picture)", "Расширение (из SDR-картинки)"),
@@ -7526,7 +7526,7 @@ index 93227f2..18f5bb6 100644
      Hint(BbSettings::MenuText(
          "Native: the brightness of lamps, fire, the moon and other highlights comes from the "
          "game's own HDR scene, before its tonemap clipped it to SDR white. Midtones, colours and "
-@@ -372,13 +665,20 @@ void PictureSection() {
+@@ -398,13 +691,20 @@ void PictureSection() {
      // A moved setting turns Picture tuning on: it gates them all.
      const bool vignette = s.graphics_vignette;
      // The useful range on the slider; Ctrl+click types any value (bbport_settings.cpp keeps it
@@ -7545,14 +7545,14 @@ index 93227f2..18f5bb6 100644
 +    }
      moved |= Slider(BbSettings::MenuText("Hue", "Оттенок"), s.graphics_hue, -180.0f, 180.0f, "%.0f");
      moved |= Slider(BbSettings::MenuText("Fog", "Туман"), s.graphics_fog, 0.0f, 3.0f);
--    moved |= Slider("Bloom", s.graphics_bloom, 0.0f, 3.0f);
+-    moved |= Slider(BbSettings::MenuText("Bloom"), s.graphics_bloom, 0.0f, 3.0f);
 +    if (!hdr_grading) {
-+        moved |= Slider("Bloom", s.graphics_bloom, 0.0f, 3.0f);
++        moved |= Slider(BbSettings::MenuText("Bloom"), s.graphics_bloom, 0.0f, 3.0f);
 +    }
      Checkbox(BbSettings::MenuText("Vignette", "Виньетка"), s.graphics_vignette);
      moved |= vignette != s.graphics_vignette;
      moved |= Slider(BbSettings::MenuText("Ambient occlusion strength", "Сила затенения (AO)"), s.graphics_ao_strength,
-@@ -399,6 +699,16 @@ void PictureSection() {
+@@ -425,6 +725,16 @@ void PictureSection() {
          Store(s.graphics_shadow_scale, 1.0f, true);
      }
      ImGui::EndDisabled();
@@ -7569,7 +7569,7 @@ index 93227f2..18f5bb6 100644
      Hint(BbSettings::MenuText(
          "Changes apply live, Picture tuning too, to the game's own colour, fog and lighting of each area "
          "(the HUD and menus keep theirs). Moving one turns Picture tuning on; off: the game's own picture. 1.00 and Hue 0 are the game's. Fog 0 clears the haze over distant streets. The "
-@@ -765,6 +1075,7 @@ void Menu() {
+@@ -801,6 +1111,7 @@ void Menu() {
      bool restart =
          s.object_motion != s.startup_object_motion || s.model_lod != s.startup_model_lod ||
          s.live_resolution != s.startup_live_resolution || s.hdr != s.startup_hdr ||
@@ -7577,7 +7577,7 @@ index 93227f2..18f5bb6 100644
          BbSettings::ResolutionNeedsRestart();
      for (int e = 0; e < BbSettings::EffectCount; ++e) {
          restart |= s.effects[e] != s.startup_effects[e];
-@@ -1099,6 +1410,11 @@ bool HandleEvent(const SDL_Event& event) {
+@@ -1219,6 +1530,11 @@ bool HandleEvent(const SDL_Event& event) {
      case SDL_EVENT_KEY_DOWN:
      case SDL_EVENT_KEY_UP: {
          const bool down = event.type == SDL_EVENT_KEY_DOWN;
@@ -7590,7 +7590,7 @@ index 93227f2..18f5bb6 100644
              ((event.key.key == SDLK_INSERT && (is_open || MenuKeys() != OverlayKeys::Off)) ||
               (is_open && event.key.key == SDLK_ESCAPE))) {
 diff --git a/gpu/shim/bbport_settings.cpp b/gpu/shim/bbport_settings.cpp
-index 9181a4a..43e03aa 100644
+index e8557fe..52ff1fc 100644
 --- a/gpu/shim/bbport_settings.cpp
 +++ b/gpu/shim/bbport_settings.cpp
 @@ -10,11 +10,14 @@
@@ -7624,7 +7624,7 @@ index 9181a4a..43e03aa 100644
  const char* Path() {
      const char* env = std::getenv("BB_CONFIG");
      return env && env[0] ? env : "bbport.ini";
-@@ -229,6 +241,16 @@ void Set(Values& v, const std::string& key, const std::string& value) {
+@@ -251,6 +263,16 @@ void Set(Values& v, const std::string& key, const std::string& value) {
                                    HdrPaperWhiteMax);
      } else if (key == "hdr_peak") {
          v.hdr_peak = Clamp(std::isfinite(f) ? f : HdrPeakDefault, HdrPeakMin, HdrPeakMax);
@@ -7641,7 +7641,7 @@ index 9181a4a..43e03aa 100644
      } else if (key == "hdr_boost") {
          v.hdr_boost = Clamp(std::isfinite(f) ? f : HdrBoostDefault, 0.0f, 1.0f);
      } else if (key == "hdr_ui_brightness") {
-@@ -247,6 +269,34 @@ void Set(Values& v, const std::string& key, const std::string& value) {
+@@ -269,6 +291,34 @@ void Set(Values& v, const std::string& key, const std::string& value) {
                          value.c_str());
          }
          v.hdr_mode = mode < 0 ? HdrModeNative : mode;
@@ -7676,7 +7676,7 @@ index 9181a4a..43e03aa 100644
      } else if (key == "live_resolution") {
          v.live_resolution = value == "auto" ? -1 : std::clamp(i, 0, 1);
      } else if (key == "cheat_vials") {
-@@ -312,8 +362,123 @@ MenuLanguage LanguageOfLocale(const char* lang) {
+@@ -335,8 +385,123 @@ MenuLanguage LanguageOfLocale(const char* lang) {
      return MenuLanguage::English;
  }
  
@@ -7800,7 +7800,7 @@ index 9181a4a..43e03aa 100644
  // The display's size for output_res = auto: BB_DISPLAY_SIZE ("WxH", from run_windows.py), even
  // (the game has half-resolution buffers); 1920x1080 without it.
  static std::pair<int, int> DisplaySize() {
-@@ -377,8 +542,14 @@ void Load() {
+@@ -400,8 +565,14 @@ void Load() {
          }
          v.menu_language = LanguageOfLocale(lang);
      }
@@ -7816,7 +7816,7 @@ index 9181a4a..43e03aa 100644
          while (std::fgets(line, sizeof(line), file)) {
              std::string text{line};
              text.erase(text.find_last_not_of(" \t\r\n") + 1);
-@@ -391,6 +562,14 @@ void Load() {
+@@ -414,6 +585,14 @@ void Load() {
          std::fclose(file);
          std::printf("Settings: %s\n", Path());
      }
@@ -7831,7 +7831,7 @@ index 9181a4a..43e03aa 100644
      // Environment overrides (scripts, A/B tests).
      if (const char* env = std::getenv("BB_UPSCALER")) {
          v.upscaler = UpscalerOff;
-@@ -423,6 +602,7 @@ void Load() {
+@@ -446,6 +625,7 @@ void Load() {
      v.startup_output_res = v.output_res;
      v.startup_live_resolution = v.live_resolution;
      v.startup_hdr = v.hdr;
@@ -7839,7 +7839,7 @@ index 9181a4a..43e03aa 100644
  }
  
  void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss) {
-@@ -515,7 +695,35 @@ void Save() {
+@@ -550,7 +730,35 @@ void Save() {
      put("hdr_boost", fixed(v.hdr_boost, 2));
      put("hdr_ui_brightness", fixed(v.hdr_ui_brightness, 2));
      put("hdr_ui_color", fixed(v.hdr_ui_color, 2));
@@ -7875,7 +7875,7 @@ index 9181a4a..43e03aa 100644
      put("graphics_controls",flag(v.graphics_controls));
      put("graphics_vignette",flag(v.graphics_vignette));
      put("graphics_ao_strength",fixed(v.graphics_ao_strength,2));
-@@ -566,7 +774,7 @@ void Save() {
+@@ -601,7 +809,7 @@ void Save() {
      bool had_lines = false;
      std::vector<bool> written(keys.size());
      if (FILE* file = std::fopen(Path(), "r")) {
@@ -7885,7 +7885,7 @@ index 9181a4a..43e03aa 100644
              had_lines = true;
              std::string text{line};
 diff --git a/gpu/shim/bbport_settings.h b/gpu/shim/bbport_settings.h
-index e56fa67..e1aa4ef 100644
+index f831a88..8b72b5a 100644
 --- a/gpu/shim/bbport_settings.h
 +++ b/gpu/shim/bbport_settings.h
 @@ -8,6 +8,15 @@
@@ -7904,7 +7904,7 @@ index e56fa67..e1aa4ef 100644
  
  enum Upscaler : int { UpscalerOff = 0, UpscalerFsr3 = 1, UpscalerFsr4 = 2, UpscalerFsr411 = 3,
                        UpscalerTaa = 4, UpscalerDlss = 5, UpscalerCount };
-@@ -83,7 +92,7 @@ inline constexpr int CheatGunRanges[] = {0, 150, 200, 300};
+@@ -85,7 +94,7 @@ inline constexpr int CheatGunRanges[] = {0, 150, 200, 300};
  /// cheat_echo_multiplier: Blood Echoes from kills times this (1: the game's own).
  inline constexpr int CheatEchoMultipliers[] = {1, 2, 5, 10};
  /// HDR output (hdr_paper_white / hdr_peak in nits, hdr_boost 0..1): defaults and ranges.
@@ -7913,7 +7913,7 @@ index e56fa67..e1aa4ef 100644
  inline constexpr float HdrPeakDefault = 1000.0f, HdrPeakMin = 10.0f, HdrPeakMax = 4000.0f;
  inline constexpr float HdrBoostDefault = 0.25f;
  /// Native mode: the game's UI at hdr_ui_brightness times paper white, and hdr_ui_color of the way
-@@ -94,8 +103,8 @@ enum HdrOutput : int { HdrOutputOff = 0, HdrOutputHdr10 = 1, HdrOutputScRgb = 2
+@@ -96,8 +105,8 @@ enum HdrOutput : int { HdrOutputOff = 0, HdrOutputHdr10 = 1, HdrOutputScRgb = 2
  /// hdr_mode in bbport.ini (docs/hdr.md). Native: the highlights' brightness from the game's own
  /// HDR scene (vk_hdr_native.h), expand where a frame has none (menus, loading, movies). Expand:
  /// the SDR picture's highlights stretched towards the peak.
@@ -7924,7 +7924,7 @@ index e56fa67..e1aa4ef 100644
  static_assert(sizeof(HdrModeNames) / sizeof(HdrModeNames[0]) == HdrModeCount);
  
  /// button_prompts in bbport.ini: the game's button icons drawn as the bound keys while the keyboard
-@@ -203,6 +212,50 @@ struct Values {
+@@ -214,6 +223,50 @@ struct Values {
      int startup_model_lod = 0;
      int startup_output_res = OutputDefault;
      int startup_live_resolution = 0;
@@ -7975,7 +7975,7 @@ index e56fa67..e1aa4ef 100644
      bool startup_hdr = false;
  };
  
-@@ -219,9 +272,25 @@ void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss = false);
+@@ -232,9 +285,25 @@ void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss = false);
  bool FixedRenderSession();
  int RenderPreset();
  bool ResolutionNeedsRestart();
@@ -8124,10 +8124,10 @@ index 67c8822..69d91f8 100644
      if (sat!=1 && Read(block+kSaturation,&saturation) && std::isfinite(saturation)) Write(block+kSaturation,saturation*sat);
      if (!s.graphics_vignette && Read(block+kVignettePower,&power)) Write(block+kVignettePower,0.0f);
 diff --git a/scripts/run_windows.py b/scripts/run_windows.py
-index ea365c7..d6cf4e2 100644
+index 78144f6..fb455e2 100644
 --- a/scripts/run_windows.py
 +++ b/scripts/run_windows.py
-@@ -317,7 +317,7 @@ def main():
+@@ -321,7 +321,7 @@ def main():
                  from engine_assets import prepare_menu_assets
                  try:
                      menus = prepare_menu_assets(merged, out / 'eboot.elf', data / 'engine-assets',
@@ -8136,7 +8136,7 @@ index ea365c7..d6cf4e2 100644
                      os.environ['BB_PC_MENU_ASSETS'] = str(menus)
                      print(f'Engine: native PC menus prepared locally: {menus}', flush=True)
                      if settings_value(config, 'rebirth') == '1':
-@@ -347,7 +347,7 @@ def main():
+@@ -351,7 +351,7 @@ def main():
          if scaled_output:
              live = os.environ.get('BB_LIVE_RES') or settings_value(config, 'live_resolution') or '0'
              if live == 'auto':
@@ -8145,7 +8145,7 @@ index ea365c7..d6cf4e2 100644
                  live = run([caps, '--live-resolution'], capture=True, check=False) or '0'
              live = '1' if live == '1' else '0'
          if live == '1':
-@@ -386,7 +386,7 @@ def main():
+@@ -390,7 +390,7 @@ def main():
          if heaps and 'BB_DMEM_MB' not in os.environ:
              os.environ['BB_DMEM_MB'] = '9152'
              print("Patches: the game's heaps are enlarged; direct memory 9152 MiB", flush=True)

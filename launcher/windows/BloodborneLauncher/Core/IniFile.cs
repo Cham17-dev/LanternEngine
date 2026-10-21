@@ -24,6 +24,13 @@ namespace BloodborneLauncher.Core
             ("live_resolution", "0"),
             ("frame_gen", "off"),
             ("frame_gen_cap", "1"),
+            ("fps_position", "0"),
+            ("fps_scale", "1.00"),
+            ("fps_text_color", "#FFFFFF"),
+            ("fps_bg_color", "#0F0F0F"),
+            ("fps_bg_opacity", "0.50"),
+            ("fps_text_opacity", "1.00"),
+            ("fps_border", "1"),
         };
 
         private readonly Dictionary<string, string?> _values = new(StringComparer.Ordinal);

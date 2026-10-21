@@ -1,22 +1,28 @@
 diff --git a/launcher/windows/BloodborneLauncher/Core/Choices.cs b/launcher/windows/BloodborneLauncher/Core/Choices.cs
-index 6f9ad48..9cd4371 100644
+index c8c7cdf..2210d7b 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Choices.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Choices.cs
-@@ -182,7 +182,7 @@
+@@ -1,4 +1,4 @@
+-﻿namespace BloodborneLauncher.Core
++namespace BloodborneLauncher.Core
+ {
+     /// <summary>A drop-down entry. Note is shown under the row while this entry is selected.</summary>
+     public sealed record Choice(string Label, string Value, string? Note = null);
+@@ -183,7 +183,7 @@
  
          public static readonly Choice[] HdrPaperWhite =
          {
--            new("100 nits", "100"), new("150 nits", "150"), new("200 nits (default)", "200"),
-+            new("100 nits", "100"), new("150 nits", "150"), new("203 nits (default)", "203"),
-             new("250 nits", "250"), new("300 nits", "300"), new("400 nits", "400"),
+-            new(L.T("100 nits"), "100"), new(L.T("150 nits"), "150"), new(L.T("200 nits (default)"), "200"),
++            new(L.T("100 nits"), "100"), new(L.T("150 nits"), "150"), new(L.T("203 nits (default)"), "203"),
+             new(L.T("250 nits"), "250"), new(L.T("300 nits"), "300"), new(L.T("400 nits"), "400"),
          };
  
-@@ -211,7 +211,22 @@
+@@ -212,7 +212,22 @@
  
          public static readonly Choice[] HdrMode =
          {
--            new("Native (default)", "native"), new("Expanded", "expand"),
-+            new("Native", "native"), new("Expanded", "expand"),
+-            new(L.T("Native (default)"), "native"), new(L.T("Expanded"), "expand"),
++            new(L.T("Native"), "native"), new(L.T("Expanded"), "expand"),
 +            new("PsychoV30 (16-bit, restart)", "psychov30",
 +                "PsychoV30 — RenoDX · © 2026 Carlos Lopez · MIT License. GLSL adaptation for bbport. github.com/clshortfuse/renodx"),
 +        };
@@ -176,7 +182,7 @@ index 249e178..eca65b2 100644
  namespace BloodborneLauncher.Core
  {
 diff --git a/launcher/windows/BloodborneLauncher/Core/GameRunner.cs b/launcher/windows/BloodborneLauncher/Core/GameRunner.cs
-index 9818eb9..4a8f9cb 100644
+index 0c81693..e95d967 100644
 --- a/launcher/windows/BloodborneLauncher/Core/GameRunner.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/GameRunner.cs
 @@ -1,4 +1,4 @@
@@ -205,7 +211,7 @@ index 9818eb9..4a8f9cb 100644
                  process.ErrorDataReceived += (_, e) => { if (e.Data != null) Emit(e.Data); };
                  process.Exited += (_, _) =>
 diff --git a/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs b/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
-index 49c5560..de7e2bd 100644
+index 5ce1f54..8bfd355 100644
 --- a/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
 @@ -46,7 +46,7 @@ namespace BloodborneLauncher.Core
@@ -237,9 +243,15 @@ index 8d56324..466119c 100644
          public static readonly string ConfigFile = Path.Combine(ConfigDir, "settings.json");
  
 diff --git a/launcher/windows/BloodborneLauncher/Core/Updater.cs b/launcher/windows/BloodborneLauncher/Core/Updater.cs
-index 6523914..b085117 100644
+index b6f1d60..6c52f5f 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Updater.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Updater.cs
+@@ -1,4 +1,4 @@
+-﻿using System.Diagnostics;
++using System.Diagnostics;
+ using System.IO;
+ using System.IO.Compression;
+ using System.Net.Http;
 @@ -22,11 +22,11 @@ namespace BloodborneLauncher.Core
      /// </summary>
      public static class Updater
@@ -249,16 +261,16 @@ index 6523914..b085117 100644
          public static string ReleasesPage => $"https://github.com/{Repository}/releases";
  
          /// <summary>The engine build this launcher is made for (package.json "engine").</summary>
--        public const string EngineId = "bbhost-0.4.0-fps80";
-+        public const string EngineId = "lantern-69018af-psychov30-v1";
+-        public const string EngineId = "bbhost-0.4.0-fps83";
++        public const string EngineId = "lantern-f9d114f-psychov30-v1";
  
          public const string ExeName = "Lantern Engine.exe";
          /// <summary>The launcher's name before 0.9.34 beta 8 (now a forwarder to ExeName).</summary>
 diff --git a/launcher/windows/BloodborneLauncher/MainWindow.xaml b/launcher/windows/BloodborneLauncher/MainWindow.xaml
-index 36bb7f0..40f1d51 100644
+index f30035a..dadec91 100644
 --- a/launcher/windows/BloodborneLauncher/MainWindow.xaml
 +++ b/launcher/windows/BloodborneLauncher/MainWindow.xaml
-@@ -4,7 +4,7 @@
+@@ -5,7 +5,7 @@
                   xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                   xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
                   xmlns:views="clr-namespace:BloodborneLauncher.Views"
@@ -267,7 +279,7 @@ index 36bb7f0..40f1d51 100644
                   Icon="app.ico"
                   Height="780" Width="1040"
                   MinHeight="560" MinWidth="820"
-@@ -340,7 +340,7 @@
+@@ -341,7 +341,7 @@
                  </Grid>
  
                  <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" IsHitTestVisible="False">
@@ -277,7 +289,7 @@ index 36bb7f0..40f1d51 100644
                  </TextBlock>
  
 diff --git a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
-index d010057..22e520a 100644
+index 290c9e1..b1ac223 100644
 --- a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 +++ b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 @@ -1,4 +1,4 @@
@@ -323,12 +335,12 @@ index d010057..22e520a 100644
          private void RefreshMonitors()
          {
 @@ -128,23 +154,50 @@ namespace BloodborneLauncher.Views
-                     : "This display shows no HDR";
-             IniToggle(SymbolRegular.Hdr24, "HDR output", hdrHint, "hdr");
-             ComboRow(SymbolRegular.Lightbulb24, "HDR source",
--                "Native: highlights as bright as they are in the game's scene. Expanded: the SDR picture's bright parts made brighter",
+                     : L.T("This display shows no HDR");
+             IniToggle(SymbolRegular.Hdr24, L.T("HDR output"), hdrHint, "hdr");
+             ComboRow(SymbolRegular.Lightbulb24, L.T("HDR source"),
+-                L.T("Native: highlights as bright as they are in the game's scene. Expanded: the SDR picture's bright parts made brighter"),
 -                Choices.HdrMode, () => Ini.Get("hdr_mode", "native"), v => Ini.Set("hdr_mode", v));
--            SliderRow(SymbolRegular.BrightnessHigh24, "Paper white", "How bright the game's white is, in nits. Range: 10–500",
+-            SliderRow(SymbolRegular.BrightnessHigh24, L.T("Paper white"), L.T("How bright the game's white is, in nits. Range: 10–500"),
 -                10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", "200"), 200),
 +                "PsychoV30: HDR tone mapping with dark tones matched to the game's SDR rendering. Native: highlights derived from the game's HDR scene. Expanded: bright SDR pixels expanded towards the peak. Entering or leaving PsychoV30 requires restarting the game.",
 +                Choices.HdrMode, () => Ini.Get("hdr_mode", "native"), v => Ini.Set("hdr_mode", v), changed: RefreshHdrRows);
@@ -336,11 +348,11 @@ index d010057..22e520a 100644
 +            // Windows reports for the chosen display (in HDR).
 +            const double DefaultPaperWhite = 203;
 +            double DetectedPeak() => DisplayPeak.Default(S.Str("display_device"));
-+            var paperWhite = SliderRow(SymbolRegular.BrightnessHigh24, "Paper white", "How bright the game's white is, in nits. Default: 203. Range: 10–500",
++            var paperWhite = SliderRow(SymbolRegular.BrightnessHigh24, L.T("Paper white"), "How bright the game's white is, in nits. Default: 203. Range: 10–500",
 +                10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", ""), DefaultPaperWhite),
                  v => Ini.Set("hdr_paper_white", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
-                 format: "0' nits'", valueWidth: 82);
--            SliderRow(SymbolRegular.WeatherSunny24, "Peak brightness", "Your display's peak brightness, in nits. Range: 10–4000",
+                 format: L.T("0' nits'"), valueWidth: 82);
+-            SliderRow(SymbolRegular.WeatherSunny24, L.T("Peak brightness"), L.T("Your display's peak brightness, in nits. Range: 10–4000"),
 -                10, 4000, 10, () => ParseDouble(Ini.Get("hdr_peak", "1000"), 1000),
 +            if (paperWhite.Parent is Panel paperWhiteRow)
 +                paperWhiteRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24, "Reset to 203 nits",
@@ -349,39 +361,39 @@ index d010057..22e520a 100644
 +            var peakHint = detected > 0
 +                ? $"Your display's peak brightness, in nits. Windows reports {detected:0} nits for it: the default. Range: 10–4000"
 +                : "Your display's peak brightness, in nits. Windows reports none (is Windows HDR on?): 1000 by default. Range: 10–4000";
-+            var peak = SliderRow(SymbolRegular.WeatherSunny24, "Peak brightness", peakHint,
++            var peak = SliderRow(SymbolRegular.WeatherSunny24, L.T("Peak brightness"), peakHint,
 +                10, 4000, 1, () => ParseDouble(Ini.Get("hdr_peak", ""), DetectedPeak()),
                  v => Ini.Set("hdr_peak", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
-                 format: "0' nits'", valueWidth: 82);
+                 format: L.T("0' nits'"), valueWidth: 82);
 +            if (peak.Parent is Panel peakRow)
 +                peakRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24,
 +                    "Reset to the peak Windows reports for this display (1000 when it reports none)",
 +                    (_, _) => peak.Value = Math.Clamp(DetectedPeak(), peak.Minimum, peak.Maximum)));
-             ComboRow(SymbolRegular.Sparkle24, "Highlight boost", "Off keeps the game's own look; higher makes lamps, fire and the sky brighter",
+             ComboRow(SymbolRegular.Sparkle24, L.T("Highlight boost"), L.T("Off keeps the game's own look; higher makes lamps, fire and the sky brighter"),
                  Choices.HdrBoost, () => Ini.Get("hdr_boost", "0.25"), v => Ini.Set("hdr_boost", v));
 +            _hdrBoostRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
-+            ComboRow(SymbolRegular.Lightbulb24, "Tone mapper",
++            ComboRow(SymbolRegular.Lightbulb24, L.T("Tone mapper"),
 +                "PsychoV30 only. PsychoV-30: as RenoDX's mods, its own shadows. Hybrid: the shadows matched to the game's below mid grey; compare them in dark interiors and fog. Vanilla: the game's own look. Also in the in-game menu, live",
 +                Choices.HdrToneMapper, () => Ini.Get("hdr_tonemapper", "4"), v => Ini.Set("hdr_tonemapper", v));
 +            _hdrToneMapperRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
-+            ComboRow(SymbolRegular.Color24, "Target gamut",
++            ComboRow(SymbolRegular.Color24, L.T("Target gamut"),
 +                "PsychoV30 only: the color volume it fits the picture into. BT.2020 is RenoDX's HDR default; compare with BT.709 on saturated lights (lanterns, fire, blue lights). Also in the in-game menu, live",
 +                Choices.HdrGamut, () => Ini.Get("hdr_gamut", "bt2020"), v => Ini.Set("hdr_gamut", v));
 +            _hdrGamutRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
              var hdrMore = Advanced();
--            ComboRow(SymbolRegular.TextFont24, "UI brightness", "Native source only: how bright the HUD, menus and subtitles are, against paper white",
-+            ComboRow(SymbolRegular.TextFont24, "UI brightness", "Native and PsychoV30: how bright the HUD, menus and subtitles are, against paper white",
+-            ComboRow(SymbolRegular.TextFont24, L.T("UI brightness"), L.T("Native source only: how bright the HUD, menus and subtitles are, against paper white"),
++            ComboRow(SymbolRegular.TextFont24, L.T("UI brightness"), "Native and PsychoV30: how bright the HUD, menus and subtitles are, against paper white",
                  Choices.HdrUiBrightness, () => Ini.Get("hdr_ui_brightness", "1"), v => Ini.Set("hdr_ui_brightness", v), hdrMore);
 +            _hdrBrightnessRow = (FrameworkElement)hdrMore.Children[hdrMore.Children.Count - 1];
-             ComboRow(SymbolRegular.Color24, "UI colour", "Native source only: Vivid shows the HUD and menus with the colours a wide-gamut monitor gives SDR; Exact keeps sRGB's",
+             ComboRow(SymbolRegular.Color24, L.T("UI colour"), L.T("Native source only: Vivid shows the HUD and menus with the colours a wide-gamut monitor gives SDR; Exact keeps sRGB's"),
                  Choices.HdrUiColor, () => Ini.Get("hdr_ui_color", "1"), v => Ini.Set("hdr_ui_color", v), hdrMore);
 +            _hdrColourRow = (FrameworkElement)hdrMore.Children[hdrMore.Children.Count - 1];
 +            RefreshHdrRows();
  
-             Group("Language");
-             ComboRow(SymbolRegular.LocalLanguage24, "In-game menu language", "The port's settings menu (Insert or L3 + R3)",
+             Group(L.T("Language"));
+             ComboRow(SymbolRegular.LocalLanguage24, L.T("In-game menu language"), L.T("The port's settings menu (Insert or L3 + R3)"),
 diff --git a/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs b/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
-index b904387..05cb726 100644
+index 14f6650..d1c6e97 100644
 --- a/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
 +++ b/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
 @@ -1,4 +1,4 @@

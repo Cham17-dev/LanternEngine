@@ -78,7 +78,8 @@ namespace BloodborneLauncher.Core
             ["exp_camera_easing"] = false,
             ["borderless_fullscreen"] = false,
             // The new engine features (EnginePreset New): on since 0.9.34, stable builds too.
-            ["exp_occlusion"] = true,
+            // Beta 9.9: off by default (objects and floors popped in late or flickered).
+            ["exp_occlusion"] = false,
             ["exp_fast_draws"] = true,
             ["exp_compile_skip"] = true,
             ["exp_vram_budget"] = true,
@@ -113,10 +114,6 @@ namespace BloodborneLauncher.Core
                 {
                     foreach (var (key, value) in saved)
                         _data[key] = value?.DeepClone();
-                    // Beta builds: occlusion culling no longer flickers and is on by default; files
-                    // from earlier versions saved the old default (off), so it is switched on once.
-                    if (Updater.CurrentBeta > 0 && !saved.ContainsKey("occlusion_default_on"))
-                        _data["exp_occlusion"] = true;
                     // Beta builds: textures kept up to 80% of the card (the 40% default evicted and
                     // reloaded hundreds a second on 6-8 GB cards); switched on once for older files.
                     // The marker is only ever written by a beta: "vram_budget_default_on" is in
@@ -125,11 +122,10 @@ namespace BloodborneLauncher.Core
                     // GB of 2486 MiB: evictions, re-uploads and tiled write-backs every frame).
                     if (Updater.CurrentBeta > 0 && !saved.ContainsKey("vram_budget_beta_on"))
                         _data["exp_vram_budget"] = true;
-                    // 0.9.34: the new engine features are on in stable builds too (Engine preset
-                    // New); files from before saved them off, so New is applied once. Legacy is
-                    // one click away on the Graphics page.
-                    if (!saved.ContainsKey("engine_preset_applied"))
-                        EnginePreset.Apply(this, EnginePreset.New);
+                    // Beta 9.9: occlusion culling off once (9.8 switched it on for everyone; floors
+                    // and objects appeared late or flickered). On again only by choice.
+                    if (!saved.ContainsKey("occlusion_off_99"))
+                        _data["exp_occlusion"] = false;
                     // Beta 9.8: the legacy shader compiler is the default again (the native one
                     // held 45-55 FPS where the legacy one held 60, Forbidden Woods, RTX 3090);
                     // switched on once, the native one stays a choice.
@@ -151,8 +147,8 @@ namespace BloodborneLauncher.Core
             // Saved with the next change: from then on the player's own choice stays.
             if (Updater.CurrentBeta > 0)
                 _data["vram_budget_beta_on"] = true;
-            _data["engine_preset_applied"] = true;
             _data["legacy_shaders_default_98"] = true;
+            _data["occlusion_off_99"] = true;
         }
 
         public void Save()

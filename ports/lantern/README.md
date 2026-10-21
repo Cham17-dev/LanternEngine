@@ -80,7 +80,7 @@ table, and bring the lights up to your display's peak.
 
 Pinned inputs:
 
-- LanternEngine `69018af24313407684cea267b107d2fb3fe86d5f` (0.9.34 beta 9.8).
+- LanternEngine `f9d114fef76bc5a90a6b5edfccddbd2e0e41bbb4` (0.9.35).
 - Its starting point, DarkIzuku/bloodborne_pc `8ecba9a4abdd54747e31d7fee54982e422b5f8e2`
   (`v0.4.0-darkizuku-preview.1`).
 - The mode 5 / PsychoV30 implementation from Cham17-dev/bloodborne_pc `hdr` at `0dce9f4`.
@@ -89,8 +89,8 @@ Pinned inputs:
 then applies `psychov30-engine.patch`; the launcher is built from `launcher/`
 (`psychov30-launcher.patch` is its diff against Lantern). The Windows workflow builds the engine
 and launcher and packages them; its manual `baseline_check` option compiles stock Lantern first.
-The package reuses the official beta 9.8 runtime resources, DLLs, notices and defaults with
-SHA-256 checks. The game starts through `bb-start.exe` (built here, as Lantern 9.8); the embedded
+The package reuses the official 0.9.35 runtime resources, DLLs, notices and defaults with
+SHA-256 checks. The game starts through `bb-start.exe` (built here, as Lantern 0.9.35); the embedded
 Python 3.12.10 and the preparation scripts stay as a fallback. CI checks both
 folder layouts and runs the shipped Python through imports and game detection.
 

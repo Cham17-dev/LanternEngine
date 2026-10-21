@@ -3,7 +3,7 @@ namespace BloodborneLauncher.Core
     /// <summary>
     /// Graphics › Engine preset: the newer engine features on or off in one go. New is the default;
     /// Legacy runs the engine the way the 0.9.33 stable did (the features that were only on in
-    /// betas off). The shader compiler is its own switch: the legacy one is the default in both. Changing a single feature by hand shows Custom.
+    /// betas off). The shader compiler and occlusion culling are switches of their own. Changing a single feature by hand shows Custom.
     /// </summary>
     public static class EnginePreset
     {
@@ -12,7 +12,6 @@ namespace BloodborneLauncher.Core
         /// <summary>Each feature's setting and its value in New; Legacy has the opposite.</summary>
         private static readonly (string Key, bool New)[] Features =
         {
-            ("exp_occlusion", true),
             ("exp_fast_draws", true),
             ("exp_compile_skip", true),
             ("exp_vram_budget", true),
@@ -20,9 +19,9 @@ namespace BloodborneLauncher.Core
 
         public static readonly Choice[] Choices =
         {
-            new("New (recommended)", New, "The current engine: occlusion culling, faster draw thread, quicker shader compiling, more VRAM for textures"),
-            new("Legacy (0.9.33)", Legacy, "The engine as 0.9.33 ran it, with those features off. Try it if the new engine crashes or draws something wrong"),
-            new("Custom", Custom, "Features below changed one by one"),
+            new(L.T("New (recommended)"), New, L.T("The current engine: faster draw thread, quicker shader compiling, more VRAM for textures")),
+            new(L.T("Legacy (0.9.33)"), Legacy, L.T("The engine as 0.9.33 ran it, with those features off. Try it if the new engine crashes or draws something wrong")),
+            new(L.T("Custom"), Custom, L.T("Features below changed one by one")),
         };
 
         public static string Current(LauncherSettings s)
