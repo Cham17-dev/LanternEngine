@@ -10,6 +10,7 @@ namespace BloodborneLauncher.Views
     public sealed class GraphicsPage : LauncherPage
     {
         private readonly TextBlock _upscalerHint, _dlssHint;
+        private TextBlock? _motionBlurHint;
         private readonly SettingRow _presetCard, _sharpenCard, _sharpnessCard;
         private readonly System.Windows.FrameworkElement _enginePreset;
         private readonly Dictionary<string, ToggleSwitch> _features = new();
@@ -168,7 +169,11 @@ namespace BloodborneLauncher.Views
             IniCombo(SymbolRegular.Cube24, L.T("Model detail"), null, Choices.ModelLod, "model_lod");
             IniCombo(SymbolRegular.Camera24, L.T("Follow camera"), L.T("Original keeps the game's camera distance, angle and follow speed at 60 FPS and above"), Choices.CameraTuning, "camera_tuning");
             foreach (var effect in Choices.Effects)
-                IniToggle(EffectIcon(effect.Key), effect.Title, effect.Hint, effect.Key);
+            {
+                var motionBlur = effect.Key == "effect_motion_blur";
+                IniToggle(EffectIcon(effect.Key), effect.Title, effect.Hint, effect.Key, changed: motionBlur ? UpdateUpscaler : null);
+                if (motionBlur) _motionBlurHint = ((SettingRow)Body.Children[^1]).Hint;
+            }
 
             Ws.PortChanged += UpdateUpscaler;
         }
@@ -236,6 +241,14 @@ namespace BloodborneLauncher.Views
             _presetCard.IsEnabled = value is not ("taa" or "off");
             _sharpenCard.IsEnabled = value != "off";
             _sharpnessCard.IsEnabled = value != "off";
+
+            // An upscaler takes the finished frame at outputs other than 1920x1080 and can smear the
+            // game's motion blur; More > Engine can leave the blur out there (BB_UPSCALER_NO_BLUR).
+            var (w, h) = Choices.OutputSize(Ini.Get("output_res", "1920x1080"));
+            if (_motionBlurHint != null)
+                SetHint(_motionBlurHint, value != "off" && (w, h) != (1920, 1080) && Ini.Flag("effect_motion_blur")
+                    ? L.T("With an upscaler at an output other than 1920x1080 the blur can smear. More > Engine > No motion blur smear with upscalers leaves it out there")
+                    : null);
 
             var ngx = Path.Combine(Paths.BinariesDir, "nvngx_dlss.dll");
             SetHint(_dlssHint, DlssFound()

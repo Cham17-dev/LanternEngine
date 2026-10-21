@@ -243,7 +243,7 @@ index 8d56324..466119c 100644
          public static readonly string ConfigFile = Path.Combine(ConfigDir, "settings.json");
  
 diff --git a/launcher/windows/BloodborneLauncher/Core/Updater.cs b/launcher/windows/BloodborneLauncher/Core/Updater.cs
-index b6f1d60..6c52f5f 100644
+index f568a50..db24fd4 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Updater.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Updater.cs
 @@ -1,4 +1,4 @@
@@ -261,8 +261,8 @@ index b6f1d60..6c52f5f 100644
          public static string ReleasesPage => $"https://github.com/{Repository}/releases";
  
          /// <summary>The engine build this launcher is made for (package.json "engine").</summary>
--        public const string EngineId = "bbhost-0.4.0-fps83";
-+        public const string EngineId = "lantern-f9d114f-psychov30-v1";
+-        public const string EngineId = "bbhost-0.4.0-fps84";
++        public const string EngineId = "lantern-16d7b51-psychov30-v1";
  
          public const string ExeName = "Lantern Engine.exe";
          /// <summary>The launcher's name before 0.9.34 beta 8 (now a forwarder to ExeName).</summary>
@@ -393,7 +393,7 @@ index 290c9e1..b1ac223 100644
              Group(L.T("Language"));
              ComboRow(SymbolRegular.LocalLanguage24, L.T("In-game menu language"), L.T("The port's settings menu (Insert or L3 + R3)"),
 diff --git a/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs b/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
-index 14f6650..d1c6e97 100644
+index a922e1c..e55903c 100644
 --- a/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
 +++ b/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
 @@ -1,4 +1,4 @@

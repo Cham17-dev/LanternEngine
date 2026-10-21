@@ -20,7 +20,29 @@ namespace BloodborneLauncher.Core
             var tail = Tail(GameRunner.SessionLog, 120).ToList();
             var why = Cause(tail, EngineCode(tail, code));
             var memory = LowMemory(tail);
-            return memory == null ? why : why + " " + memory;
+            if (memory != null) why += " " + memory;
+            // OptiScaler hooks the submissions and runs DLSS itself: a device lost with it loaded
+            // says so (the engine runs a compatibility mode for it, Engine › OptiScaler compatibility).
+            if (tail.Any(l => l.Contains("DEVICE_LOST", StringComparison.Ordinal) ||
+                              l.Contains("device lost", StringComparison.OrdinalIgnoreCase)) &&
+                OptiScalerVersion() is { } opti)
+                why += " " + L.F($"OptiScaler {opti} was loaded: it hooks the game's GPU submissions and runs DLSS itself. Keep Engine › OptiScaler compatibility on; if the crash comes back, take OptiScaler's files out of engine\\out to rule it out.");
+            return why;
+        }
+
+        /// <summary>OptiScaler's version from its own start line ("OptiScaler v0.9.5-pre4 (8dac650) ... loaded")
+        /// or the engine's ("OptiScaler: v0.9.5.0 loaded as winmm.dll; ..."); null when it was not loaded.</summary>
+        private static string? OptiScalerVersion()
+        {
+            foreach (var line in Tail(GameRunner.SessionLog, int.MaxValue))
+            {
+                var at = line.IndexOf("OptiScaler v", StringComparison.Ordinal);
+                if (at >= 0 && line.Contains(" loaded", StringComparison.Ordinal))
+                    return line[(at + 11)..].Split(' ')[0];
+                if (line.StartsWith("OptiScaler: ", StringComparison.Ordinal) && line.Contains(" loaded as ", StringComparison.Ordinal))
+                    return line[12..].StartsWith('v') ? line[12..].Split(' ')[0] : "";
+            }
+            return null;
         }
 
         private static string Cause(List<string> tail, long code)

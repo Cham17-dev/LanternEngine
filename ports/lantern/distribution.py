@@ -13,8 +13,8 @@ import urllib.request
 from zipfile import ZipFile
 
 BASE_URL = ('https://github.com/Awakenchan/LanternEngine/releases/download/'
-            'v0.9.35/LanternEngine-v0.9.35-win64.zip')
-BASE_SHA = '2ccca7dda16c5eedbb49205a4caf621700dee20173d749180b09f7906540d0ff'
+            'v0.9.36/LanternEngine-v0.9.36-win64.zip')
+BASE_SHA = '38b0de16231da36daa8ffd01f8d2a2be5040209d6f03e8ceef38b1a4c77f385c'
 PYTHON_URL = 'https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip'
 PYTHON_SHA = '4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3'
 
@@ -73,9 +73,9 @@ def assemble(engine, overlay, destination, cache):
     # Embedded Python ignores the script directory unless explicitly added to its _pth.
     (python / 'python312._pth').write_text('python312.zip\n.\n../../scripts\n', encoding='ascii')
     (destination / 'package.json').write_text(json.dumps({
-        'version': '0.9.35-psychov30', 'engine': 'lantern-f9d114f-psychov30-v1',
+        'version': '0.9.36-psychov30', 'engine': 'lantern-16d7b51-psychov30-v1',
         'source': 'https://github.com/Cham17-dev/LanternEngine/tree/lantern-psychov30',
-        'runtime_resources': 'v0.9.35', 'python': '3.12.10',
+        'runtime_resources': 'v0.9.36', 'python': '3.12.10',
     }, indent=2), encoding='utf-8')
     # Explicit shipped HDR defaults, without replacing any player's existing INI.
     ini = destination / 'bbport.ini'

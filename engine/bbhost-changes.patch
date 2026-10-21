@@ -57761,7 +57761,7 @@ index a66e3d4..7d912fc 100644
  
  } // namespace Vulkan::UiComposition
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_breadcrumbs.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_breadcrumbs.cpp
-index e0fb9f4..5d9e805 100644
+index e0fb9f4..456c0e2 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_breadcrumbs.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_breadcrumbs.cpp
 @@ -1,6 +1,9 @@
@@ -57774,15 +57774,17 @@ index e0fb9f4..5d9e805 100644
  #include <array>
  #include <atomic>
  #include <cstdio>
-@@ -11,6 +14,7 @@
+@@ -11,7 +14,9 @@
  #include <sys/stat.h>
  #include <unistd.h>
  #include "video_core/renderer_vulkan/vk_breadcrumbs.h"
 +#include <vector>
  #include "video_core/renderer_vulkan/vk_instance.h"
++#include "video_core/renderer_vulkan/vk_optiscaler.h"
  
  extern "C" int runtime_memory_vma_info(uintptr_t address, int* prot, int* type, uintptr_t* end);
-@@ -55,7 +59,163 @@ struct ArgsNote {
+ 
+@@ -55,7 +60,163 @@ struct ArgsNote {
  };
  std::array<ArgsNote, ArgSlots> args_notes{};
  
@@ -57946,7 +57948,7 @@ index e0fb9f4..5d9e805 100644
      const char* env = std::getenv("BB_BREADCRUMBS");
      if (env && env[0] == '0') {
          return;
-@@ -274,9 +434,78 @@ void Report(const char* title, const char* where);
+@@ -274,9 +435,84 @@ void Report(const char* title, const char* where);
  
  void ReportDeviceLost(const char* where) {
      static std::atomic_flag reported = ATOMIC_FLAG_INIT;
@@ -57958,6 +57960,12 @@ index e0fb9f4..5d9e805 100644
          Report("at device lost", where);
      }
 +    ReportDeviceFault();
++    if (const auto& opti = OptiScaler::Detect(); opti.loaded) {
++        std::printf("Device lost with OptiScaler loaded (as %s, compatibility mode %s): it hooks "
++                    "submissions and runs DLSS itself; to rule it out, remove %s and try again\n",
++                    opti.module.c_str(), OptiScaler::Compat() ? "on" : "off", opti.module.c_str());
++        std::fflush(stdout);
++    }
 +}
 +
 +vk::UniqueDebugUtilsMessengerEXT CreateAddressReport(vk::Instance instance) {
@@ -58182,18 +58190,29 @@ index a123982..d825a7a 100644
  
  } // namespace Vulkan
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_dlss.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_dlss.cpp
-index 72f2c43..71a9a01 100644
+index 72f2c43..04a0d0e 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_dlss.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_dlss.cpp
-@@ -2,6 +2,7 @@
+@@ -2,8 +2,10 @@
  
  #include <cstdio>
  #include <cstdlib>
 +#include <cctype>
  #include <cstring>
  #include <filesystem>
++#include <mutex>
  #include <string>
-@@ -122,6 +123,28 @@ void SetF(NgxParameter* p, const char* name, float v) {
+ #include <vector>
+ 
+@@ -15,6 +17,7 @@
+ 
+ #include "video_core/renderer_vulkan/vk_dlss.h"
+ #include "video_core/renderer_vulkan/vk_instance.h"
++#include "video_core/renderer_vulkan/vk_optiscaler.h"
+ #include "video_core/renderer_vulkan/vk_scheduler.h"
+ #include "bbport_settings.h"
+ 
+@@ -122,6 +125,28 @@ void SetF(NgxParameter* p, const char* name, float v) {
  void SetP(NgxParameter* p, const char* name, void* v) {
      Slot<void (*)(NgxParameter*, const char*, void*)>(p, SetVoid)(p, name, v);
  }
@@ -58222,7 +58241,7 @@ index 72f2c43..71a9a01 100644
  NgxResult GetI(NgxParameter* p, const char* name, int* v) {
      return Slot<NgxResult (*)(NgxParameter*, const char*, int*)>(p, GetInt)(p, name, v);
  }
-@@ -187,6 +210,7 @@ struct DlssUpscaler::Impl {
+@@ -187,6 +212,7 @@ struct DlssUpscaler::Impl {
      bool available = false;
      bool fatal = false;
      std::string problem;
@@ -58230,7 +58249,22 @@ index 72f2c43..71a9a01 100644
  
  #ifdef _WIN32
      HMODULE core = nullptr;
-@@ -243,6 +267,33 @@ struct DlssUpscaler::Impl {
+@@ -213,6 +239,14 @@ struct DlssUpscaler::Impl {
+         bool operator==(const Key&) const = default;
+     } key{};
+ 
++    /// OptiScaler's NGX calls may run vkDeviceWaitIdle (a feature released or its backend
++    /// changed), which needs every queue externally synchronized: they go out under the lock
++    /// our submissions and presents take (BB_OPTISCALER_NGX_LOCK).
++    const bool ngx_lock = OptiScaler::Part("BB_OPTISCALER_NGX_LOCK");
++    std::unique_lock<std::mutex> QueueLock() {
++        return ngx_lock ? std::unique_lock{Scheduler::submit_mutex} : std::unique_lock<std::mutex>{};
++    }
++
+     Impl(const Instance& instance_, Scheduler& scheduler_)
+         : instance{instance_}, scheduler{scheduler_} {}
+ 
+@@ -243,6 +277,33 @@ struct DlssUpscaler::Impl {
                           L"FullPath", RRF_RT_REG_SZ, nullptr, dir, &size) == ERROR_SUCCESS) {
              core = LoadLibraryW((std::wstring(dir) + L"\\_nvngx.dll").c_str());
          }
@@ -58264,7 +58298,7 @@ index 72f2c43..71a9a01 100644
  #else
          core = dlopen("libnvidia-ngx.so.1", RTLD_NOW);
  #endif
-@@ -372,8 +423,10 @@ struct DlssUpscaler::Impl {
+@@ -372,11 +433,14 @@ struct DlssUpscaler::Impl {
          if (!available) {
              return false;
          }
@@ -58276,7 +58310,11 @@ index 72f2c43..71a9a01 100644
          if (!feature || !(wanted == key)) {
              if (feature) {
                  scheduler.Finish(); // the feature's resources may still be in use
-@@ -394,18 +447,35 @@ struct DlssUpscaler::Impl {
++                const auto lock = QueueLock();
+                 release_feature(feature);
+                 feature = nullptr;
+             }
+@@ -394,18 +458,36 @@ struct DlssUpscaler::Impl {
              }
              SetI(params, "DLSS.Feature.Create.Flags", flags);
              SetI(params, "DLSS.Enable.Output.Subrects", 0);
@@ -58289,6 +58327,7 @@ index 72f2c43..71a9a01 100644
 +            // "default". A preset the DLL refuses is retried with its default.
 +            const unsigned preset = DlssPreset();
 +            SetPreset(params, preset);
++            const auto lock = QueueLock();
 +            NgxResult r = create_feature(VkDevice(instance.GetDevice()), VkCommandBuffer(f.cmdbuf),
 +                                         kFeatureSuperSampling, params, &feature);
 +            if ((Failed(r) || !feature) && preset != 0) {
@@ -58318,6 +58357,27 @@ index 72f2c43..71a9a01 100644
          }
          ResourceVk color = Resource(f.color, vk::ImageAspectFlagBits::eColor, false);
          ResourceVk depth = Resource(f.depth, vk::ImageAspectFlagBits::eDepth, false);
+@@ -424,8 +506,10 @@ struct DlssUpscaler::Impl {
+         SetUI(params, "DLSS.Render.Subrect.Dimensions.Width", f.render_width);
+         SetUI(params, "DLSS.Render.Subrect.Dimensions.Height", f.render_height);
+         SetF(params, "FrameTimeDeltaInMsec", f.frame_ms);
+-        const NgxResult r =
+-            evaluate_feature(VkCommandBuffer(f.cmdbuf), feature, params, nullptr);
++        const NgxResult r = [&] {
++            const auto lock = QueueLock();
++            return evaluate_feature(VkCommandBuffer(f.cmdbuf), feature, params, nullptr);
++        }();
+         if (Failed(r)) {
+             Fail(fmt_hex("DLSS evaluation failed", r), false);
+             return false;
+@@ -440,6 +524,7 @@ struct DlssUpscaler::Impl {
+         }
+         scheduler.Finish();
+         if (feature) {
++            const auto lock = QueueLock();
+             release_feature(feature);
+         }
+         if (params) {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_draw_pipe.h b/gpu/shadps4/video_core/renderer_vulkan/vk_draw_pipe.h
 index 0e80933..abd1e0e 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_draw_pipe.h
@@ -62900,6 +62960,182 @@ index 0000000..bb04853
 +};
 +
 +} // namespace Vulkan
+diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_optiscaler.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_optiscaler.cpp
+new file mode 100644
+index 0000000..a7261b4
+--- /dev/null
++++ b/gpu/shadps4/video_core/renderer_vulkan/vk_optiscaler.cpp
+@@ -0,0 +1,137 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include <cstdio>
++#include <cstdlib>
++#include <cwctype>
++#include <filesystem>
++#include <vector>
++
++#ifdef _WIN32
++#include <windows.h>
++#include <tlhelp32.h>
++#endif
++
++#include "video_core/renderer_vulkan/vk_optiscaler.h"
++
++namespace Vulkan::OptiScaler {
++
++namespace {
++
++bool EnvOn(const char* name) {
++    const char* env = std::getenv(name);
++    return !env || env[0] != '0';
++}
++
++#ifdef _WIN32
++std::string Narrow(const std::wstring& text) {
++    std::string out;
++    for (const wchar_t c : text) {
++        out.push_back(c < 128 ? char(c) : '?');
++    }
++    return out;
++}
++
++/// "x.y.z.w" from the file's version resource (version.dll is loaded here, not linked).
++std::string FileVersion(const wchar_t* path) {
++    const HMODULE dll = LoadLibraryW(L"version.dll");
++    if (!dll) {
++        return {};
++    }
++    using SizeFn = DWORD(WINAPI*)(LPCWSTR, LPDWORD);
++    using InfoFn = BOOL(WINAPI*)(LPCWSTR, DWORD, DWORD, LPVOID);
++    using QueryFn = BOOL(WINAPI*)(LPCVOID, LPCWSTR, LPVOID*, PUINT);
++    const auto size_fn = reinterpret_cast<SizeFn>(GetProcAddress(dll, "GetFileVersionInfoSizeW"));
++    const auto info_fn = reinterpret_cast<InfoFn>(GetProcAddress(dll, "GetFileVersionInfoW"));
++    const auto query_fn = reinterpret_cast<QueryFn>(GetProcAddress(dll, "VerQueryValueW"));
++    std::string version;
++    DWORD handle = 0;
++    const DWORD size = size_fn && info_fn && query_fn ? size_fn(path, &handle) : 0;
++    if (size) {
++        std::vector<char> data(size);
++        VS_FIXEDFILEINFO* fixed = nullptr;
++        UINT length = 0;
++        if (info_fn(path, 0, size, data.data()) &&
++            query_fn(data.data(), L"\\", reinterpret_cast<LPVOID*>(&fixed), &length) && fixed &&
++            fixed->dwFileVersionMS) {
++            char text[64];
++            std::snprintf(text, sizeof(text), "%u.%u.%u.%u", HIWORD(fixed->dwFileVersionMS),
++                          LOWORD(fixed->dwFileVersionMS), HIWORD(fixed->dwFileVersionLS),
++                          LOWORD(fixed->dwFileVersionLS));
++            version = text;
++        }
++    }
++    FreeLibrary(dll);
++    return version;
++}
++
++/// OptiScaler exports the NGX entry points under a proxy name (winmm.dll, dxgi.dll, version.dll,
++/// ...) and keeps OptiScaler.ini beside itself. The driver's own NGX core (_nvngx.dll / nvngx.dll)
++/// exports them too and counts only with that ini.
++Info Find() {
++    Info info;
++    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
++    if (snapshot == INVALID_HANDLE_VALUE) {
++        return info;
++    }
++    MODULEENTRY32W entry{};
++    entry.dwSize = sizeof(entry);
++    for (BOOL more = Module32FirstW(snapshot, &entry); more && !info.loaded;
++         more = Module32NextW(snapshot, &entry)) {
++        std::wstring name = entry.szModule;
++        for (auto& c : name) {
++            c = wchar_t(std::towlower(c));
++        }
++        if (!GetProcAddress(entry.hModule, "NVSDK_NGX_VULKAN_Init_Ext2")) {
++            continue;
++        }
++        std::error_code ec;
++        const bool ini = std::filesystem::exists(
++            std::filesystem::path(entry.szExePath).parent_path() / L"OptiScaler.ini", ec);
++        const bool ngx_core = name == L"_nvngx.dll" || name == L"nvngx.dll";
++        if (ngx_core && !ini) {
++            continue;
++        }
++        info.loaded = true;
++        info.module = Narrow(entry.szModule);
++        info.version = FileVersion(entry.szExePath);
++    }
++    CloseHandle(snapshot);
++    return info;
++}
++#else
++Info Find() {
++    return {};
++}
++#endif
++
++} // namespace
++
++const Info& Detect() {
++    static const Info info = [] {
++        Info found = Find();
++        if (found.loaded) {
++            std::printf("OptiScaler: %s%s loaded as %s; compatibility mode: %s\n",
++                        found.version.empty() ? "" : "v",
++                        found.version.empty() ? "(version unknown)" : found.version.c_str(),
++                        found.module.c_str(),
++                        EnvOn("BB_OPTISCALER_COMPAT")
++                            ? "on - submissions from one thread (BB_OPTISCALER_SYNC_SUBMIT), "
++                              "NGX calls under the queue lock (BB_OPTISCALER_NGX_LOCK); "
++                              "BB_OPTISCALER_COMPAT=0 turns it off"
++                            : "off (BB_OPTISCALER_COMPAT=0)");
++        }
++        return found;
++    }();
++    return info;
++}
++
++bool Compat() {
++    static const bool on = Detect().loaded && EnvOn("BB_OPTISCALER_COMPAT");
++    return on;
++}
++
++bool Part(const char* name) {
++    return Compat() && EnvOn(name);
++}
++
++} // namespace Vulkan::OptiScaler
+diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_optiscaler.h b/gpu/shadps4/video_core/renderer_vulkan/vk_optiscaler.h
+new file mode 100644
+index 0000000..f6a5394
+--- /dev/null
++++ b/gpu/shadps4/video_core/renderer_vulkan/vk_optiscaler.h
+@@ -0,0 +1,27 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++// bbport: OptiScaler (a DLL players drop next to the executable, often as winmm.dll) hooks
++// vkCreateDevice, vkGetDeviceProcAddr, vkQueueSubmit and takes over the NGX entry points: our
++// DLSS runs through its own feature, which may call vkDeviceWaitIdle from the thread recording
++// the evaluate (a release, or a backend change from its menu). It is allowed; while it is loaded
++// a compatibility mode keeps the engine on the paths it handles. BB_OPTISCALER_COMPAT=0 turns
++// the whole mode off; each part has its own switch as well.
++#pragma once
++
++#include <string>
++
++namespace Vulkan::OptiScaler {
++
++struct Info {
++    bool loaded = false;
++    std::string module;  ///< the file name it was loaded as (winmm.dll, dxgi.dll, ...)
++    std::string version; ///< from its version resource, empty when it has none
++};
++
++/// Looks once for a loaded OptiScaler and prints one line about it and the compatibility mode.
++const Info& Detect();
++/// OptiScaler is loaded and BB_OPTISCALER_COMPAT is not 0.
++bool Compat();
++/// Compat() and the part's own switch (`name`, e.g. "BB_OPTISCALER_SYNC_SUBMIT") is not 0.
++bool Part(const char* name);
++
++} // namespace Vulkan::OptiScaler
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 index d8713f2..620920f 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
@@ -67185,7 +67421,7 @@ index e5a656b..8333b19 100644
      bool debug = false; ///< BB_SCENE_DEBUG frame: print resolves and fills
  private:
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_scheduler.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_scheduler.cpp
-index 06eadfd..d31ac91 100644
+index 06eadfd..0e08863 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_scheduler.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_scheduler.cpp
 @@ -17,6 +17,7 @@
@@ -67196,7 +67432,24 @@ index 06eadfd..d31ac91 100644
  #include "video_core/renderer_vulkan/vk_gpu_profiler.h"
  #include "bbport_toggles.h"
  #include "bbport_wait_trace.h"
-@@ -322,37 +323,165 @@ std::unique_ptr<RecordChunk> Scheduler::AcquireChunk() {
+@@ -25,6 +26,7 @@
+ #include "common/thread.h"
+ #include "imgui/renderer/texture_manager.h"
+ #include "video_core/renderer_vulkan/vk_instance.h"
++#include "video_core/renderer_vulkan/vk_optiscaler.h"
+ #include "video_core/renderer_vulkan/vk_scheduler.h"
+ #include "bbport_threads.h"
+ 
+@@ -162,6 +164,8 @@ Scheduler::Scheduler(const Instance& instance, bool threaded_recording)
+     if (!workers.empty()) {
+         const char* async = std::getenv("BB_ASYNC_SUBMIT");
+         async_submit = !async || async[0] != '0';
++        // OptiScaler loaded: one thread submits (its submit hooks keep global state).
++        async_submit = async_submit && !OptiScaler::Part("BB_OPTISCALER_SYNC_SUBMIT");
+         if (async_submit) {
+             std::printf("GPU: submissions go out from the recording threads (BB_ASYNC_SUBMIT)\n");
+         }
+@@ -322,37 +326,165 @@ std::unique_ptr<RecordChunk> Scheduler::AcquireChunk() {
      return chunk;
  }
  
@@ -67384,7 +67637,7 @@ index 06eadfd..d31ac91 100644
  }
  
  namespace {
-@@ -386,7 +515,7 @@ void Scheduler::NoteHostCopySource(u64 address, u64 size) {
+@@ -386,7 +518,7 @@ void Scheduler::NoteHostCopySource(u64 address, u64 size) {
      }
  }
  
@@ -67393,7 +67646,7 @@ index 06eadfd..d31ac91 100644
      {
          std::scoped_lock lk{host_copy_sources_mutex};
          bool overlap = host_copy_big_seq > host_copy_sources_done;
-@@ -405,10 +534,10 @@ void Scheduler::WaitHostCopiesFor(u64 address, u64 size) {
+@@ -405,10 +537,10 @@ void Scheduler::WaitHostCopiesFor(u64 address, u64 size) {
              return;
          }
      }
@@ -67406,7 +67659,7 @@ index 06eadfd..d31ac91 100644
      u64 sources_seen;
      {
          std::scoped_lock lk{host_copy_sources_mutex};
-@@ -423,13 +552,15 @@ void Scheduler::WaitHostCopies() {
+@@ -423,13 +555,15 @@ void Scheduler::WaitHostCopies() {
              s.host_copy_sources_done = std::max(s.host_copy_sources_done, seen);
          }
      } forget{*this, sources_seen};
@@ -67426,7 +67679,7 @@ index 06eadfd..d31ac91 100644
      }
      BbStats::WaitTimer timer{BbStats::copy_threads_wait_ns};
      BbCopy::WaitAsync();
-@@ -449,7 +580,7 @@ void Scheduler::KickRecording(bool force) {
+@@ -449,7 +583,7 @@ void Scheduler::KickRecording(bool force) {
          MaybeSplit();
      }
      // Batches of tens of KiB keep the queue handoff cheap relative to the work it carries.
@@ -67435,7 +67688,7 @@ index 06eadfd..d31ac91 100644
          return;
      }
      HandOver();
-@@ -461,7 +592,7 @@ void Scheduler::MaybeSplit() {
+@@ -461,7 +595,7 @@ void Scheduler::MaybeSplit() {
          return;
      }
      // Cutting inside a render pass closes and reopens it: only after a longer stretch.
@@ -67444,7 +67697,7 @@ index 06eadfd..d31ac91 100644
      if (bytes < (is_rendering ? 2 * split_bytes : split_bytes)) {
          return;
      }
-@@ -510,6 +641,11 @@ void Scheduler::HandOver() {
+@@ -510,6 +644,11 @@ void Scheduler::HandOver() {
      if (!commands && !ordered) {
          return;
      }
@@ -67456,7 +67709,7 @@ index 06eadfd..d31ac91 100644
      Worker& worker = *workers[current_segment % workers.size()];
      bool wake = false;
      {
-@@ -521,11 +657,12 @@ void Scheduler::HandOver() {
+@@ -521,11 +660,12 @@ void Scheduler::HandOver() {
                  worker.queue.push_back(std::move(chunk));
                  ++batch->handed[current_segment];
              }
@@ -67474,7 +67727,7 @@ index 06eadfd..d31ac91 100644
                  ++batch->handed[current_segment];
              }
              worker.queued.store(worker.queue.size(), std::memory_order_release);
-@@ -542,8 +679,9 @@ void Scheduler::HandOver() {
+@@ -542,8 +682,9 @@ void Scheduler::HandOver() {
              for (auto& chunk : ordered_full) {
                  queue(std::move(chunk));
              }
@@ -67486,7 +67739,7 @@ index 06eadfd..d31ac91 100644
              }
              ordered_queued.store(ordered_queue.size(), std::memory_order_release);
              // Any thread may run them; the current segment's thread is woken for them (when it
-@@ -622,7 +760,7 @@ void Scheduler::EnterDirectMode() {
+@@ -622,7 +763,7 @@ void Scheduler::EnterDirectMode() {
          }
          // A segment nothing was handed to yet is not begun: it becomes the direct one.
          const bool untouched =
@@ -67495,7 +67748,7 @@ index 06eadfd..d31ac91 100644
          if (!untouched) {
              // Its recording thread ends the segment's command buffer (the pool is that thread's).
              Record([](vk::CommandBuffer cmdbuf) { Check(cmdbuf.end()); });
-@@ -675,6 +813,7 @@ void Scheduler::RecorderThread(std::stop_token stoken, u32 index) {
+@@ -675,6 +816,7 @@ void Scheduler::RecorderThread(std::stop_token stoken, u32 index) {
          std::snprintf(name, sizeof(name), "bb:VkRecorder%u", index);
          Common::SetCurrentThreadName(name);
      }
@@ -67503,7 +67756,7 @@ index 06eadfd..d31ac91 100644
      Worker& worker = *workers[index];
      std::vector<std::unique_ptr<RecordChunk>> ordered;
      const auto has_work = [&] {
-@@ -687,7 +826,7 @@ void Scheduler::RecorderThread(std::stop_token stoken, u32 index) {
+@@ -687,7 +829,7 @@ void Scheduler::RecorderThread(std::stop_token stoken, u32 index) {
          // take time from guest threads. The others sleep until a new segment reaches them.
          if (active_worker.load(std::memory_order_relaxed) == index) {
              static const auto spin_time =
@@ -68875,7 +69128,7 @@ index d310098..0c91c9b 100644
  
  } // namespace Vulkan
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
-index a3240be..05b17f5 100644
+index a3240be..ad2c2b4 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
 @@ -10,10 +10,12 @@
@@ -69019,7 +69272,7 @@ index a3240be..05b17f5 100644
          std::printf("Output resolution: %ux%u (live)\n", target_width, target_height);
          failed = false;
          fsr4_failed = false;
-@@ -367,10 +439,28 @@ bool TemporalUpscaler::OnFrameStart() {
+@@ -367,16 +439,45 @@ bool TemporalUpscaler::OnFrameStart() {
          if (BbSettings::IsFrameUpscaler(upscaler)) BbSettings::Get().fsr4_problem = nullptr;
      }
      if (applied_upscaler != upscaler) fsr4_failed = false; // retry after a menu change
@@ -69049,7 +69302,24 @@ index a3240be..05b17f5 100644
                                                          {target_width, target_height}));
          render_width = scene_targets.Size().width;
          render_height = scene_targets.Size().height;
-@@ -411,15 +501,27 @@ bool TemporalUpscaler::OnFrameStart() {
+     }
+     BbSettings::Get().active_render_width = Scaled() ? render_width : scene_targets.Size().width;
+     BbSettings::Get().active_render_height = Scaled() ? render_height : scene_targets.Size().height;
++    // bbport: outputs other than 1080p upscale the game's finished frame (RunScaled), after its
++    // motion blur: the upscaler accumulated the blurred frames along motion vectors that do not
++    // describe the blur, a smear over the whole picture (worst at low render sizes). The game's
++    // blur is held off then (engine/graphics.cpp); at 1080p the upscale comes before the post and
++    // its blur. Opt-in: BB_UPSCALER_NO_BLUR=1 holds it there; =2: held under any upscaler.
++    static const int no_blur = [] {
++        const char* env = std::getenv("BB_UPSCALER_NO_BLUR");
++        return env && env[0] ? std::atoi(env) : 0;
++    }();
++    BbSettings::Get().motion_blur_held.store(no_blur != 0 && active && (Scaled() || no_blur == 2),
++                                             std::memory_order_relaxed);
+     if (changed || !dispatched_last_frame) reset = true;
+     if (changed) jitter_index = 0;
+     applied_preset = preset;
+@@ -411,15 +512,27 @@ bool TemporalUpscaler::OnFrameStart() {
  }
  
  void TemporalUpscaler::OnDispatch(u64 cs_hash) {
@@ -69083,7 +69353,7 @@ index a3240be..05b17f5 100644
  }
  
  bool TemporalUpscaler::EnsureResources(u32 w, u32 h, u32 ow, u32 oh, bool hdr) {
-@@ -1106,6 +1208,7 @@ bool TemporalUpscaler::RecordReactive(vk::ImageView color_view) {
+@@ -1106,6 +1219,7 @@ bool TemporalUpscaler::RecordReactive(vk::ImageView color_view) {
  }
  
  void TemporalUpscaler::Run() {
@@ -69091,7 +69361,7 @@ index a3240be..05b17f5 100644
      if (auto* profiler = GpuProfiler::Get()) {
          const char* label = BbSettings::Get().upscaler == BbSettings::UpscalerTaa
              ? "upscaler Run (TAA)" : "upscaler Run (FSR)";
-@@ -1152,6 +1255,9 @@ void TemporalUpscaler::Run() {
+@@ -1152,6 +1266,9 @@ void TemporalUpscaler::Run() {
          input_color_view = c.view;
          input_depth_view = d.view;
      }
@@ -69101,7 +69371,7 @@ index a3240be..05b17f5 100644
      const auto cmdbuf = scheduler.CommandBuffer();
      const Breadcrumbs::Scope crumb{cmdbuf, scheduler.CrumbStream(), "TAA"};
  
-@@ -1184,6 +1290,7 @@ void TemporalUpscaler::Run() {
+@@ -1184,6 +1301,7 @@ void TemporalUpscaler::Run() {
      own_barrier(vk::Image(motion_image), vk::ImageLayout::eGeneral,
                  vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite,
                  vk::ImageLayout::eGeneral, all, vk::AccessFlagBits2::eShaderRead);
@@ -69109,7 +69379,7 @@ index a3240be..05b17f5 100644
  
      const bool has_reactive = mask_ready || RecordReactive(input_color_view);
  
-@@ -1195,6 +1302,7 @@ void TemporalUpscaler::Run() {
+@@ -1195,6 +1313,7 @@ void TemporalUpscaler::Run() {
      last_frame = now;
  
      bool dispatched = false;
@@ -69117,7 +69387,7 @@ index a3240be..05b17f5 100644
      if (BbSettings::Get().upscaler == BbSettings::UpscalerTaa) {
          RecordTaa(cmdbuf, input_color_view, input_depth_view);
          dispatched = true;
-@@ -1274,6 +1382,7 @@ void TemporalUpscaler::Run() {
+@@ -1274,6 +1393,7 @@ void TemporalUpscaler::Run() {
              dispatched = true;
          }
      }
@@ -69125,7 +69395,7 @@ index a3240be..05b17f5 100644
      if (dispatched) {
          reset = false;
          dispatched_last_frame = true;
-@@ -1413,7 +1522,16 @@ float TemporalUpscaler::SceneMipBias() const {
+@@ -1413,7 +1533,16 @@ float TemporalUpscaler::SceneMipBias() const {
      if (!Active() || BbSettings::Get().upscaler == BbSettings::UpscalerTaa) return 0.0f;
      const float render = float(BbSettings::Get().active_render_width.load());
      const float output = float(Scaled() ? target_width : 1920u);
@@ -69143,7 +69413,7 @@ index a3240be..05b17f5 100644
  }
  
  bool TemporalUpscaler::Scaled() const {
-@@ -1435,7 +1553,29 @@ void TemporalUpscaler::OnColorTarget(VideoCore::ImageId color) {
+@@ -1435,7 +1564,29 @@ void TemporalUpscaler::OnColorTarget(VideoCore::ImageId color) {
  
  void TemporalUpscaler::OnDraw(u64 vs_hash, VideoCore::ImageId color,
                                VideoCore::ImageId depth, bool native_viewport) {
@@ -69173,7 +69443,7 @@ index a3240be..05b17f5 100644
      if (!Scaled()) {
          return;
      }
-@@ -1454,8 +1594,12 @@ void TemporalUpscaler::OnDraw(u64 vs_hash, VideoCore::ImageId color,
+@@ -1454,8 +1605,12 @@ void TemporalUpscaler::OnDraw(u64 vs_hash, VideoCore::ImageId color,
          return;
      }
      const auto& image = texture_cache.GetImage(color);
@@ -69187,7 +69457,7 @@ index a3240be..05b17f5 100644
      const bool ui_draw = movie &&
          (image.info.pixel_format == vk::Format::eR8G8B8A8Unorm ||
           image.info.pixel_format == vk::Format::eR8G8B8A8Srgb) &&
-@@ -1469,14 +1613,110 @@ void TemporalUpscaler::OnDraw(u64 vs_hash, VideoCore::ImageId color,
+@@ -1469,14 +1624,110 @@ void TemporalUpscaler::OnDraw(u64 vs_hash, VideoCore::ImageId color,
      case UiComposition::Background::Temporal:
          RunScaled();
          if (ui_phase) {
@@ -69299,7 +69569,7 @@ index a3240be..05b17f5 100644
  }
  
  void TemporalUpscaler::EnsureUiResources(u32 w, u32 h, vk::Format color, vk::Format depth) {
-@@ -1632,15 +1872,29 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
+@@ -1632,15 +1883,29 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
                          vk::PipelineStageFlagBits2::eTransfer, vk::AccessFlagBits2::eTransferRead);
          runtime.FlushBarriers();
      }
@@ -69334,7 +69604,7 @@ index a3240be..05b17f5 100644
                        region](vk::CommandBuffer cmd) {
          vk::ImageMemoryBarrier2 barrier{
              .srcStageMask = vk::PipelineStageFlagBits2::eAllCommands,
-@@ -1653,6 +1907,18 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
+@@ -1653,6 +1918,18 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
              .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
          };
          cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier});
@@ -69353,7 +69623,7 @@ index a3240be..05b17f5 100644
          cmd.blitImage(source, source_layout, ui, vk::ImageLayout::eTransferDstOptimal, region,
                        vk::Filter::eLinear);
          barrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
-@@ -1746,6 +2012,9 @@ void TemporalUpscaler::RunScaled() {
+@@ -1746,6 +2023,9 @@ void TemporalUpscaler::RunScaled() {
      const auto color_access = vk::AccessFlagBits2::eColorAttachmentRead |
                                vk::AccessFlagBits2::eColorAttachmentWrite;
      const auto rw = vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eShaderWrite;
@@ -69363,7 +69633,7 @@ index a3240be..05b17f5 100644
      // The previous frame's display pass read it: all commands before.
      barrier(vk::Image(ui_image), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eUndefined,
              all, vk::AccessFlagBits2::eNone, vk::ImageLayout::eGeneral, all, rw);
-@@ -1756,6 +2025,7 @@ void TemporalUpscaler::RunScaled() {
+@@ -1756,6 +2036,7 @@ void TemporalUpscaler::RunScaled() {
      barrier(vk::Image(motion_image), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eGeneral,
              vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite,
              vk::ImageLayout::eGeneral, all, vk::AccessFlagBits2::eShaderRead);
@@ -69371,7 +69641,7 @@ index a3240be..05b17f5 100644
  
      const auto now = std::chrono::steady_clock::now();
      float frame_ms = std::chrono::duration<float, std::milli>(now - last_frame).count();
-@@ -2210,9 +2480,9 @@ bool TemporalUpscaler::UseFsr4() const {
+@@ -2210,9 +2491,9 @@ bool TemporalUpscaler::UseFsr4() const {
          return dlss && dlss->Available() && !fsr4_failed;
      }
      const bool supported = selected == BbSettings::UpscalerFsr411
@@ -69383,7 +69653,7 @@ index a3240be..05b17f5 100644
  }
  
  bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image color,
-@@ -2257,7 +2527,20 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image
+@@ -2257,7 +2538,20 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image
          BbSettings::Get().fsr4_problem = kept[next].c_str();
          next = (next + 1) % kept.size();
      }
@@ -75997,7 +76267,7 @@ index cf4fbd8..e8557fe 100644
      put("live_resolution", v.live_resolution < 0 ? "auto" : flag(v.live_resolution != 0));
      if (v.menu_x >= 0.0f && v.menu_y >= 0.0f) {
 diff --git a/gpu/shim/bbport_settings.h b/gpu/shim/bbport_settings.h
-index c0e8a94..f831a88 100644
+index c0e8a94..926f484 100644
 --- a/gpu/shim/bbport_settings.h
 +++ b/gpu/shim/bbport_settings.h
 @@ -20,9 +20,23 @@ inline bool IsFsr4(int upscaler) {
@@ -76118,7 +76388,7 @@ index c0e8a94..f831a88 100644
      std::atomic<bool> sharpen{true};
      std::atomic<float> sharpness{0.3f};
      std::atomic<bool> jitter{true};
-@@ -65,6 +134,23 @@ struct Values {
+@@ -65,26 +134,74 @@ struct Values {
      std::atomic<float> reactive_max{0.9f};
      std::atomic<int> debug_view{DebugNone};
      std::atomic<bool> show_fps{false};
@@ -76142,7 +76412,15 @@ index c0e8a94..f831a88 100644
      /// The settings menu's position (fraction of the screen), -1 until it is moved.
      std::atomic<float> menu_x{-1.0f}, menu_y{-1.0f};
      // FSR 4 checks (menu): the provider's auto exposure, the jitter sign it is given.
-@@ -77,14 +163,42 @@ struct Values {
+     std::atomic<bool> fsr4_auto_exposure{true};
+     std::atomic<bool> fsr4_invert_jitter{false};
+     std::atomic<int> active_render_width{1920}, active_render_height{1080};
++    /// Set by the renderer: the game's motion blur is held off (engine/graphics.cpp), as a temporal
++    /// upscaler takes the game's finished frame, blur and all (BB_UPSCALER_NO_BLUR).
++    std::atomic<bool> motion_blur_held{false};
+     /// Applied at start (patches.py); the menu shows when a restart is needed.
+     std::atomic<bool> effects[EffectCount]{};
+     std::atomic<bool> camera_controls{false}; // startup engine hook, opt-in
      std::atomic<bool> widescreen{true},pc_controls{true},mouse_camera{true},mouse_menu{true};
      std::atomic<bool> mouse_invert_x{false},mouse_invert_y{false},mouse_auto_rotation{false};
      std::atomic<int> mouse_sensitivity{5};
@@ -76185,7 +76463,7 @@ index c0e8a94..f831a88 100644
      /// Live resolution and preset changes (run.sh): 0 off by default (startup patch, fastest
      /// on the Steam Deck and older GPUs), -1 auto (strong discrete GPUs), 1 on. On restart.
      std::atomic<int> live_resolution{0};
-@@ -100,11 +214,15 @@ struct Values {
+@@ -100,11 +217,15 @@ struct Values {
      int startup_model_lod = 0;
      int startup_output_res = OutputDefault;
      int startup_live_resolution = 0;
@@ -78286,10 +78564,10 @@ index a2bc45d..ad7e742 100644
  bool player_stat_set(const char* name,std::int64_t value);
  bool player_origin(int* origin);
 diff --git a/gpu/shim/engine/graphics.cpp b/gpu/shim/engine/graphics.cpp
-index c1e5ac1..67c8822 100644
+index c1e5ac1..5acb7b0 100644
 --- a/gpu/shim/engine/graphics.cpp
 +++ b/gpu/shim/engine/graphics.cpp
-@@ -4,6 +4,7 @@
+@@ -4,9 +4,11 @@
  #include "graphics.h"
  #include "engine_state.h"
  #include "bbport_settings.h"
@@ -78297,7 +78575,32 @@ index c1e5ac1..67c8822 100644
  #include <atomic>
  #include <cstring>
  #include <cmath>
-@@ -24,6 +25,13 @@ const std::uint8_t kYebisRecordPrologue[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
++#include <mutex>
+ namespace BbEngine::Graphics {
+ namespace {
+ #define GUEST_ABI __attribute__((sysv_abi))
+@@ -15,8 +17,18 @@ constexpr std::uint64_t kRenderView = 0x269e990;
+ // push rbp; mov rbp, rsp; push r15..r12; push rbx; sub rsp, 0xea8
+ const std::uint8_t kRenderViewPrologue[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55,
+                                             0x41, 0x54, 0x53, 0x48, 0x81, 0xec, 0xa8, 0x0e, 0x00, 0x00};
+-constexpr std::size_t kCapabilities = 0x48, kSsaoFlag = 0x2968, kAaFlag = 0x296a;
+-constexpr std::uint64_t kSsaoCapability = 0x8, kAaCapability = 0x10;
++constexpr std::size_t kCapabilities = 0x48, kSsaoFlag = 0x2968, kMotionBlurFlag = 0x2969, kAaFlag = 0x296a;
++constexpr std::uint64_t kSsaoCapability = 0x8, kAaCapability = 0x10, kMotionBlurCapability = 0x20;
++// bbport: motion blur. The renderer's +0x2969 gates the velocity map and the blur pass every view
++// (sub_269e990 and the post it calls); its constructor sets it (the "Disable Motion Blur" patch
++// makes that 0) and the velocity map is allocated with capability 0x20 either way, so it is safe
++// to clear and to set back at run time. Held off while the renderer says so (motion_blur_held:
++// an upscaler takes the finished frame, blur and all); the game's own value, as each renderer
++// first had it, is written back after - the player's setting is never changed.
++struct BlurView { std::uint64_t renderer; std::uint8_t game; };
++BlurView g_blur[8]{};
++std::mutex g_blur_mutex;
++int g_blur_logged = -1;
+ 
+ constexpr std::uint64_t kYebisRecord = 0x25d4860;
+ // push rbp; mov rbp, rsp; push r15..r12; push rbx; sub rsp, 0x28; mov r13, r9
+@@ -24,6 +36,13 @@ const std::uint8_t kYebisRecordPrologue[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
                                               0x41, 0x54, 0x53, 0x48, 0x83, 0xec, 0x28, 0x4d, 0x89, 0xcd};
  constexpr std::uint64_t kPostBlock = 0x59406e0;
  constexpr std::size_t kSaturation = 0xc8, kVignettePower = 0xd0, kGlareLuminance = 0xdc;
@@ -78311,7 +78614,7 @@ index c1e5ac1..67c8822 100644
  constexpr std::size_t kYebisHeld = 0x2710;  // on the YEBIS object: the block was not refreshed
  std::uint8_t* g_post_block = nullptr;
  
-@@ -51,8 +59,29 @@ const std::uint8_t kShadowSetupPrologue[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
+@@ -51,17 +70,55 @@ const std::uint8_t kShadowSetupPrologue[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57,
  constexpr std::size_t kShadowBlock = 0x80, kShadowHeld = 0x297c;  // on the renderer
  constexpr std::size_t kShadowScaled[] = {0x38, 0x3c, 0x44, 0x48};
  
@@ -78336,12 +78639,30 @@ index c1e5ac1..67c8822 100644
 +// read every call: off, each returns at once and the game's own values stand - so the switch
 +// and every setting are live.
 +bool On() { return BbSettings::Get().graphics_controls.load(std::memory_order_relaxed); }
++void MotionBlur(std::uint64_t r) {
++    const bool held=BbSettings::Get().motion_blur_held.load(std::memory_order_relaxed);
++    std::lock_guard lock{g_blur_mutex};
++    BlurView* view=nullptr;
++    for (auto& v:g_blur) if (v.renderer==r) { view=&v;break; }
++    for (auto& v:g_blur) if (!view && !v.renderer && Read(r+kMotionBlurFlag,&v.game)) { v.renderer=r;view=&v; }
++    if (!view) return;  // more renderers than expected: left as the game has them
++    Write(r+kMotionBlurFlag,static_cast<std::uint8_t>(held ? 0 : view->game));
++    if (view->game && g_blur_logged!=held) {
++        g_blur_logged=held;
++        host_log(held ? "Motion blur: held off while the upscaler takes the finished frame (output other than 1080p): "
++                        "it would accumulate the blur into a smear; the setting is unchanged (BB_UPSCALER_NO_BLUR)"
++                      : "Motion blur: on (the game's own)");
++    }
++}
 +// SSAO and AA are effects with their own settings (Picture tuning doesn't gate them): written
 +// every view, so switching Picture tuning off leaves nothing forced behind.
  GUEST_ABI std::int64_t RenderView(std::uint64_t,const std::uint64_t* saved) {
      const auto r=saved[0];std::uint64_t caps=0;
      if (!r || !Read(r+kCapabilities,&caps)) return 0;
-@@ -62,6 +91,7 @@ GUEST_ABI std::int64_t RenderView(std::uint64_t,const std::uint64_t* saved) {
+     const std::uint8_t ssao=BbSettings::Get().effects[3].load() && (caps&kSsaoCapability);
+     const std::uint8_t aa=BbSettings::Get().effects[4].load() && (caps&kAaCapability);
+     Write(r+kSsaoFlag,ssao);Write(r+kAaFlag,aa);
++    if (caps&kMotionBlurCapability) MotionBlur(r);
      return 0;
  }
  GUEST_ABI std::int64_t AoDraw(std::uint64_t,const std::uint64_t* saved) {
@@ -78349,7 +78670,7 @@ index c1e5ac1..67c8822 100644
      const auto object=saved[5];const float k=BbSettings::Get().graphics_ao_strength;
      std::uint8_t held=1;float v=0,o=0;
      if (!object || k==1 || !Read(object+kSsaoHeld,&held) || held ||
-@@ -70,6 +100,7 @@ GUEST_ABI std::int64_t AoDraw(std::uint64_t,const std::uint64_t* saved) {
+@@ -70,6 +127,7 @@ GUEST_ABI std::int64_t AoDraw(std::uint64_t,const std::uint64_t* saved) {
      return 0;
  }
  GUEST_ABI std::int64_t ShadowSetup(std::uint64_t,const std::uint64_t* saved) {
@@ -78357,7 +78678,7 @@ index c1e5ac1..67c8822 100644
      const auto block=saved[4];const float k=BbSettings::Get().graphics_shadow_scale;
      std::uint8_t held=1;
      if (!block || k==1 || !Read(block+kShadowHeld-kShadowBlock,&held) || held) return 0;
-@@ -77,20 +108,42 @@ GUEST_ABI std::int64_t ShadowSetup(std::uint64_t,const std::uint64_t* saved) {
+@@ -77,20 +135,42 @@ GUEST_ABI std::int64_t ShadowSetup(std::uint64_t,const std::uint64_t* saved) {
      return 0;
  }
  GUEST_ABI std::int64_t YebisRecord(std::uint64_t,const std::uint64_t* saved) {
@@ -78404,7 +78725,7 @@ index c1e5ac1..67c8822 100644
      Hook hooks[4];
      if (size<0x55406e0+0x370 || !Prepare(hooks[0],image,size,kRenderView-0x400000,kRenderViewPrologue,RenderView) ||
          !Prepare(hooks[1],image,size,kYebisRecord-0x400000,kYebisRecordPrologue,YebisRecord) ||
-@@ -100,8 +153,23 @@ bool Install(std::uint8_t* image,std::size_t size) {
+@@ -100,8 +180,23 @@ bool Install(std::uint8_t* image,std::size_t size) {
          host_log("live graphics disabled: engine bytes differ; all original paths retained");return false;
      }
      g_post_block=image+0x55406e0;
@@ -80680,7 +81001,7 @@ index deefd94..1d12ce5 100644
  uint32_t menu_confirm_button();
  uint32_t menu_back_button();
 diff --git a/gpu/shim/input/input.cpp b/gpu/shim/input/input.cpp
-index 30fdc4f..e2d1e3e 100644
+index 30fdc4f..0bf6742 100644
 --- a/gpu/shim/input/input.cpp
 +++ b/gpu/shim/input/input.cpp
 @@ -54,7 +54,7 @@ bool host_mouse_stage_position(float& x,float& y) {
@@ -80692,7 +81013,7 @@ index 30fdc4f..e2d1e3e 100644
      const float present=std::min(window_w/ow,window_h/oh);
      if(!s.widescreen){
          x=(mouse_x-(window_w-ow*present)/2)/present*1920/ow;
-@@ -162,13 +162,24 @@ extern "C" int bbgpu_pc_input(BbPcPad* d,const bool* keys,int nkeys,int gamepad_
+@@ -162,13 +162,28 @@ extern "C" int bbgpu_pc_input(BbPcPad* d,const bool* keys,int nkeys,int gamepad_
              if(p.lx==128)p.lx=127;if(p.ly==128)p.ly=127;
              if(p.rx==128)p.rx=127;if(p.ry==128)p.ry=127;
          }
@@ -80700,7 +81021,11 @@ index 30fdc4f..e2d1e3e 100644
 -        if(menu && keys) {
 +        // Separate immutable menu navigation from gameplay keys (only while a menu has the screen:
 +        // menu_pointer_navigating).
-+        const bool navigating=menu && menu_pointer_navigating();
++        // bbport: for 250 ms after a menu or prompt is confirmed or closed, the movement keys stay
++        // the left stick: the menu state lags the closing, so a quick tap of W right after a
++        // prompt was a d-pad up in the world. A menu still open reads the stick the same way.
++        static uint64_t settle_until=0;
++        const bool navigating=menu && menu_pointer_navigating() && SDL_GetTicks()>=settle_until;
 +        // bbport: a direction held when a menu or prompt is confirmed or closed is no d-pad until
 +        // it is let go of: the menu state lags the closing by a few frames, and W held through a
 +        // prompt was a d-pad up in the world (HP turned into Quicksilver Bullets).
@@ -80723,7 +81048,7 @@ index 30fdc4f..e2d1e3e 100644
              if(keys[SDL_SCANCODE_RETURN])p.buttons|=menu_confirm_button();
              if(keys[SDL_SCANCODE_BACKSPACE])p.buttons|=menu_back_button();
              for(int i=kBindMoveF;i<=kBindMoveR;i++)held[i]=false;
-@@ -178,15 +189,18 @@ extern "C" int bbgpu_pc_input(BbPcPad* d,const bool* keys,int nkeys,int gamepad_
+@@ -178,15 +193,18 @@ extern "C" int bbgpu_pc_input(BbPcPad* d,const bool* keys,int nkeys,int gamepad_
              if(s.mouse_menu){
                  if(edges&1)menu_pointer_click();
                  if(edges&SDL_BUTTON_RMASK)p.buttons|=menu_back_button();
@@ -80732,7 +81057,7 @@ index 30fdc4f..e2d1e3e 100644
                  p.buttons|=menu_pointer_take_press();
              }
 +            const uint32_t closing=menu_confirm_button()|menu_back_button();
-+            if(p.buttons&~last_buttons&closing)dpad_blocked|=dpad_held;
++            if(p.buttons&~last_buttons&closing){dpad_blocked|=dpad_held;settle_until=SDL_GetTicks()+250;}
          }else {
              bool mh[kBindCount]={};host_bindings_mouse_held(buttons|edges|(scroll>0?32:scroll<0?64:0),mh);
              host_bindings_apply(mh,held[kBindStrongMod]||mh[kBindStrongMod],p);
