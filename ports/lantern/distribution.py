@@ -90,7 +90,8 @@ def assemble(engine, overlay, destination, cache):
     for name in required:
         if not (destination / name).is_file():
             raise RuntimeError(f'Incomplete distribution: {name}')
-    if (runtime / 'out/bb-start.exe').exists() or (destination / 'out').exists():
+    # out\ at the top is the layout before engine\ (bb-start.exe in engine\out is ours, built here).
+    if (destination / 'out').exists():
         raise RuntimeError('Mixed engine layouts in distribution')
     print(f'Complete PsychoV30 package: {destination}')
 
