@@ -4,6 +4,13 @@ HDR for Bloodborne on Lantern Engine, with RenoDX's PsychoV30 tone mapper and a 
 like a RenoDX mod. This branch carries a reproducible patch over Lantern, not a copy of its
 engine. A successful build is not an in-game validation: see [Validation](#validation-still-required).
 
+> **Unofficial, AI-assisted.** This is not a RenoDX mod and is not affiliated with or endorsed by
+> RenoDX or its authors. It reuses RenoDX's MIT-licensed PsychoV30 tone mapper, ported to GLSL,
+> but the HDR integration (where the scene is captured, the game's color table, the output) is
+> this port's own and does not follow RenoDX's mod guidelines. It was written largely with an AI
+> coding assistant (Claude) and is tested by one player. Please do not report its issues to
+> RenoDX. For RenoDX itself, see [clshortfuse/renodx](https://github.com/clshortfuse/renodx).
+
 ## Install
 
 1. Download `lantern-psychov30-package` and extract it into a **new, empty folder**. It is a
