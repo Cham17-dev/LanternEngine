@@ -19,6 +19,17 @@ namespace BloodborneLauncher.Views
     {
         public SymbolIcon Icon { get; }
         public TextBlock Hint { get; }
+        public string Title { get; }
+        /// <summary>The description (the ⓘ tooltip, or the line under the title in Classic).</summary>
+        public string? Info { get; }
+
+        /// <summary>A setting the settings search finds: set for rows a page puts in with LauncherPage.Add,
+        /// not for list entries such as trophies, mods or connection test results.</summary>
+        public bool Searchable { get; set; }
+        /// <summary>The group header the row is under ("Experimental"), for the search results.</summary>
+        public string? Section { get; set; }
+        /// <summary>A choice row's options ("FSR 4 · DLSS · TAA"), so searching for an option finds its row.</summary>
+        public string Choices { get; set; } = "";
 
         public bool ShowIcon
         {
@@ -31,16 +42,18 @@ namespace BloodborneLauncher.Views
 
         public SettingRow(SymbolRegular icon, string title, string? info, object? control, bool wide)
         {
-            Padding = Classic ? new Thickness(16, 12, 16, 12) : new Thickness(14, 9, 14, 9);
-            MinHeight = Classic ? 64 : 42;
+            Title = title;
+            Info = info;
+            Padding = Classic ? new Thickness(14, 9, 14, 9) : new Thickness(14, 7, 14, 7);
+            MinHeight = Classic ? 52 : 38;
             BorderThickness = Classic ? new Thickness(1) : new Thickness(0, 1, 0, 0);
             SetResourceReference(BorderBrushProperty, Classic ? "CardStrokeColorDefaultBrush" : "GlassDividerBrush");
             if (Classic)
             {
                 CornerRadius = new CornerRadius(6);
-                Margin = new Thickness(0, 0, 0, 4);
-                SetResourceReference(BackgroundProperty, "CardBackgroundFillColorDefaultBrush");
+                Margin = new Thickness(0, 0, 0, 3);
             }
+            PlainBackground();
 
             Icon = new SymbolIcon { Symbol = icon, FontSize = Classic ? 20 : 18, Margin = new Thickness(0, 0, Classic ? 16 : 12, 0), VerticalAlignment = VerticalAlignment.Center,
                 Visibility = Classic ? Visibility.Visible : Visibility.Collapsed };
@@ -56,15 +69,18 @@ namespace BloodborneLauncher.Views
                 titleLine.Children.Add(mark);
             }
 
-            Hint = new TextBlock { FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0), Visibility = Visibility.Collapsed };
+            Hint = new TextBlock { FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0), Visibility = Visibility.Collapsed };
             Hint.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorTertiaryBrush");
 
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(titleLine);
             if (Classic && !string.IsNullOrWhiteSpace(info))
             {
-                // Classic shows the description under the title instead of in a tooltip.
-                var description = new TextBlock { Text = info, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) };
+                // Classic shows the description under the title instead of in a tooltip: its first
+                // sentence there, the whole text when the mouse is on it.
+                var brief = LauncherPage.Brief(info);
+                var description = new TextBlock { Text = brief, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 0),
+                    ToolTip = brief == info ? null : info };
                 description.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
                 text.Children.Add(description);
             }
@@ -107,6 +123,26 @@ namespace BloodborneLauncher.Views
                 text.Children.Add(Hint);
 
             Child = grid;
+        }
+
+        /// <summary>A card in Classic; nothing in Modern, where the group's glass box shows through.</summary>
+        private void PlainBackground()
+        {
+            if (Classic) SetResourceReference(BackgroundProperty, "CardBackgroundFillColorDefaultBrush");
+            else ClearValue(BackgroundProperty);
+        }
+
+        /// <summary>Lights the row up in the accent colour for a moment, then fades back: the settings
+        /// search found it.</summary>
+        public void Flash()
+        {
+            var accent = TryFindResource("AccentTextFillColorPrimaryBrush") is SolidColorBrush { Color: var c } ? c : Colors.SteelBlue;
+            var glow = new SolidColorBrush(Color.FromArgb(0x55, accent.R, accent.G, accent.B));
+            Background = glow;
+            var fade = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(1.2)) { BeginTime = TimeSpan.FromSeconds(0.9) };
+            // A second search for the same row while this one fades has its own glow: leave that one be.
+            fade.Completed += (_, _) => { if (ReferenceEquals(Background, glow)) PlainBackground(); };
+            glow.BeginAnimation(Brush.OpacityProperty, fade);
         }
     }
 
@@ -190,6 +226,68 @@ namespace BloodborneLauncher.Views
         }
     }
 
+    /// <summary>The rows inside an Advanced section (folded away until it is opened).</summary>
+    public sealed class AdvancedRows : StackPanel { }
+
+    /// <summary>
+    /// A folded part of a group: an "Advanced (n)" line that opens and closes the rows under it.
+    /// Rows put in Rows stay searchable; the search opens the section to show one.
+    /// </summary>
+    public sealed class AdvancedSection : StackPanel
+    {
+        public AdvancedRows Rows { get; } = new() { Visibility = Visibility.Collapsed };
+        private readonly SymbolIcon _chevron;
+        private readonly TextBlock _label;
+        private readonly string _title;
+
+        public AdvancedSection(string title)
+        {
+            _title = title;
+            _chevron = new SymbolIcon { Symbol = SymbolRegular.ChevronRight16, FontSize = 12, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+            _chevron.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "TextFillColorSecondaryBrush");
+            _label = new TextBlock { Text = title, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center };
+            _label.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
+            var header = new Border
+            {
+                Padding = new Thickness(14, 7, 14, 7),
+                BorderThickness = SettingRow.Classic ? new Thickness(0) : new Thickness(0, 1, 0, 0),
+                Background = Brushes.Transparent,
+                Cursor = Cursors.Hand,
+                Focusable = true,
+                ToolTip = L.T("Settings most players never need to change"),
+                Child = LauncherPage.Row(_chevron, _label),
+            };
+            header.SetResourceReference(Border.BorderBrushProperty, "GlassDividerBrush");
+            header.MouseLeftButtonUp += (_, _) => IsOpen = !IsOpen;
+            header.KeyDown += (_, e) =>
+            {
+                if (e.Key is Key.Enter or Key.Space) { IsOpen = !IsOpen; e.Handled = true; }
+            };
+            header.MouseEnter += (_, _) => _label.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorPrimaryBrush");
+            header.MouseLeave += (_, _) => _label.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
+            Children.Add(header);
+            Children.Add(Rows);
+            Loaded += (_, _) => ShowCount();
+        }
+
+        public bool IsOpen
+        {
+            get => Rows.Visibility == Visibility.Visible;
+            set
+            {
+                Rows.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+                _chevron.Symbol = value ? SymbolRegular.ChevronDown16 : SymbolRegular.ChevronRight16;
+                ShowCount();
+            }
+        }
+
+        private void ShowCount()
+        {
+            var count = Rows.Children.OfType<SettingRow>().Count(r => r.Visibility == Visibility.Visible);
+            _label.Text = count > 0 ? $"{_title} ({count})" : _title;
+        }
+    }
+
     /// <summary>
     /// A settings page: groups of compact rows, each group one rounded box (Sectionize puts the
     /// rows of a group into it once the page is built). The helpers bind a control straight to a
@@ -208,6 +306,17 @@ namespace BloodborneLauncher.Views
         protected LauncherPage(string title, string subtitle)
         {
             Background = Brushes.Transparent;
+            // A Frame does not pass inherited properties on to its page: the window's crisp text
+            // settings stopped at it, and every page drew WPF's default "Ideal" text (soft, blurry
+            // at small sizes). Set again here.
+            TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
+            TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
+            TextOptions.SetTextHintingMode(this, TextHintingMode.Fixed);
+            RenderOptions.SetClearTypeHint(this, ClearTypeHint.Enabled);
+            SetResourceReference(FontFamilyProperty, "UiFont");
+            SetResourceReference(System.Windows.Documents.TextElement.FontFamilyProperty, "UiFont");
+            UseLayoutRounding = true;
+            SnapsToDevicePixels = true;
             SetResourceReference(ForegroundProperty, "TextFillColorPrimaryBrush");
             SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "TextFillColorPrimaryBrush");
 
@@ -262,7 +371,7 @@ namespace BloodborneLauncher.Views
                            (child is TextBlock && box != null);
                 if (box != null && fits)
                 {
-                    if (child is TextBlock caption) caption.Margin = new Thickness(14, 10, 14, 6);
+                    if (child is TextBlock caption) caption.Margin = new Thickness(14, 8, 14, 4);
                     if (child is WrapPanel wrap) wrap.Margin = new Thickness(10, 4, 10, 10);
                     box.Children.Add(child);
                 }
@@ -288,8 +397,37 @@ namespace BloodborneLauncher.Views
             var header = Text(text, "GroupHeader");
             header.Tag = "group";
             (into ?? Body).Children.Add(header);
+            _group = text;
             return header;
         }
+
+        /// <summary>
+        /// A folded "Advanced" part of the current group, for settings few players change. Put rows in
+        /// with into: the panel this returns. The settings search still finds them and opens it.
+        /// </summary>
+        protected Panel Advanced(string title = "Advanced", Panel? into = null)
+        {
+            var section = new AdvancedSection(title);
+            (into ?? Body).Children.Add(section);
+            return section.Rows;
+        }
+
+        /// <summary>The first sentence of a long description, for a line under a row (the whole
+        /// text goes in its tooltip). Short text is returned as it is.</summary>
+        public static string Brief(string text, int max = 90)
+        {
+            if (text.Length <= max) return text;
+            foreach (var end in new[] { ". ", "; ", ": " })
+            {
+                var at = text.IndexOf(end, StringComparison.Ordinal);
+                if (at >= 20 && at < max) return text[..at] + (end == ". " ? "." : "…");
+            }
+            var cut = text.LastIndexOf(' ', max);
+            return (cut > 20 ? text[..cut] : text[..max]).TrimEnd(',', ';', ':', ' ') + "…";
+        }
+
+        /// <summary>The last group header, which the rows added after it belong to.</summary>
+        private string? _group;
 
         public static SymbolIcon Icon(SymbolRegular symbol) => new() { Symbol = symbol };
 
@@ -307,10 +445,62 @@ namespace BloodborneLauncher.Views
             hint.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
         }
 
+        /// <summary>Puts a setting on the page; the settings search finds every row added here.</summary>
         protected SettingRow Add(SettingRow row, Panel? into = null)
         {
             (into ?? Body).Children.Add(row);
+            row.Searchable = true;
+            row.Section = _group;
+            _searchRows.Add(row);
             return row;
+        }
+
+        // ---------------------------------------------------------------- settings search
+
+        /// <summary>Every row put in with Add, in page order: the settings search's index of this
+        /// page, built as the page is (no walk through the page's tree at each search).</summary>
+        private readonly List<SettingRow> _searchRows = new();
+
+        /// <summary>
+        /// This page's settings that can be seen right now: the rows put in with Add, minus those a
+        /// choice hides (Custom resolution while a named size is chosen, a cheat's amount while it is
+        /// off) and those no longer on the page.
+        /// </summary>
+        public IEnumerable<SettingRow> SearchRows() =>
+            _searchRows.Where(row => row.Searchable && Shown(row));
+
+        private bool Shown(DependencyObject? at)
+        {
+            for (; at != null && !ReferenceEquals(at, this); at = LogicalTreeHelper.GetParent(at))
+                if (at is UIElement { Visibility: not Visibility.Visible } && at is not AdvancedRows)
+                    return false; // a folded Advanced section still counts: the search opens it
+            return at != null;
+        }
+
+        /// <summary>
+        /// Scrolls a row of this page to the middle of the view, flashes it and puts the keyboard on
+        /// its control, so Space or the arrow keys change it. False when it has no control to focus.
+        /// </summary>
+        public bool Reveal(SettingRow row)
+        {
+            for (DependencyObject? at = row; at != null; at = LogicalTreeHelper.GetParent(at))
+                if (at is AdvancedSection section) section.IsOpen = true;
+            UpdateLayout();
+            if (!row.IsVisible) return false;
+            // Focus first: focusing scrolls the control into view, and the centring below comes after it.
+            var focused = SettingSearch.Descendants(row).OfType<System.Windows.Controls.Control>()
+                .FirstOrDefault(c => c is { Focusable: true, IsTabStop: true, IsEnabled: true, IsVisible: true })?.Focus() == true;
+            try
+            {
+                var top = row.TransformToAncestor(Scroller).Transform(new Point(0, 0)).Y + Scroller.VerticalOffset;
+                Scroller.ScrollToVerticalOffset(Math.Max(0, top - Math.Max(0, Scroller.ViewportHeight - row.ActualHeight) / 2));
+            }
+            catch (InvalidOperationException)
+            {
+                row.BringIntoView(); // not under this page's scroller after all
+            }
+            row.Flash();
+            return focused;
         }
 
         public static Button SmallButton(string text, SymbolRegular icon, RoutedEventHandler click, ControlAppearance look = ControlAppearance.Secondary)
@@ -360,7 +550,13 @@ namespace BloodborneLauncher.Views
             Func<Choice, bool>? enabled = null)
         {
             TextBlock note = null!;
-            void ShowNote(int index) => SetHint(note, index >= 0 ? choices[index].Note : null);
+            void ShowNote(int index)
+            {
+                var full = index >= 0 ? choices[index].Note : null;
+                var brief = full == null ? null : Brief(full, 110);
+                SetHint(note, brief);
+                note.ToolTip = brief == full ? null : full;
+            }
             void Picked(int index)
             {
                 set(choices[index].Value);
@@ -369,11 +565,13 @@ namespace BloodborneLauncher.Views
                 changed?.Invoke();
             }
 
+            var options = string.Join(" · ", choices.Select(c => c.Label));
             var shortLabels = choices.Sum(c => Segmented.Short(c.Label).Length);
             if (!SettingRow.Classic && choices.Count is >= 2 and <= 6 && shortLabels <= 72)
             {
                 var segmented = new Segmented(choices, enabled);
                 var row = Add(Card(icon, title, hint, segmented, out note, wide: true), into);
+                row.Choices = options;
                 segmented.Select(Choices.IndexOf(choices, get()), notify: false);
                 ShowNote(segmented.SelectedIndex);
                 segmented.Changed += Picked;
@@ -384,7 +582,9 @@ namespace BloodborneLauncher.Views
             var box = new ComboBox { Width = width, VerticalAlignment = VerticalAlignment.Center };
             foreach (var choice in choices)
                 box.Items.Add(new ComboBoxItem { Content = choice.Label, Tag = choice.Value });
+            ComboSearch.Attach(box);
             var card = Add(Card(icon, title, hint, box, out note), into);
+            card.Choices = options;
             box.SelectedIndex = Choices.IndexOf(choices, get());
             ShowNote(box.SelectedIndex);
             box.SelectionChanged += (_, _) => { if (box.SelectedIndex >= 0) Picked(box.SelectedIndex); };
@@ -420,10 +620,11 @@ namespace BloodborneLauncher.Views
         protected ToggleSwitch IniToggle(SymbolRegular icon, string title, string? hint, string key, Panel? into = null, Action? changed = null) =>
             ToggleRow(icon, title, hint, () => Ini.Flag(key), v => Ini.Set(key, v ? "1" : "0"), into, changed);
 
-        /// <summary>A slider with its value printed beside it.</summary>
+        /// <summary>A slider with a small number box beside it: type a value and press Enter (or click
+        /// away) to set it exactly. The value is kept in the slider's range and on its steps; text that
+        /// is not a number puts the current value back.</summary>
         protected Slider SliderRow(SymbolRegular icon, string title, string? hint, double min, double max, double step,
-            Func<double> get, Action<double> set, string format = "0.00", Panel? into = null, double valueWidth = 44,
-            string? inputUnit = null)
+            Func<double> get, Action<double> set, string format = "0.00", Panel? into = null, double valueWidth = 44)
         {
             var slider = new Slider
             {
@@ -433,68 +634,55 @@ namespace BloodborneLauncher.Views
                 LargeChange = step * 4,
                 TickFrequency = step,
                 IsSnapToTickEnabled = true,
-                Width = 260,
+                Width = 240,
                 VerticalAlignment = VerticalAlignment.Center,
                 Value = Math.Clamp(get(), min, max),
             };
-            var value = new TextBlock
+            var culture = System.Globalization.CultureInfo.InvariantCulture;
+            var value = new TextBox
             {
-                Width = valueWidth,
+                Width = Math.Max(valueWidth + 24, 66),
+                MinHeight = 0,
+                Padding = new Thickness(6, 3, 6, 3),
                 TextAlignment = TextAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 10, 0),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                ClearButtonEnabled = false,
+                Margin = new Thickness(10, 0, 0, 0),
+                ToolTip = L.F($"Type a value from {min.ToString(format, culture)} to {max.ToString(format, culture)} and press Enter"),
             };
-            value.SetResourceReference(TextBlock.FontFamilyProperty, "MonoFont");
-            value.Text = slider.Value.ToString(format, System.Globalization.CultureInfo.InvariantCulture);
+            value.SetResourceReference(System.Windows.Controls.Control.FontFamilyProperty, "MonoFont");
+            void Show() => value.Text = slider.Value.ToString(format, culture);
+            void Commit()
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(value.Text, @"-?(\d+([.,]\d*)?|[.,]\d+)");
+                if (!match.Success ||
+                    !double.TryParse(match.Value.Replace(',', '.'), System.Globalization.NumberStyles.Float, culture, out var typed))
+                {
+                    Show(); // not a number: back to the current value
+                    return;
+                }
+                typed = Math.Clamp(typed, min, max);
+                if (step > 0) typed = Math.Clamp(min + Math.Round((typed - min) / step) * step, min, max);
+                typed = Math.Round(typed, 6);
+                if (Math.Abs(slider.Value - typed) > 1e-9) slider.Value = typed; // saves through ValueChanged
+                Show();
+            }
+            Show();
+            value.KeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Enter) { Commit(); value.SelectAll(); e.Handled = true; }
+                else if (e.Key == Key.Escape) { Show(); value.SelectAll(); e.Handled = true; }
+            };
+            value.LostKeyboardFocus += (_, _) => Commit();
+            value.GotKeyboardFocus += (_, _) => value.SelectAll();
             slider.ValueChanged += (_, _) =>
             {
-                value.Text = slider.Value.ToString(format, System.Globalization.CultureInfo.InvariantCulture);
+                Show();
                 set(slider.Value);
                 Ws.SaveSoon();
             };
-            FrameworkElement valueControl = value;
-            if (inputUnit != null)
-            {
-                var input = new TextBox
-                {
-                    Width = valueWidth,
-                    TextAlignment = TextAlignment.Right,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    ToolTip = "Type an exact value, then press Enter. Escape cancels the edit.",
-                };
-                input.SetResourceReference(TextBox.FontFamilyProperty, "MonoFont");
-                void RefreshValue() => input.Text = slider.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
-                void CommitValue()
-                {
-                    var valid = double.TryParse(input.Text, System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out var number) ||
-                        double.TryParse(input.Text, System.Globalization.NumberStyles.Float,
-                            System.Globalization.CultureInfo.CurrentCulture, out number);
-                    if (valid && double.IsFinite(number))
-                    {
-                        number = Math.Clamp(number, min, max);
-                        slider.Value = Math.Clamp(min + Math.Round((number - min) / step,
-                            MidpointRounding.AwayFromZero) * step, min, max);
-                    }
-                    RefreshValue();
-                }
-                RefreshValue();
-                input.GotKeyboardFocus += (_, _) => input.SelectAll();
-                input.LostKeyboardFocus += (_, _) => CommitValue();
-                input.KeyDown += (_, e) =>
-                {
-                    if (e.Key == Key.Enter) { CommitValue(); e.Handled = true; }
-                    else if (e.Key == Key.Escape) { RefreshValue(); input.SelectAll(); e.Handled = true; }
-                };
-                slider.ValueChanged += (_, _) => RefreshValue();
-                valueControl = Row(input, new TextBlock
-                {
-                    Text = inputUnit,
-                    Margin = new Thickness(6, 0, 10, 0),
-                    VerticalAlignment = VerticalAlignment.Center,
-                });
-            }
-            Add(Card(icon, title, hint, Row(valueControl, slider), out _), into);
+            Add(Card(icon, title, hint, Row(slider, value), out _), into);
             return slider;
         }
 
@@ -529,9 +717,18 @@ namespace BloodborneLauncher.Views
         protected static string? PickFolder(string title, string current)
         {
             var dialog = new Microsoft.Win32.OpenFolderDialog { Title = title };
-            if (System.IO.Directory.Exists(current))
-                dialog.InitialDirectory = current;
-            return dialog.ShowDialog() == true ? dialog.FolderName : null;
+            try
+            {
+                if (System.IO.Directory.Exists(current))
+                    dialog.InitialDirectory = System.IO.Path.GetFullPath(current);
+                return dialog.ShowDialog() == true ? dialog.FolderName : null;
+            }
+            catch (ArgumentException)
+            {
+                // The shell refused the starting folder (a path it cannot parse): open without it.
+                dialog = new Microsoft.Win32.OpenFolderDialog { Title = title };
+                return dialog.ShowDialog() == true ? dialog.FolderName : null;
+            }
         }
     }
 }

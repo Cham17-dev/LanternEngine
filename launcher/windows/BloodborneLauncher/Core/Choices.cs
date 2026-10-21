@@ -1,4 +1,4 @@
-﻿namespace BloodborneLauncher.Core
+namespace BloodborneLauncher.Core
 {
     /// <summary>A drop-down entry. Note is shown under the row while this entry is selected.</summary>
     public sealed record Choice(string Label, string Value, string? Note = null);
@@ -14,22 +14,31 @@
             new("FSR 4.1.1", "fsr411"),
             new("FSR 3", "fsr3"),
             new("DLSS (NVIDIA RTX)", "dlss"),
-            new("TAA (native anti-aliasing)", "taa"),
-            new("Off", "off"),
+            new(L.T("TAA (native anti-aliasing)"), "taa"),
+            new(L.T("Off"), "off"),
+        };
+
+        /// <summary>frame_gen in bbport.ini: a generated frame between the game's own (the engine's
+        /// vk_frame_generation.h). Off by default.</summary>
+        public static readonly Choice[] FrameGeneration =
+        {
+            new(L.T("Off"), "off"),
+            new("FSR 3.1 (2x)", "fsr3", "Needs an upscaler. Not in menus, movies or with HDR output"),
         };
 
         public static readonly Choice[] Presets =
         {
-            new("Native AA (no upscaling; DLAA with DLSS)", "0"),
-            new("Quality (x1.5)", "1"),
-            new("Balanced (x1.7)", "2"),
-            new("Performance (x2)", "3"),
-            new("Ultra Performance (x3)", "4"),
+            new(L.T("Native AA (no upscaling; DLAA with DLSS)"), "0"),
+            new(L.T("Quality (x1.5)"), "1"),
+            new(L.T("Balanced (x1.7)"), "2"),
+            new(L.T("Performance (x2)"), "3"),
+            new(L.T("Ultra Performance (x3)"), "4"),
         };
 
         public static readonly Choice[] OutputResolutions =
         {
-            new("1280 × 720 (Steam Deck)", "1280x720"),
+            new(L.T("1280 × 720 (Steam Deck)"), "1280x720"),
+            new("1600 × 900", "1600x900"),
             new("1920 × 1080", "1920x1080"),
             new("2560 × 1440", "2560x1440"),
             new("3840 × 2160", "3840x2160"),
@@ -41,9 +50,21 @@
             new("3840 × 1080 (32:9)", "3840x1080"),
             new("5120 × 1440 (32:9)", "5120x1440"),
             new("7680 × 2160 (32:9)", "7680x2160"),
+            // Narrower than 16:9: the camera and UI made taller to fill it (Widescreen).
+            new("1280 × 1024 (5:4)", "1280x1024"),
+            new("1680 × 1050 (16:10)", "1680x1050"),
+            new("1920 × 1200 (16:10)", "1920x1200"),
+            new("2560 × 1600 (16:10)", "2560x1600"),
             // Any other display: its own size, the camera and UI widened to fill it.
-            new("Display (auto)", "auto", "Your display's own resolution, whatever its shape: the picture fills the screen"),
+            new(L.T("Display (auto)"), "auto", L.T("Your display's own resolution, whatever its shape: the picture fills the screen")),
+            new("Custom", Custom, "Any width and height: set them below"),
         };
+
+        /// <summary>The Output resolution list's entry for a size it does not name.</summary>
+        public const string Custom = "custom";
+
+        /// <summary>A size the engine takes as a custom output: 640 × 360 to 16384 × 8640, even.</summary>
+        public static bool ValidCustomSize(int w, int h) => w >= 640 && h >= 360 && w <= 16384 && h <= 8640;
 
         /// <summary>The size an output_res value names; "auto" is the display's own (1920 × 1080
         /// when it is unknown), as the engine reads it at start (scripts/run_windows.py).</summary>
@@ -66,40 +87,63 @@
         // the picture is clearer without them, and the upscalers anti-alias (players' advice).
         public static readonly Effect[] Effects =
         {
-            new("effect_chromatic_aberration", "Chromatic aberration", false),
-            new("effect_dof", "Depth of field", false),
-            new("effect_motion_blur", "Motion blur", false),
-            new("effect_ssao", "Ambient occlusion (SSAO)", true),
-            new("effect_game_aa", "Game's own anti-aliasing", false),
-            new("effect_dynamic_shadows", "Shadows from dynamic lights", true),
-            new("effect_ssr", "Screen-space reflections", false, "Not in the original game"),
-            new("skip_intro", "Skip intro videos", false),
-            new("debug_camera", "Free camera", false, "Toggle with Cross + L3 / Space + Z"),
-            new("debug_menu", "Debug menu", false,
-                "Left touchpad / Tab. Needs the adhoc folder from Nexus mod #253 (adhoc/font) in the game's dvdroot_ps4 or as a mod; without it the patch is not applied"),
+            new("effect_chromatic_aberration", L.T("Chromatic aberration"), false),
+            new("effect_dof", L.T("Depth of field"), false),
+            new("effect_motion_blur", L.T("Motion blur"), false),
+            new("effect_ssao", L.T("Ambient occlusion (SSAO)"), true),
+            new("effect_game_aa", L.T("Game's own anti-aliasing"), false),
+            new("effect_dynamic_shadows", L.T("Shadows from dynamic lights"), true),
+            new("effect_ssr", L.T("Screen-space reflections"), false, L.T("Not in the original game")),
+            new("skip_intro", L.T("Skip intro videos"), false),
+            new("debug_camera", L.T("Free camera"), false, L.T("Toggle with Cross + L3 / Space + Z")),
+            new("debug_menu", L.T("Debug menu"), false,
+                L.T("Left touchpad / Tab. Needs the adhoc folder from Nexus mod #253 (adhoc/font) in the game's dvdroot_ps4 or as a mod; without it the patch is not applied")),
+        };
+
+        public static readonly Choice[] CameraTuning =
+        {
+            new("Original (the game's camera)", "original", "As the game has it, at any frame rate"),
+            new("FPS++ retune", "fps++", "Kyo's 60 FPS++ camera: further back and slower to follow"),
         };
 
         public static readonly Choice[] ModelLod =
         {
-            new("As in the game", "0"),
-            new("Highest (-2)", "-2"),
-            new("Lower (1)", "1"),
-            new("Lowest (2)", "2"),
+            new(L.T("As in the game"), "0"),
+            new(L.T("Highest (-2)"), "-2"),
+            new(L.T("Lower (1)"), "1"),
+            new(L.T("Lowest (2)"), "2"),
         };
 
         public static readonly Choice[] FpsModes =
         {
             new("60 FPS", "60"),
-            new("90 FPS", "90", "Includes the sprint fix for high frame rates"),
-            new("120 FPS", "120", "The 90 FPS patch made for 120"),
-            new("144 FPS", "144", "The 90 FPS patch made for 144"),
-            new("Uncapped", "uncap", "The community uncapped patch, no limit. It can freeze at the end of a boss intro (Vicar Amelia's); 120 and 144 use another patch"),
-            new("30 FPS (as on PS4)", "30"),
+            new("90 FPS", "90", L.T("Includes the sprint fix for high frame rates")),
+            new("120 FPS", "120", L.T("The 90 FPS patch made for 120")),
+            new("144 FPS", "144", L.T("The 90 FPS patch made for 144")),
+            new(L.T("Uncapped"), "uncap", L.T("The community uncapped patch, no limit. It can freeze at the end of a boss intro (Vicar Amelia's); 120 and 144 use another patch")),
+            new(L.T("30 FPS (as on PS4)"), "30"),
+        };
+
+        /// <summary>The DLSS model (BB_DLSS_PRESET): NVIDIA's render presets.</summary>
+        public static readonly Choice[] DlssModels =
+        {
+            new("Transformer (preset K)", "k", "The newer model: steadier thin and moving objects (a weapon on the back, railings)"),
+            new("CNN (preset E)", "e", "The older model: a little faster on RTX 20 and 30 cards, softer and more ghosting in motion"),
+            new("The DLL's default", "default", "Whatever the included DLSS version picks for each quality mode"),
+        };
+
+        /// <summary>What opens the port's in-game settings menu (BB_OVERLAY_KEYS).</summary>
+        public static readonly Choice[] OverlayKeys =
+        {
+            new("Insert or L3 + R3", "both", "The keyboard's Insert key, or both sticks pressed on a controller"),
+            new("Insert only", "insert", "Pressing both sticks in a fight no longer opens it"),
+            new(L.T("Off"), "off", "The menu never opens; settings stay in the launcher and the game's PC menus"),
         };
 
         /// <summary>The port's in-game settings menu (Insert / L3+R3).</summary>
         public static readonly Choice[] MenuLanguages =
         {
+            new("简体中文", "zh_CN"),
             new("English", "en"),
             new("Español", "es"),
             new("Português (Brasil)", "pt_BR"),
@@ -113,57 +157,62 @@
 
         public static readonly Choice[] PresentModes =
         {
-            new("Mailbox", "Mailbox", "Low latency without tearing"),
-            new("FIFO (VSync)", "Fifo", "Classic vertical sync"),
-            new("FIFO Relaxed", "FifoRelaxed", "VSync that tears instead of stuttering when a frame is late"),
-            new("Immediate", "Immediate", "Lowest latency; may tear"),
+            new(L.T("Mailbox"), "Mailbox", L.T("Low latency without tearing")),
+            new(L.T("FIFO (VSync)"), "Fifo", L.T("Classic vertical sync")),
+            new(L.T("FIFO Relaxed"), "FifoRelaxed", L.T("VSync that tears instead of stuttering when a frame is late")),
+            new(L.T("Immediate"), "Immediate", L.T("Lowest latency; may tear")),
         };
 
         public static readonly Choice[] DrawPipe =
         {
-            new("Auto", "", "On with 8 or more CPU threads"),
-            new("On", "1"),
-            new("Off", "0", "More stable, but slower"),
+            new(L.T("Auto"), "", L.T("On with 8 or more CPU threads")),
+            new(L.T("On"), "1"),
+            new(L.T("Off"), "0", L.T("More stable, but slower")),
         };
 
         public static readonly Choice[] GameLanguages =
         {
             new("English", "1"),
-            new("Russian", "8"),
-            new("Japanese", "0"),
-            new("French", "2"),
-            new("Spanish", "3"),
-            new("German", "4"),
-            new("Italian", "5"),
+            new(L.T("Russian"), "8"),
+            new(L.T("Japanese"), "0"),
+            new(L.T("French"), "2"),
+            new(L.T("Spanish"), "3"),
+            new(L.T("German"), "4"),
+            new(L.T("Italian"), "5"),
         };
 
         public static readonly Choice[] HdrPaperWhite =
         {
-            new("100 nits", "100"), new("150 nits", "150"), new("203 nits (default)", "203"),
-            new("250 nits", "250"), new("300 nits", "300"), new("400 nits", "400"),
+            new(L.T("100 nits"), "100"), new(L.T("150 nits"), "150"), new(L.T("203 nits (default)"), "203"),
+            new(L.T("250 nits"), "250"), new(L.T("300 nits"), "300"), new(L.T("400 nits"), "400"),
         };
 
         public static readonly Choice[] HdrPeak =
         {
-            new("400 nits", "400"), new("600 nits", "600"), new("800 nits", "800"), new("1000 nits (default)", "1000"),
-            new("1500 nits", "1500"), new("2000 nits", "2000"), new("4000 nits", "4000"),
+            new(L.T("400 nits"), "400"), new(L.T("600 nits"), "600"), new(L.T("800 nits"), "800"), new(L.T("1000 nits (default)"), "1000"),
+            new(L.T("1500 nits"), "1500"), new(L.T("2000 nits"), "2000"), new(L.T("4000 nits"), "4000"),
         };
 
         /// <summary>button_prompts: the game's button icons as keys while the keyboard or mouse is in use, always, or never.</summary>
         public static readonly Choice[] ButtonPrompts =
         {
-            new("Automatic (default)", "auto"), new("Keyboard", "keyboard"), new("Controller", "controller"),
+            new(L.T("Automatic (default)"), "auto"), new(L.T("Keyboard"), "keyboard"), new(L.T("Controller"), "controller"),
         };
 
         /// <summary>pad_icons: the game's controller icons as they are (PlayStation's) or as an Xbox controller's buttons; automatic follows the controller in use.</summary>
+        public static readonly Choice[] DiscordStatus =
+        {
+            new(L.T("Off"), "off"), new("Lantern Engine", "lantern"), new("Custom", "custom"),
+        };
+
         public static readonly Choice[] PadIcons =
         {
-            new("Automatic (default)", "auto"), new("PlayStation", "playstation"), new("Xbox", "xbox"),
+            new(L.T("Automatic (default)"), "auto"), new("PlayStation", "playstation"), new("Xbox", "xbox"),
         };
 
         public static readonly Choice[] HdrMode =
         {
-            new("Native", "native"), new("Expanded", "expand"),
+            new(L.T("Native"), "native"), new(L.T("Expanded"), "expand"),
             new("PsychoV30 (16-bit, restart)", "psychov30",
                 "PsychoV30 — RenoDX · © 2026 Carlos Lopez · MIT License. GLSL adaptation for bbport. github.com/clshortfuse/renodx"),
         };
@@ -183,54 +232,54 @@
 
         public static readonly Choice[] HdrBoost =
         {
-            new("Off", "0"), new("Low (default)", "0.25"), new("Medium", "0.5"), new("High", "1"),
+            new(L.T("Off"), "0"), new(L.T("Low (default)"), "0.25"), new(L.T("Medium"), "0.5"), new(L.T("High"), "1"),
         };
 
         public static readonly Choice[] HdrUiBrightness =
         {
-            new("Dimmer", "0.75"), new("Paper white (default)", "1"), new("Brighter", "1.25"), new("Much brighter", "1.5"),
+            new(L.T("Dimmer"), "0.75"), new(L.T("Paper white (default)"), "1"), new(L.T("Brighter"), "1.25"), new(L.T("Much brighter"), "1.5"),
         };
 
         public static readonly Choice[] HdrUiColor =
         {
-            new("Exact (sRGB)", "0"), new("In between", "0.5"), new("Vivid (default)", "1"),
+            new(L.T("Exact (sRGB)"), "0"), new(L.T("In between"), "0.5"), new(L.T("Vivid (default)"), "1"),
         };
 
         public static readonly Choice[] OnlineServers =
         {
-            new("The Hunter's Dream", "huntersdream"),
+            new(L.T("The Hunter's Dream"), "huntersdream"),
         };
 
         public static readonly Choice[] SignTimeout =
         {
-            new("30 seconds (default)", "30"), new("60 seconds", "60"), new("The game's own (180 seconds)", "0"),
+            new(L.T("30 seconds (default)"), "30"), new(L.T("60 seconds"), "60"), new(L.T("The game's own (180 seconds)"), "0"),
         };
 
         public static readonly Choice[] LiveResolution =
         {
-            new("Auto (by GPU)", "auto"),
-            new("Off (faster)", "0"),
-            new("On", "1"),
+            new(L.T("Auto (by GPU)"), "auto"),
+            new(L.T("Off (faster)"), "0"),
+            new(L.T("On"), "1"),
         };
 
         public static readonly Choice[] Readbacks =
         {
-            new("Relaxed", "", "Default"),
-            new("Off", "0"),
-            new("Precise", "2"),
+            new(L.T("Relaxed"), "", L.T("Default")),
+            new(L.T("Off"), "0"),
+            new(L.T("Precise"), "2"),
         };
 
         public static readonly Choice[] SoundOutput =
         {
-            new("WASAPI", "", "Default"),
+            new("WASAPI", "", L.T("Default")),
             new("DirectSound", "directsound"),
-            new("DirectSound, larger buffer", "directsound_large"),
+            new(L.T("DirectSound, larger buffer"), "directsound_large"),
         };
 
         public static readonly Choice[] LaunchMethods =
         {
-            new("Bloodborne PC engine", "windows", "Prepares mods and patches, then starts the engine (out\\bb-probe.exe)"),
-            new("Custom command", "custom", "Runs a program of your choice with the settings as environment variables"),
+            new("Lantern Engine", "windows", L.T("Prepares mods and patches, then starts the engine (out\\bb-probe.exe)")),
+            new(L.T("Custom command"), "custom", L.T("Runs a program of your choice with the settings as environment variables")),
         };
 
         public static int IndexOf(IReadOnlyList<Choice> choices, string value)

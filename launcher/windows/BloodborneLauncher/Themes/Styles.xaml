@@ -6,6 +6,8 @@
         sets Foreground explicitly, because Page defaults it to black.
     -->
 
+    <!-- Windows 11's UI font, made for small sizes on screen; Segoe UI on Windows 10. -->
+    <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Courier New</FontFamily>
 
     <!-- Section heading above a group of cards -->
@@ -13,7 +15,7 @@
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
-        <Setter Property="Margin" Value="4,16,0,6" />
+        <Setter Property="Margin" Value="4,12,0,5" />
     </Style>
 
     <Style x:Key="PageTitle" TargetType="TextBlock">
@@ -23,7 +25,7 @@
     </Style>
 
     <Style x:Key="PageSubtitle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontSize" Value="12.5" />
         <Setter Property="Margin" Value="0,3,0,0" />
         <Setter Property="MaxWidth" Value="520" />
         <Setter Property="HorizontalAlignment" Value="Left" />
@@ -38,13 +40,13 @@
     </Style>
 
     <Style x:Key="Muted" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontSize" Value="12.5" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
     <Style x:Key="Faint" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontSize" Value="12.5" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
@@ -59,7 +61,7 @@
     </Style>
 
     <Style x:Key="StatLabel" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="11.5" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
     </Style>
 

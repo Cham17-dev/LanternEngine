@@ -23,7 +23,9 @@ namespace BloodborneLauncher.Core
         public static string DlcDir(LauncherSettings s) =>
             s.Str("dlc_dir") is { Length: > 0 } dir ? Paths.Expand(dir) : FoundDlc(GameDir(s)) ?? "";
 
-        private static (string Game, string? Found) _foundDlc = ("", null);
+        // A class, not a value tuple: the Play page looks on a worker thread, so the pair is
+        // swapped whole and never read half-written.
+        private static Tuple<string, string?> _foundDlc = Tuple.Create("", (string?)null);
 
         /// <summary>An add-on dump near the game folder, as other launchers find it: a folder with an
         /// add-on's sce_sys\param.sfo (category "ac") inside the game folder, beside it or one level
@@ -32,7 +34,8 @@ namespace BloodborneLauncher.Core
         public static string? FoundDlc(string game)
         {
             if (game.Length == 0 || !Directory.Exists(game)) return null;
-            if (_foundDlc.Game == game) return _foundDlc.Found;
+            var cached = _foundDlc;
+            if (cached.Item1 == game) return cached.Item2;
             string? found = null;
             try
             {
@@ -59,7 +62,7 @@ namespace BloodborneLauncher.Core
                 }
             }
             catch (Exception) { }
-            _foundDlc = (game, found);
+            _foundDlc = Tuple.Create(game, found);
             return found;
         }
 
@@ -130,11 +133,14 @@ namespace BloodborneLauncher.Core
                 ["PYTHONUNBUFFERED"] = "1",
             };
             // The Play page's DLC switch: off, the game is told no add-ons are installed.
-            if (!s.Bool("dlc_enabled")) env["BB_DLC"] = "0";
-            else if (DlcDir(s) is { Length: > 0 } dlc) env["BB_DLC_DIR"] = dlc;
+            env["BB_DLC"] = s.Bool("dlc_enabled") ? "1" : "0";
+            if (s.Bool("dlc_enabled") && DlcDir(s) is { Length: > 0 } dlc) env["BB_DLC_DIR"] = dlc;
             if (RegionPatchOnline is { } region) env["BB_REGION_PATCH_ONLINE"] = region;
             if (ResolutionPatchChoice is { } resolution) env["BB_RESOLUTION_PATCH"] = resolution;
             if (s.Str("present_mode").Length > 0) env["BB_PRESENT_MODE"] = s.Str("present_mode");
+            // Settings › Performance: empty is the engine's own choice (left unset).
+            if (s.Str("draw_pipe") is "0" or "1") env["BB_DRAW_PIPE"] = s.Str("draw_pipe");
+            if (s.Str("readbacks") is "0" or "2") env["BB_READBACKS"] = s.Str("readbacks");
             if (s.Bool("frame_stats")) env["BB_FRAME_STATS"] = "1";
             if (s.Bool("fsr_profile")) env["BB_FSR4_PROFILE"] = "1";
             if (s.Bool("audio_stats")) env["BB_AUDIO_STATS"] = "1";
@@ -155,6 +161,7 @@ namespace BloodborneLauncher.Core
             if (!s.Bool("exp_sleep_spin")) env["BB_SLEEP_SPIN_US"] = "600";
             if (!s.Bool("exp_async_pipelines")) env["BB_ASYNC_PIPELINES"] = "0";
             if (!s.Bool("exp_occlusion")) env["BB_OCCLUSION"] = "0";
+            if (s.Bool("exp_sharp_ui")) env["BB_SHARP_UI"] = "1";
             if (!s.Bool("exp_fast_draws"))
             {
                 env["BB_SUBMIT_END_TASKS"] = "0";
@@ -170,6 +177,11 @@ namespace BloodborneLauncher.Core
             var output = s.Bool("safe_mode_next") ? "" : s.Str("sound_output");
             if (output.StartsWith("directsound")) env["SDL_AUDIO_DRIVER"] = "directsound";
             if (output == "directsound_large") env["SDL_AUDIO_DEVICE_SAMPLE_FRAMES"] = "2048";
+            if (s.Bool("exp_fast_loading")) env["BB_FAST_LOADING"] = "1";
+            if (s.Bool("exp_hot_pages")) env["BB_HOT_PAGES"] = "2";
+            if (s.Bool("exp_sfx_workaround")) env["BB_SFX_WORKAROUND"] = "1";
+            if (s.Bool("exp_camera_easing")) env["BB_CAMERA_FIX"] = "1";
+            if (s.Bool("borderless_fullscreen")) env["BB_EXCLUSIVE_FULLSCREEN"] = "0";
             if (!s.Bool("exp_compile_skip"))
             {
                 env["BB_SKIP_UNCOMPILED"] = "0";
@@ -177,14 +189,26 @@ namespace BloodborneLauncher.Core
                 env["BB_PIPELINE_TAKE"] = "0";
             }
             if (s.Bool("section_stats")) env["BB_SECTIONS"] = "1";
+            if (s.Str("overlay_keys") is "insert" or "off") env["BB_OVERLAY_KEYS"] = s.Str("overlay_keys");
+            if (s.Bool("legacy_shaders")) env["BB_NATIVE_SHADERS"] = "0";
+            if (s.Str("dlss_preset") is { Length: > 0 } dlss && dlss != "k") env["BB_DLSS_PRESET"] = dlss;
+            if (s.Bool("shader_capture"))
+            {
+                env["BB_SHADER_CAPTURE"] = "1";
+                env["BB_SHADER_CAPTURE_DIR"] = Path.Combine(Path.GetDirectoryName(GameRunner.SessionLog)!, "shaders");
+            }
             if (s.Bool("safe_mode_next"))
             {
                 // Safe mode (after a crash, one run): every experimental engine option and the mods off.
+                env.Remove("BB_FAST_LOADING");
+                env.Remove("BB_HOT_PAGES");
+                env.Remove("BB_CAMERA_FIX");
                 env["BB_PRECISE_PACING"] = "0";
                 env["BB_IMAGE_WRITEBACK_GC"] = "0";
                 env["BB_GC_PRESSURE_PERCENT"] = "0";
                 env["BB_GC_PRESSURE_SECONDS"] = "0";
                 env["BB_GPU_THREAD_PRIORITY"] = "0";
+                env["BB_NATIVE_SHADERS"] = "0";
                 env["BB_SLEEP_SPIN_US"] = "600";
                 env["BB_ASYNC_PIPELINES"] = "0";
                 env["BB_OCCLUSION"] = "0";
@@ -198,25 +222,37 @@ namespace BloodborneLauncher.Core
                 env["BB_PIPELINE_TAKE"] = "0";
                 env["BB_MODS_ENABLED"] = "0";
             }
-            // The account password never goes to bbport.ini; the engine takes it from here.
-            if (s.OnlinePassword is { Length: > 0 } password) env["BB_SHADNET_PASSWORD"] = password;
             // The Hunter's Dream account (scripts/online.py uses it in that pool only).
             if (s.HuntersDreamToken is { Length: > 0 } token && s.Str("hd_name") is { Length: > 0 } name)
             {
                 env["BB_THD_TOKEN"] = token;
                 env["BB_THD_ONLINE_ID"] = name;
             }
-            // What this client reports to the shadNet server after signing in (it signs out clients that report none).
+            // The client version the online backend reports to the server.
             env["BB_CLIENT_VERSION"] = "shadPS4 Awakenchan/v0.20.0";
 
+            // The Engine page's switches, only those changed from the engine's default; safe mode
+            // starts without them, as without the other experimental options.
+            if (!s.Bool("safe_mode_next"))
+                foreach (var (variable, value) in EngineSwitches.Changed(s))
+                    env[variable] = value;
+
+            // Extra variables last: they win over everything above.
+            foreach (var (variable, value) in ExtraVariables(s))
+                env[variable] = value;
+            WindowsMonitors.ApplyEnvironment(s.Str("display_device"), WindowsMonitors.All(), env);
+            return env;
+        }
+
+        /// <summary>Settings › Diagnostics › Extra variables: NAME=value pairs separated by spaces.</summary>
+        public static IEnumerable<(string Name, string Value)> ExtraVariables(LauncherSettings s)
+        {
             foreach (var item in s.Str("extra_env").Split(' ', StringSplitOptions.RemoveEmptyEntries))
             {
                 var at = item.IndexOf('=');
                 if (at > 0)
-                    env[item[..at]] = item[(at + 1)..];
+                    yield return (item[..at], item[(at + 1)..]);
             }
-            WindowsMonitors.ApplyEnvironment(s.Str("display_device"), WindowsMonitors.All(), env);
-            return env;
         }
 
         /// <summary>SDL3 hints for controllers, given to the game and used by the launcher's own SDL (SdlPad).</summary>

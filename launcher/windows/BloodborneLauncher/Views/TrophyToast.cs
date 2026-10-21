@@ -58,6 +58,10 @@ namespace BloodborneLauncher.Views
         private TrophyToast(Trophy trophy, string corner)
         {
             _corner = corner;
+            // Crisp text, as the main window's (a window does not inherit them).
+            System.Windows.Media.TextOptions.SetTextFormattingMode(this, System.Windows.Media.TextFormattingMode.Display);
+            System.Windows.Media.TextOptions.SetTextHintingMode(this, System.Windows.Media.TextHintingMode.Fixed);
+            UseLayoutRounding = true;
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
             Background = Brushes.Transparent;
@@ -112,7 +116,7 @@ namespace BloodborneLauncher.Views
 
             var earned = new TextBlock
             {
-                Text = "You have earned a trophy!",
+                Text = L.T("You have earned a trophy!"),
                 FontFamily = face,
                 FontSize = 13.5,
                 Foreground = new SolidColorBrush(Color.FromRgb(0xC9, 0xCB, 0xCF)),

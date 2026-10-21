@@ -47,6 +47,8 @@ namespace BloodborneLauncher.Core
         public SessionStats? Session { get; private set; }
         /// <summary>The game ended by itself with an error (not stopped from here): exit code and session.</summary>
         public event Action<int, SessionStats>? GameCrashed;
+        /// <summary>The game ended after The Hunter's Dream refused this PC's sign-in: account name and reason.</summary>
+        public event Action<string, string>? SignInRefused;
         private bool _stopping;
 
         public void Initialise()
@@ -79,13 +81,13 @@ namespace BloodborneLauncher.Core
             _outputTimer.Start();
             Game.Exited += code => Dispatch(() =>
             {
-                Log(code == 0 ? "The game exited normally." : $"The game exited with code {code}.",
+                Log(code == 0 ? L.T("The game exited normally.") : L.F($"The game exited with code {code}."),
                     code == 0 ? LogLevel.Good : LogLevel.Warn);
-                _pendingOutput.Enqueue($"— the game exited (code {code}) —");
+                _pendingOutput.Enqueue(L.F($"— the game exited (code {code}) —"));
                 FlushOutput();
                 if (_hdrBefore.Count > 0 && WindowsHdr.Restore(_hdrBefore) is > 0 and var restored)
-                    Log(restored == 1 ? "Windows HDR was switched off during the game; turned it back on."
-                                      : $"Windows HDR was switched off on {restored} displays during the game; turned it back on.", LogLevel.Info);
+                    Log(restored == 1 ? L.T("Windows HDR was switched off during the game; turned it back on.")
+                                      : L.F($"Windows HDR was switched off on {restored} displays during the game; turned it back on."), LogLevel.Info);
                 _hdrBefore = new();
                 var stopped = _stopping;
                 _stopping = false;
@@ -96,10 +98,20 @@ namespace BloodborneLauncher.Core
                     {
                         SessionStats.AddPlaytime(Settings, PlayerProfiles.Current(Settings), session.Length);
                         SaveSoon();
-                        Log("Session: " + session.Summary, LogLevel.Info);
+                        Log(L.T("Session: ") + session.Summary, LogLevel.Info);
                     }
                     if (code != 0 && !stopped)
                         GameCrashed?.Invoke(code, session);
+                    // The server refused the account's token (the session log's THD line): kept until the
+                    // player signs in again, so the Online page marks the account, and told now.
+                    if (session.SignInRefused is { } refused)
+                    {
+                        var name = refused.Name.Length > 0 ? refused.Name : Settings.Str("hd_name");
+                        Settings.Set("hd_refused", refused.Reason);
+                        SaveSoon();
+                        Log($"The Hunter's Dream refused the sign-in as {name} ({refused.Reason}): sign in again on the Online page.", LogLevel.Warn);
+                        SignInRefused?.Invoke(name, refused.Reason);
+                    }
                 }
                 GameStateChanged?.Invoke();
             });
@@ -158,13 +170,13 @@ namespace BloodborneLauncher.Core
                     ? Latest
                     : null;
                 if (Update != null)
-                    Log($"Launcher update available: {Update.Tag} (you have {Updater.CurrentLabel}).", LogLevel.Good);
+                    Log(L.F($"Launcher update available: {Update.Tag} (you have {Updater.CurrentLabel})."), LogLevel.Good);
                 else if (!quiet)
-                    Log(Latest == null ? "No launcher release is published yet." : $"The launcher is up to date ({Updater.CurrentLabel}).", LogLevel.Good);
+                    Log(Latest == null ? L.T("No launcher release is published yet.") : L.F($"The launcher is up to date ({Updater.CurrentLabel})."), LogLevel.Good);
             }
             catch (Exception e)
             {
-                if (!quiet) Log("Could not check for updates: " + e.GetBaseException().Message, LogLevel.Warn);
+                if (!quiet) Log(L.T("Could not check for updates: ") + e.GetBaseException().Message, LogLevel.Warn);
             }
             UpdateStateChanged?.Invoke();
         }
@@ -176,7 +188,7 @@ namespace BloodborneLauncher.Core
             if (ids.Count == 0) return;
             var names = ids.Where(id => id != TrophyTracker.PlatinumId && TrophyTracker.ById.ContainsKey(id))
                 .Select(id => TrophyTracker.ById[id].Name).ToList();
-            if (names.Count > 0) Log($"Trophies already earned in this save: {string.Join(", ", names)}", LogLevel.Good);
+            if (names.Count > 0) Log(L.F($"Trophies already earned in this save: {string.Join(", ", names)}"), LogLevel.Good);
             Announce(ids.Where(id => id == TrophyTracker.PlatinumId).ToList());
             TrophiesChanged?.Invoke();
         }
@@ -187,7 +199,7 @@ namespace BloodborneLauncher.Core
             foreach (var id in ids)
             {
                 if (!TrophyTracker.ById.TryGetValue(id, out var trophy)) continue;
-                Log($"Trophy unlocked: {trophy.Name} ({trophy.Grade})", LogLevel.Good);
+                Log(L.F($"Trophy unlocked: {trophy.Name} ({trophy.Grade})"), LogLevel.Good);
                 if (Settings.Bool("trophy_notifications"))
                     Views.TrophyToast.Announce(trophy);
             }
@@ -220,13 +232,13 @@ namespace BloodborneLauncher.Core
                 else if (!_iniWarned)
                 {
                     _iniWarned = true;
-                    Log("bbport.ini not written: the engine folder is not set (Settings › Bloodborne PC).", LogLevel.Warn);
+                    Log("bbport.ini not written: the engine folder is not set (Settings › Lantern Engine).", LogLevel.Warn);
                 }
                 Saved?.Invoke();
             }
             catch (Exception e)
             {
-                Log("Could not save settings: " + e.Message, LogLevel.Bad);
+                Log(L.T("Could not save settings: ") + e.Message, LogLevel.Bad);
             }
         }
 
@@ -240,15 +252,21 @@ namespace BloodborneLauncher.Core
             OutputCleared?.Invoke();
             if (Settings.Bool("save_backups"))
             {
-                try
+                // Copied on a worker thread: the game takes ~20 s to reach its first save, and a
+                // large save folder held the launcher (Play looked stuck) while it was copied here.
+                var settings = Settings;
+                System.Threading.Tasks.Task.Run(() =>
                 {
-                    if (SaveBackups.Create(Settings) != null)
-                        Log($"Saves backed up before playing (the newest {SaveBackups.Keep} are kept).", LogLevel.Step);
-                }
-                catch (Exception e)
-                {
-                    Log("Could not back up the saves: " + e.Message, LogLevel.Warn);
-                }
+                    try
+                    {
+                        if (SaveBackups.Create(settings) != null)
+                            Log(L.F($"Saves backed up before playing (the newest {SaveBackups.Keep} are kept)."), LogLevel.Step);
+                    }
+                    catch (Exception e)
+                    {
+                        Log(L.T("Could not back up the saves: ") + e.Message, LogLevel.Warn);
+                    }
+                });
             }
             var safeMode = Settings.Bool("safe_mode_next");
             Session = new SessionStats();
@@ -259,7 +277,7 @@ namespace BloodborneLauncher.Core
                 Log(error, LogLevel.Bad);
                 return error;
             }
-            Log(GameRunner.Custom(Settings) ? "Started the game with the custom command." : "Started Bloodborne.", LogLevel.Step);
+            Log(GameRunner.Custom(Settings) ? L.T("Started the game with the custom command.") : L.T("Started Bloodborne."), LogLevel.Step);
             if (Settings.Bool("section_stats"))
             {
                 // Timing every render stage costs frame rate: one game only.
@@ -271,7 +289,7 @@ namespace BloodborneLauncher.Core
                 // One run only: the next start uses the settings as chosen again.
                 Settings.Set("safe_mode_next", false);
                 SaveSoon();
-                Log("Safe mode for this run: experimental engine options and mods are off.", LogLevel.Step);
+                Log(L.T("Safe mode for this run: experimental engine options and mods are off."), LogLevel.Step);
             }
             GameStateChanged?.Invoke();
             return null;
@@ -279,7 +297,7 @@ namespace BloodborneLauncher.Core
 
         public async Task StopGameAsync()
         {
-            Log("Stopping the game…", LogLevel.Step);
+            Log(L.T("Stopping the game…"), LogLevel.Step);
             _stopping = true;
             await Game.StopAsync();
             GameStateChanged?.Invoke();

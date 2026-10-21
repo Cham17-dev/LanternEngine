@@ -12,7 +12,8 @@ out = stage / 'out'
 out.mkdir(exist_ok=True)
 clang_bin = Path(os.environ['BB_CLANG_BIN'])
 queue = []
-for name in ['bb-probe.exe', 'bb-gpu-capabilities.exe', 'bb-engine-assets.exe']:
+# bb-start.exe: the native start (boot image, mods, patches, then bb-probe), as Lantern 9.8 runs.
+for name in ['bb-probe.exe', 'bb-start.exe', 'bb-gpu-capabilities.exe', 'bb-engine-assets.exe']:
     src = engine / 'out' / name
     if not src.is_file():
         raise RuntimeError(f'Missing build output: {src}')
@@ -40,7 +41,8 @@ while queue:
 for src in launcher.iterdir():
     if src.is_file():
         shutil.copy2(src, stage / src.name)
-shutil.copy2(Path(__file__).with_name('README.md'), stage / 'README-PsychoV30.md')
+# The repository's README (this port's) is the package's README-PsychoV30.md.
+shutil.copy2(Path(__file__).resolve().parents[2] / 'README.md', stage / 'README-PsychoV30.md')
 notices = Path(__file__).with_name('licenses')
 shutil.copytree(notices, stage / 'licenses', dirs_exist_ok=True)
 (stage / 'psychov30-example.ini').write_text(

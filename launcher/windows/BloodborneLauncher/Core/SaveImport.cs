@@ -137,10 +137,10 @@ namespace BloodborneLauncher.Core
         /// what is there.</summary>
         public static void Import(LauncherSettings s, string from)
         {
-            if (!HasSaves(from)) throw new IOException("That folder has no Bloodborne save files (userdata).");
+            if (!HasSaves(from)) throw new IOException(L.T("That folder has no Bloodborne save files (userdata)."));
             if (!IsComplete(from))
-                throw new IOException($"That save is incomplete: it has no {SlotFile}, the file the game needs to find the " +
-                                      "save slots (importing it would make the game crash). Import the whole SPRJ0005 folder.");
+                throw new IOException(L.F($"That save is incomplete: it has no {SlotFile}, the file the game needs to find the ") +
+                                      L.T("save slots (importing it would make the game crash). Import the whole SPRJ0005 folder."));
             SaveBackups.Create(s, beforeRestore: true);
             var target = Target(s);
             // Copied next to it first, so a failed copy leaves the current saves in place. Only the
@@ -149,10 +149,18 @@ namespace BloodborneLauncher.Core
             if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true);
             Directory.CreateDirectory(staging);
             // Only the save's own files: the folder may be Downloads with the save files loose in it.
-            foreach (var file in Directory.GetFiles(from).Where(IsSaveFile))
-                File.Copy(file, Path.Combine(staging, Path.GetFileName(file)));
-            if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
-            Directory.Move(staging, target);
+            try
+            {
+                foreach (var file in Directory.GetFiles(from).Where(IsSaveFile))
+                    File.Copy(file, Path.Combine(staging, Path.GetFileName(file)));
+                if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+                Directory.Move(staging, target);
+            }
+            finally
+            {
+                // A failed copy leaves no staging folder behind; kept only if it is the one copy left.
+                try { if (Directory.Exists(staging) && Directory.Exists(target)) Directory.Delete(staging, recursive: true); } catch (Exception) { }
+            }
         }
     }
 }

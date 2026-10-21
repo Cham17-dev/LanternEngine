@@ -5,11 +5,15 @@ using System.Text;
 
 namespace BloodborneLauncher.Core
 {
-    /// <summary>The online connection test: the game server (messages, bloodstains, ghosts), the
-    /// shadNet server's TCP port (sign-in, co-op), its Web API, and UDP to it (summons).</summary>
+    /// <summary>The online connection test, all on The Hunter's Dream: the game server (messages,
+    /// bloodstains, ghosts), the session service co-op signs in to, and the STUN/relay server
+    /// summons go through (the engine's thd backend, scripts/online.py).</summary>
     public static class Online
     {
         public sealed record Result(string Name, string Address, bool Ok, string Detail);
+
+        private const string Host = "thehuntersdream.com";
+        private const int SessionPort = 18671, StunPort = 3478;
 
         /// <summary>The game server as scripts/online.py uses it: empty is The Hunter's Dream, a
         /// bare name gets https://, and the old default (the public shadNet Web API, which has no
@@ -24,91 +28,88 @@ namespace BloodborneLauncher.Core
                 : text;
         }
 
-        public static async Task<List<Result>> CheckAsync(string gameServer, string server, string webapi)
+        /// <summary>One HTTPS request to The Hunter's Dream through Windows' own TLS before the game
+        /// starts. The engine's OpenSSL trusts the roots in Windows' store, but Windows adds a root
+        /// (ISRG Root X1, The Hunter's Dream's Let's Encrypt chain) only when its own TLS needs it:
+        /// a PC that never had it failed every request with "SSL server verification failed"
+        /// (GitHub issue 46). The answer does not matter; failures are left to the game's log.</summary>
+        public static async Task PrepareTrustAsync()
+        {
+            try
+            {
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+                using var response = await http.GetAsync($"https://{Host}:{SessionPort}/");
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        public static async Task<List<Result>> CheckAsync(string gameServer)
         {
             var results = new List<Result> { await CheckGameServerAsync(gameServer) };
+            var session = $"{Host}:{SessionPort}";
             try
             {
-                var at = server.LastIndexOf(':');
-                var host = at > 0 ? server[..at] : server;
-                var port = at > 0 && int.TryParse(server[(at + 1)..], out var p) ? p : 31313;
                 using var tcp = new TcpClient();
                 using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await tcp.ConnectAsync(host, port, cancel.Token);
-                results.Add(new Result("Co-op server", server, true, ""));
+                await tcp.ConnectAsync(Host, SessionPort, cancel.Token);
+                results.Add(new Result("Co-op sessions", session, true, ""));
             }
             catch (Exception e)
             {
-                results.Add(new Result("Co-op server", server, false, e.GetBaseException().Message));
+                results.Add(new Result("Co-op sessions", session, false, e.GetBaseException().Message));
             }
-
-            try
-            {
-                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-                var body = await http.GetStringAsync(webapi.TrimEnd('/') + "/status");
-                var ok = body.Replace(" ", "").Contains("\"ok\":true");
-                results.Add(new Result("Web API", webapi, ok, ok ? "" : "not a shadNet server"));
-            }
-            catch (Exception e)
-            {
-                results.Add(new Result("Web API", webapi, false, e.GetBaseException().Message));
-            }
+            results.Add(await CheckStunAsync());
             return results;
         }
 
-        /// <summary>
-        /// The path summons take: the game's signaling ping to the shadNet server's UDP port (its
-        /// TCP port + 1), command 1 with the account name, framed both ways the engine sends it
-        /// (the shadPS4 server's PS4 datagram [FF 83 FF FF FF FF], a shadp2p server's 4-byte vport
-        /// header). The server answers with the address it saw: UDP gets through, and that is the
-        /// address other players are given. Sent from the game's P2P port when it is free, so the
-        /// router's mapping for that port is the one tested. The public server answers only players
-        /// signed in from the game, so no answer proves nothing: null then.
-        /// </summary>
-        public static async Task<Result?> CheckUdpAsync(string host, int tcpPort, string account, int localPort)
+        /// <summary>A STUN binding request (RFC 5389) to the relay summons use: an answer means UDP
+        /// gets through, with the address other players see.</summary>
+        private static async Task<Result> CheckStunAsync()
         {
-            var address = $"{host}:{tcpPort + 1} (UDP)";
+            var address = L.F($"{Host}:{StunPort} (UDP)");
             try
             {
-                var ip = (await Dns.GetHostAddressesAsync(host)).First(a => a.AddressFamily == AddressFamily.InterNetwork);
-                UdpClient udp;
-                try { udp = new UdpClient(localPort); }
-                catch (SocketException) { udp = new UdpClient(0); } // the game holds it
-                using (udp)
+                var ip = (await Dns.GetHostAddressesAsync(Host)).First(a => a.AddressFamily == AddressFamily.InterNetwork);
+                using var udp = new UdpClient(0);
+                var request = new byte[20];
+                request[1] = 0x01; // Binding Request, no attributes
+                request[4] = 0x21; request[5] = 0x12; request[6] = 0xA4; request[7] = 0x42;
+                Random.Shared.NextBytes(request.AsSpan(8, 12));
+                var server = new IPEndPoint(ip, StunPort);
+                for (var attempt = 0; attempt < 3; ++attempt)
                 {
-                    var ping = new byte[21];
-                    ping[0] = 0x01;
-                    var name = Encoding.UTF8.GetBytes(account);
-                    Array.Copy(name, 0, ping, 1, Math.Min(name.Length, 16));
-                    byte[] Framed(params byte[] header) => header.Concat(ping).ToArray();
-                    var ps4 = Framed(0xFF, 0x83, 0xFF, 0xFF, 0xFF, 0xFF);
-                    var shadp2p = Framed(0xFF, 0xFF, 0xFF, 0xFF);
-                    var server = new IPEndPoint(ip, tcpPort + 1);
-                    for (var attempt = 0; attempt < 3; ++attempt)
+                    await udp.SendAsync(request, request.Length, server);
+                    using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    try
                     {
-                        await udp.SendAsync(ps4, ps4.Length, server);
-                        await udp.SendAsync(shadp2p, shadp2p.Length, server);
-                        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                        try
+                        var b = (await udp.ReceiveAsync(cancel.Token)).Buffer;
+                        if (b.Length < 20 || b[0] != 0x01 || b[1] != 0x01 || !b.AsSpan(8, 12).SequenceEqual(request.AsSpan(8, 12)))
+                            continue;
+                        // The mapped address, IPv4: XOR-MAPPED-ADDRESS (0x0020, or 0x8020 from older
+                        // servers, XORed with the magic cookie) or plain MAPPED-ADDRESS (0x0001).
+                        for (var at = 20; at + 12 <= b.Length; at += 4 + ((b[at + 2] << 8 | b[at + 3]) + 3) / 4 * 4)
                         {
-                            var b = (await udp.ReceiveAsync(cancel.Token)).Buffer;
-                            var at = b.Length >= 12 && b[0] == 0xFF && b[1] == 0x83 ? 6
-                                : b.Length >= 10 && b[0] == 0xFF && b[1] == 0xFF ? 4 : -1;
-                            if (at < 0) continue;
-                            var external = new IPAddress(new ReadOnlySpan<byte>(b, at, 4));
-                            var port = (b[at + 4] << 8) | b[at + 5];
-                            return new Result("Co-op UDP", address, true, $"the server sees you at {external}:{port}");
+                            var type = b[at] << 8 | b[at + 1];
+                            if (type is not (0x0020 or 0x8020 or 0x0001) || b[at + 5] != 0x01) continue;
+                            var xor = type != 0x0001;
+                            var port = (b[at + 6] << 8 | b[at + 7]) ^ (xor ? 0x2112 : 0);
+                            var ipBytes = new byte[4];
+                            for (var k = 0; k < 4; ++k) ipBytes[k] = (byte)(b[at + 8 + k] ^ (xor ? request[4 + k] : 0));
+                            return new Result("Co-op relay", address, true, L.F($"the server sees you at {new IPAddress(ipBytes)}:{port}"));
                         }
-                        catch (OperationCanceledException)
-                        {
-                        }
+                        return new Result("Co-op relay", address, true, "");
                     }
-                    return null;
+                    catch (OperationCanceledException)
+                    {
+                    }
                 }
+                return new Result("Co-op relay", address, false, "no answer (a firewall or VPN may block UDP)");
             }
             catch (Exception e)
             {
-                return new Result("Co-op UDP", address, false, e.GetBaseException().Message);
+                return new Result("Co-op relay", address, false, e.GetBaseException().Message);
             }
         }
 
@@ -125,15 +126,15 @@ namespace BloodborneLauncher.Core
                 var body = await http.GetStringAsync(uri.Uri);
                 var xml = Encoding.UTF8.GetString(Convert.FromBase64String(body.Trim()));
                 var ok = xml.Contains("<api_", StringComparison.Ordinal);
-                return new Result("Game server", gameServer, ok, ok ? "" : "not a Bloodborne game server");
+                return new Result(L.T("Game server"), gameServer, ok, ok ? "" : L.T("not a Bloodborne game server"));
             }
             catch (FormatException)
             {
-                return new Result("Game server", gameServer, false, "not a Bloodborne game server");
+                return new Result(L.T("Game server"), gameServer, false, L.T("not a Bloodborne game server"));
             }
             catch (Exception e)
             {
-                return new Result("Game server", gameServer, false, e.GetBaseException().Message);
+                return new Result(L.T("Game server"), gameServer, false, e.GetBaseException().Message);
             }
         }
     }

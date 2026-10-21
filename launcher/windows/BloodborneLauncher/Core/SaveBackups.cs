@@ -25,9 +25,12 @@ namespace BloodborneLauncher.Core
             Path.Combine(GameEnvironment.SavesRoot(s), "launcher-backups", PlayerProfiles.Current(s));
 
         /// <summary>This profile's backups, newest first.</summary>
-        public static List<Backup> List(LauncherSettings s)
+        public static List<Backup> List(LauncherSettings s) => ListIn(Folder(s));
+
+        /// <summary>The backups in a profile's backup folder, newest first. Reads the disk only (each
+        /// backup's size too), so it can run on a worker thread.</summary>
+        public static List<Backup> ListIn(string folder)
         {
-            var folder = Folder(s);
             if (!Directory.Exists(folder)) return new();
             var list = new List<Backup>();
             foreach (var dir in Directory.GetDirectories(folder))
@@ -67,7 +70,7 @@ namespace BloodborneLauncher.Core
         public static void Restore(LauncherSettings s, Backup backup)
         {
             var from = Path.Combine(backup.Dir, "savedata");
-            if (!Directory.Exists(from)) throw new DirectoryNotFoundException("This backup has no savedata folder.");
+            if (!Directory.Exists(from)) throw new DirectoryNotFoundException(L.T("This backup has no savedata folder."));
             Create(s, beforeRestore: true);
 
             var target = SaveData(s);
@@ -79,12 +82,18 @@ namespace BloodborneLauncher.Core
             Directory.Move(staging, target);
         }
 
+        /// <summary>A save import's staging folder (SaveImport): never part of the saves. One left by
+        /// an older import held a whole Downloads folder, copied into every backup.</summary>
+        private static bool Staging(string from, string path) =>
+            Path.GetRelativePath(from, path).Split(Path.DirectorySeparatorChar)
+                .Any(part => part.EndsWith(".importing", StringComparison.OrdinalIgnoreCase));
+
         private static void Copy(string from, string to)
         {
             Directory.CreateDirectory(to);
-            foreach (var dir in Directory.GetDirectories(from, "*", SearchOption.AllDirectories))
+            foreach (var dir in Directory.GetDirectories(from, "*", SearchOption.AllDirectories).Where(d => !Staging(from, d)))
                 Directory.CreateDirectory(Path.Combine(to, Path.GetRelativePath(from, dir)));
-            foreach (var file in Directory.GetFiles(from, "*", SearchOption.AllDirectories))
+            foreach (var file in Directory.GetFiles(from, "*", SearchOption.AllDirectories).Where(f => !Staging(from, f)))
                 File.Copy(file, Path.Combine(to, Path.GetRelativePath(from, file)), overwrite: true);
         }
 
@@ -92,7 +101,7 @@ namespace BloodborneLauncher.Core
         private static string Fingerprint(string dir)
         {
             var text = new StringBuilder();
-            foreach (var file in Directory.GetFiles(dir, "*", SearchOption.AllDirectories).OrderBy(f => f, StringComparer.Ordinal))
+            foreach (var file in Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Where(f => !Staging(dir, f)).OrderBy(f => f, StringComparer.Ordinal))
             {
                 var info = new FileInfo(file);
                 text.Append(Path.GetRelativePath(dir, file)).Append('|').Append(info.Length).Append('|')

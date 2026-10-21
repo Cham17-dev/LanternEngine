@@ -20,14 +20,28 @@ namespace BloodborneLauncher.Core
             ("show_fps", "1"),
             ("output_res", "1920x1080"),
             ("model_lod", "0"),
+            ("camera_tuning", "original"),
             ("live_resolution", "0"),
+            ("frame_gen", "off"),
+            ("frame_gen_cap", "1"),
+            ("fps_position", "0"),
+            ("fps_scale", "1.00"),
+            ("fps_text_color", "#FFFFFF"),
+            ("fps_bg_color", "#0F0F0F"),
+            ("fps_bg_opacity", "0.50"),
+            ("fps_text_opacity", "1.00"),
+            ("fps_border", "1"),
         };
 
         private readonly Dictionary<string, string?> _values = new(StringComparer.Ordinal);
         private List<string> _lines = new();
+        /// <summary>Keys the launcher changed since the file was read: only these are written over it.
+        /// The game edits the same file (in-game menu) while the launcher holds an older copy.</summary>
+        private readonly HashSet<string> _changed = new(StringComparer.Ordinal);
 
         public void Load()
         {
+            _changed.Clear();
             _values.Clear();
             foreach (var (key, value) in Defaults)
                 _values[key] = value;
@@ -56,6 +70,12 @@ namespace BloodborneLauncher.Core
 
         public void Save()
         {
+            // What the game wrote meanwhile stays: the file is read again and only the launcher's own
+            // changes go over it (PC Enhancements set in the game came back off after it exited).
+            var mine = _changed.ToDictionary(k => k, k => _values.TryGetValue(k, out var v) ? v : null, StringComparer.Ordinal);
+            Load();
+            foreach (var (key, value) in mine)
+                _values[key] = value;
             var written = new HashSet<string>(StringComparer.Ordinal);
             var output = new List<string>();
             foreach (var line in _lines)
@@ -92,7 +112,12 @@ namespace BloodborneLauncher.Core
 
         public bool Flag(string key) => Get(key) == "1";
 
-        public void Set(string key, string? value) => _values[key] = value;
+        public void Set(string key, string? value)
+        {
+            if (_values.TryGetValue(key, out var old) && old == value) return;
+            _values[key] = value;
+            _changed.Add(key);
+        }
 
         /// <summary>Every key with a value (shared settings).</summary>
         public IEnumerable<KeyValuePair<string, string>> Values =>

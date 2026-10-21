@@ -51,7 +51,7 @@ namespace BloodborneLauncher.Core
                 int.TryParse(ini.Get("preset", "0"), out var preset);
                 scale = PresetScales[Math.Clamp(preset, 0, PresetScales.Length - 1)];
             }
-            long rw = (long)Math.Round(w / scale / 2) * 2, rh = (long)Math.Round(h / scale / 2) * 2;
+            long rw = (long)Math.Round(w / scale / 4) * 4, rh = (long)Math.Round(h / scale / 4) * 4;
             return rw * rh > 1920 * 1080;
         }
 
@@ -67,10 +67,10 @@ namespace BloodborneLauncher.Core
                 // the pool at start (Windows error 1450): what Windows can give right now counts.
                 long available = (long)(status.AvailPageFile >> 20), pool = PoolMiB(ini);
                 if (available >= pool) return null;
-                return $"The game takes about {pool / 1024.0:0.#} GB of memory (RAM plus page file) at start, and Windows can give " +
-                       $"about {available / 1024.0:0.#} GB right now: the game would not start (Windows error 1450).\n\n" +
-                       "Close other programs (browsers, recorders), or turn Live resolution On (Display) or choose a lower " +
-                       "upscaler preset or output resolution: a scene up to 1080p needs about 4 GB less.";
+                return L.F($"The game takes about {pool / 1024.0:0.#} GB of memory (RAM plus page file) at start, and Windows can give ") +
+                       L.F($"about {available / 1024.0:0.#} GB right now: the game would not start (Windows error 1450).\n\n") +
+                       L.T("Close other programs (browsers, recorders), or turn Live resolution On (Display) or choose a lower ") +
+                       L.T("upscaler preset or output resolution: a scene up to 1080p needs about 4 GB less.");
             }
             long ram = (long)(status.TotalPhys >> 20), limit = (long)(status.TotalPageFile >> 20);
             long inUse = limit - (long)(status.AvailPageFile >> 20);
@@ -78,11 +78,11 @@ namespace BloodborneLauncher.Core
             long pageFile = Math.Max(maxPageFileMiB, limit - ram);
             long room = ram + pageFile - inUse, need = NeededMiB(ini);
             if (room >= need) return null;
-            var file = pageFile < 256 ? "the page file is off" : $"the page file is fixed at {pageFile / 1024.0:0.#} GB";
-            return $"The game needs about {need / 1024.0:0.#} GB of memory (RAM plus page file). With the programs open now, " +
-                   $"about {Math.Max(0, room) / 1024.0:0.#} GB is left, because {file}. Windows can run out during play, and the game then crashes.\n\n" +
-                   "To fix it, set the page file to System managed size: Windows Settings › System › About › Advanced system settings › " +
-                   "Performance Settings › Advanced › Virtual memory › Change. Closing other programs also helps.";
+            var file = pageFile < 256 ? L.T("the page file is off") : L.F($"the page file is fixed at {pageFile / 1024.0:0.#} GB");
+            return L.F($"The game needs about {need / 1024.0:0.#} GB of memory (RAM plus page file). With the programs open now, ") +
+                   L.F($"about {Math.Max(0, room) / 1024.0:0.#} GB is left, because {file}. Windows can run out during play, and the game then crashes.\n\n") +
+                   L.T("To fix it, set the page file to System managed size: Windows Settings › System › About › Advanced system settings › ") +
+                   L.T("Performance Settings › Advanced › Virtual memory › Change. Closing other programs also helps.");
         }
 
         /// <summary>Whether Windows manages the page file size, else the configured maximum in MiB
