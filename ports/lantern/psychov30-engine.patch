@@ -10,13 +10,14 @@ index 0000000..041ff71
 +extern glm::vec4* g_out;
 diff --git a/docs/hdr-tools/gamut_bridge_check/main.cpp b/docs/hdr-tools/gamut_bridge_check/main.cpp
 new file mode 100644
-index 0000000..2bc3b04
+index 0000000..e64cb58
 --- /dev/null
 +++ b/docs/hdr-tools/gamut_bridge_check/main.cpp
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,79 @@
 +#include "spirv_cross/external_interface.h"
 +#define GLM_FORCE_SWIZZLE
 +#include <glm/glm.hpp>
++#include <algorithm>
 +#include <cmath>
 +#include <cstdio>
 +#include <vector>
