@@ -4,6 +4,10 @@ on:
   push:
     branches: [lantern-psychov30, lantern-psychov30-beta]
     paths: ['ports/lantern/**', 'launcher/**', 'engine/**', 'README.md', '.github/workflows/lantern-psychov30.yml']
+  # A release published on GitHub (tag v<version>, e.g. v0.9.36-beta.1): built with that
+  # version, its package, launcher and package.json attached to it (job publish).
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       baseline_check:
@@ -80,6 +84,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      # The version the launcher reports and its updater compares with the releases' tags: a
+      # release's tag, else ports/lantern/VERSION.
+      - name: Release version
+        id: version
+        shell: pwsh
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $v = if ($env:TAG) { $env:TAG } else { Get-Content ports/lantern/VERSION -TotalCount 1 }
+          $v = $v.Trim().TrimStart('v', 'V')
+          if ($v -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$') { throw "Unexpected version '$v'" }
+          "full=$v" >> $env:GITHUB_OUTPUT
+          "number=$(($v -split '-')[0])" >> $env:GITHUB_OUTPUT
+          Write-Output "Version $v"
       - name: Reconstruct Lantern baseline
         run: python ports/lantern/prepare.py baseline engine-src upstream-lantern
       - uses: msys2/setup-msys2@v2
@@ -128,6 +146,8 @@ jobs:
           dotnet publish launcher/windows/BloodborneLauncher/BloodborneLauncher.csproj
           -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ steps.version.outputs.number }}
+          -p:InformationalVersion=${{ steps.version.outputs.full }}
           -o launcher-port
       - name: Verify launcher paths
         shell: pwsh
@@ -144,6 +164,8 @@ jobs:
           export BB_CLANG_BIN="$(cygpath -w /clang64/bin)"
           python ports/lantern/package_engine.py engine-src stage launcher-port
       - name: Assemble complete matching runtime
+        env:
+          BB_RELEASE_VERSION: ${{ steps.version.outputs.full }}
         run: python ports/lantern/distribution.py engine-src stage distribution runtime-downloads
       - name: Smoke check shipped preparation runtime
         run: python ports/lantern/package_check.py distribution
@@ -151,9 +173,44 @@ jobs:
         with:
           name: lantern-psychov30-package
           path: distribution/
+      # A release's files, as the launcher's updater reads them (Updater.cs): the package zip,
+      # Lantern Engine.exe on its own and package.json.
+      - name: Release files
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.full }}
+        run: |
+          New-Item -ItemType Directory release-files, pack | Out-Null
+          Copy-Item distribution pack/LanternEngine-PsychoV30 -Recurse
+          7z a -tzip -mx=5 "release-files/LanternEngine-PsychoV30-v$env:VERSION-win64.zip" ./pack/LanternEngine-PsychoV30
+          if ($LASTEXITCODE -ne 0) { throw "7z failed" }
+          Copy-Item "distribution/Lantern Engine.exe", distribution/package.json release-files/
+          Get-ChildItem release-files | Format-Table Name, Length
+      - if: github.event_name == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lantern-psychov30-release
+          path: release-files/
       - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: lantern-build-log
           path: engine-src/out/gpu-build.log
+  publish:
+    if: github.event_name == 'release'
+    needs: [shaders, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lantern-psychov30-release
+          path: release-files
+      - name: Attach the files to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" release-files/* --clobber --repo "$GITHUB_REPOSITORY"

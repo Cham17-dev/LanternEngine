@@ -98,6 +98,21 @@ SHA-256 checks. The game starts through `bb-start.exe` (built here, as Lantern 0
 Python 3.12.10 and the preparation scripts stay as a fallback. CI checks both
 folder layouts and runs the shipped Python through imports and game detection.
 
+### Releases
+
+The launcher updates itself from this fork's GitHub releases (`Updater.cs`): it compares its own
+version with the releases' tags (`v0.9.36-beta.1`: a beta, offered to beta builds; `v0.9.36`:
+stable) and downloads the package zip, or only `Lantern Engine.exe` when `package.json` names the
+same engine. The version a build reports comes from `ports/lantern/VERSION`, or from the release's
+tag when the workflow runs for a release.
+
+To publish: on GitHub, *Releases > Draft a new release*, a new tag `v<version>` on
+`lantern-psychov30` (with `-beta.<n>` and *Set as a pre-release* for a beta), then *Publish*. The
+workflow builds that version and attaches `LanternEngine-PsychoV30-v<version>-win64.zip`,
+`Lantern Engine.exe` and `package.json` to the release (job `publish`); the files appear about
+fifteen minutes later. Raise `ports/lantern/VERSION` to the next version afterwards, so CI builds
+between releases report it.
+
 ### Rendering
 
 - **16-bit chain.** After the composite, the game's chain runs in RGBA16F (gamma 2.2, BT.709),

@@ -6,6 +6,7 @@ engine, helper programs, launcher and preparation scripts all come from our buil
 """
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import shutil
 import sys
@@ -72,8 +73,11 @@ def assemble(engine, overlay, destination, cache):
         embedded.extractall(python)
     # Embedded Python ignores the script directory unless explicitly added to its _pth.
     (python / 'python312._pth').write_text('python312.zip\n.\n../../scripts\n', encoding='ascii')
+    # The release's version: the workflow's (a release's tag), else ports/lantern/VERSION.
+    version = os.environ.get('BB_RELEASE_VERSION') or (Path(__file__).with_name('VERSION')
+                                                        .read_text(encoding='utf-8').strip())
     (destination / 'package.json').write_text(json.dumps({
-        'version': '0.9.36-psychov30', 'engine': 'lantern-16d7b51-psychov30-v1',
+        'version': version, 'engine': 'lantern-16d7b51-psychov30-v1',
         'source': 'https://github.com/Cham17-dev/LanternEngine/tree/lantern-psychov30',
         'runtime_resources': 'v0.9.36', 'python': '3.12.10',
     }, indent=2), encoding='utf-8')
