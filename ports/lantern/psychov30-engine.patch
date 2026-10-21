@@ -1,3 +1,316 @@
+diff --git a/docs/hdr-tools/gamut_bridge_check/glob.h b/docs/hdr-tools/gamut_bridge_check/glob.h
+new file mode 100644
+index 0000000..7a3c197
+--- /dev/null
++++ b/docs/hdr-tools/gamut_bridge_check/glob.h
+@@ -0,0 +1,9 @@
++#pragma once
++#include <glm/glm.hpp>
++// The check's push constant: which value the shaders output (main.cpp).
++struct PCData {
++    int mode;
++};
++extern glm::vec4* g_in;
++extern glm::vec4* g_out;
++extern PCData g_pc;
+diff --git a/docs/hdr-tools/gamut_bridge_check/main.cpp b/docs/hdr-tools/gamut_bridge_check/main.cpp
+new file mode 100644
+index 0000000..2f25ae6
+--- /dev/null
++++ b/docs/hdr-tools/gamut_bridge_check/main.cpp
+@@ -0,0 +1,76 @@
++#include "spirv_cross/external_interface.h"
++#define GLM_FORCE_SWIZZLE
++#include <glm/glm.hpp>
++#include <cmath>
++#include <cstdio>
++#include <vector>
++#include "glob.h"
++glm::vec4* g_in; glm::vec4* g_out; PCData g_pc;
++extern "C" const spirv_cross_interface* orig_iface(void);
++extern "C" const spirv_cross_interface* port_iface(void);
++
++static void run(const spirv_cross_interface* iface, std::vector<glm::vec4>& in, std::vector<glm::vec4>& out) {
++    auto* sh = iface->construct();
++    g_in = in.data(); g_out = out.data();
++    glm::uvec3 groups(in.size() / 64, 1, 1), id(0, 0, 0);
++    spirv_cross_set_builtin(sh, SPIRV_CROSS_BUILTIN_NUM_WORK_GROUPS, &groups, sizeof(groups));
++    spirv_cross_set_builtin(sh, SPIRV_CROSS_BUILTIN_WORK_GROUP_ID, &id, sizeof(id));
++    for (unsigned g = 0; g < groups.x; ++g) { id.x = g; iface->invoke(sh); }
++    iface->destruct(sh);
++}
++
++int main() {
++    // Grey, BT.709 colors (in gamut), BT.2020 primaries and mixes given in BT.709 (outside it:
++    // negative channels), pastel and saturated, from dark to well above white.
++    std::vector<glm::vec4> in;
++    for (int i = 0; i < 32; ++i) { float v = std::pow(10.f, -4.f + 6.f * i / 31.f); in.push_back({v, v, v, 1}); }
++    const float hues[][3] = {{1,0,0},{0,1,0},{0,0,1},{1,1,0},{0,1,1},{1,0,1},{1,.5f,0},{1,.2f,.1f},
++                             {.2f,1,.3f},{.3f,.4f,1},{1,.9f,.7f},{.6f,.7f,1},
++                             // BT.2020 red, green, blue, and partly outside BT.709
++                             {1.6605f,-.1246f,-.0182f},{-.5876f,1.1329f,-.1006f},{-.0728f,-.0083f,1.1187f},
++                             {1.2f,-.05f,-.02f},{-.1f,1,.2f},{.1f,-.08f,1},{.5f,.5f,-.2f},{1,-.3f,.4f}};
++    for (auto& h : hues) for (int i = 0; i < 24; ++i) {
++        float v = std::pow(10.f, -3.f + 5.f * i / 23.f); in.push_back({h[0]*v, h[1]*v, h[2]*v, 1}); }
++    in.push_back({0, 0, 0, 1});
++    while (in.size() % 64) in.push_back({0.18f, 0.18f, 0.18f, 1});
++    std::vector<glm::vec4> a(in.size()), b(in.size());
++    const char* names[] = {"compression scale", "compressed", "compressed then decompressed",
++                           "Neutwo max-channel scale"};
++    int bad = 0;
++    for (int mode = 0; mode < 4; ++mode) {
++        g_pc = PCData{mode};
++        run(orig_iface(), in, a); run(port_iface(), in, b);
++        double worst = 0; int worst_i = 0, nan_mismatch = 0;
++        for (size_t i = 0; i < in.size(); ++i) {
++            double ref = std::max(1e-3, (double)std::max({std::fabs(a[i].x), std::fabs(a[i].y), std::fabs(a[i].z)}));
++            for (int k = 0; k < 3; ++k) {
++                float x = a[i][k], y = b[i][k];
++                if (std::isnan(x) != std::isnan(y)) { ++nan_mismatch; continue; }
++                if (std::isnan(x)) continue;
++                double rel = std::fabs(x - y) / ref;
++                if (rel > worst) { worst = rel; worst_i = int(i); }
++            }
++        }
++        bool ok = worst < 1e-3 && !nan_mismatch;
++        bad += !ok;
++        printf("%-30s max diff %.2e (of the largest channel)  NaN mismatches %d  %s\n", names[mode], worst,
++               nan_mismatch, ok ? "OK" : "DIFF");
++        if (!ok) printf("   input (%g %g %g): orig (%g %g %g) port (%g %g %g)\n", in[worst_i].x, in[worst_i].y,
++                        in[worst_i].z, a[worst_i].x, a[worst_i].y, a[worst_i].z, b[worst_i].x, b[worst_i].y, b[worst_i].z);
++    }
++    // What the bridge does to colors outside BT.709 (RenoDX's own code): their compression scale
++    // and the most negative channel left after it.
++    g_pc.mode = 0; run(orig_iface(), in, a);
++    g_pc.mode = 1; run(orig_iface(), in, b);
++    int outside = 0, compressed = 0; float worst_neg = 0;
++    for (size_t i = 0; i < in.size(); ++i) {
++        if (std::min({in[i].x, in[i].y, in[i].z}) < 0) {
++            ++outside;
++            compressed += a[i].x < 1.f;
++            worst_neg = std::min({worst_neg, b[i].x, b[i].y, b[i].z});
++        }
++    }
++    printf("\noutside BT.709: %d inputs, %d compressed (scale < 1); most negative channel after: %g\n",
++           outside, compressed, worst_neg);
++    return bad;
++}
+diff --git a/docs/hdr-tools/gamut_bridge_check/orig.hlsl b/docs/hdr-tools/gamut_bridge_check/orig.hlsl
+new file mode 100644
+index 0000000..32e0f00
+--- /dev/null
++++ b/docs/hdr-tools/gamut_bridge_check/orig.hlsl
+@@ -0,0 +1,19 @@
++#include "color/gamut.hlsl"
++StructuredBuffer<float4> inputs : register(t0);
++RWStructuredBuffer<float4> outputs : register(u1);
++struct P {
++  int mode;
++};
++[[vk::push_constant]] P pc;
++[numthreads(64, 1, 1)]
++void main(uint3 id : SV_DispatchThreadID) {
++  float3 c = inputs[id.x].xyz;
++  float3 adaptive = lms_from_BT709(float3(1.f, 1.f, 1.f));
++  float scale = ComputeGamutCompressionScaleBT709AdaptiveD65(c, adaptive, 1.f);
++  float3 compressed = GamutCompressBT709AdaptiveD65(c, adaptive, scale);
++  float4 o = float4(scale, 0.f, 0.f, 1.f);
++  if (pc.mode == 1) o = float4(compressed, 1.f);
++  if (pc.mode == 2) o = float4(GamutDecompressBT709AdaptiveD65(compressed, adaptive, scale), 1.f);
++  if (pc.mode == 3) o = float4(ComputeMaxChannelScale(c), 0.f, 0.f, 1.f);
++  outputs[id.x] = o;
++}
+diff --git a/docs/hdr-tools/gamut_bridge_check/port.comp b/docs/hdr-tools/gamut_bridge_check/port.comp
+new file mode 100644
+index 0000000..61e589d
+--- /dev/null
++++ b/docs/hdr-tools/gamut_bridge_check/port.comp
+@@ -0,0 +1,20 @@
++#version 450
++#extension GL_GOOGLE_include_directive : require
++#include "gamut_bridge.glsl"
++layout(local_size_x = 64) in;
++layout(std430, binding = 0) readonly buffer In { vec4 inputs[]; };
++layout(std430, binding = 1) writeonly buffer Out { vec4 outputs[]; };
++layout(push_constant) uniform P {
++    int mode;
++} pc;
++void main() {
++    uint i = gl_GlobalInvocationID.x;
++    vec3 c = inputs[i].xyz;
++    float scale = bb_gamut_compression_scale(c);
++    vec3 compressed = bb_gamut_compress(c, scale);
++    vec4 o = vec4(scale, 0.0, 0.0, 1.0);
++    if (pc.mode == 1) o = vec4(compressed, 1.0);
++    if (pc.mode == 2) o = vec4(bb_gamut_decompress(compressed, scale), 1.0);
++    if (pc.mode == 3) o = vec4(bb_neutwo_max_channel_scale(c), 0.0, 0.0, 1.0);
++    outputs[i] = o;
++}
+diff --git a/docs/hdr-tools/gamut_bridge_check/prepare_gamut.py b/docs/hdr-tools/gamut_bridge_check/prepare_gamut.py
+new file mode 100644
+index 0000000..d1d51ee
+--- /dev/null
++++ b/docs/hdr-tools/gamut_bridge_check/prepare_gamut.py
+@@ -0,0 +1,87 @@
++"""Prepare RenoDX's gamut.hlsl for glslang's HLSL front end: namespaces removed, qualified calls
++renamed to the shim's functions (copied from macleod_boynton.hlsl, rgb.hlsl and neutwo.hlsl).
++The gamut code itself is unchanged. Usage: python -I prepare_gamut.py <renodx> <out dir>
++(standalone: the shim has the matrices it needs)."""
++import os, re, sys
++
++src_root, out = sys.argv[1], sys.argv[2]
++shaders = os.path.join(src_root, 'src', 'shaders')
++gamut = open(os.path.join(shaders, 'color', 'gamut.hlsl')).read()
++gamut = gamut[:gamut.index('float3 GamutCompressLMS(')] + '#endif\n'  # the include guard's
++for a, b in [('renodx::color::macleod_boynton::from::WeightedLMS', 'mb_from_WeightedLMS'),
++             ('renodx::color::macleod_boynton::WeightedLMSFromMacleodBoynton', 'mb_WeightedLMSFromMacleodBoynton'),
++             ('renodx::color::macleod_boynton::from::D65XY', 'mb_D65XY'),
++             ('renodx::color::macleod_boynton::WeighLMS', 'mb_WeighLMS'),
++             ('renodx::color::macleod_boynton::UnweighLMS', 'mb_UnweighLMS'),
++             ('renodx::color::macleod_boynton::BT709_TO_LMS_WEIGHTED_MAT', 'MB_BT709_TO_LMS_WEIGHTED_MAT'),
++             ('renodx::color::lms::from::BT709', 'lms_from_BT709'),
++             ('renodx::color::bt709::from::LMS', 'bt709_from_LMS'),
++             ('renodx::math::DivideSafe', 'DivideSafe'),
++             # glslang's HLSL front end crashes on array sizes given by a constant
++             ('[CIE1702_EDGE_COUNT] =', '[7] ='), ('[CIE1702_BOUNDARY_POINT_COUNT] =', '[89] ='),
++             ('renodx::math::FLT_MAX', 'FLT_MAX'),
++             ('#include "./macleod_boynton.hlsl"', '#include "color/mb_shim.hlsl"')]:
++    gamut = gamut.replace(a, b)
++gamut = re.sub(r'^namespace \w+ \{\n', '', gamut, flags=re.M)
++if 'renodx::' in gamut:
++    sys.exit('unresolved: ' + re.findall(r'renodx::[\w:]+', gamut)[0])
++open(os.path.join(out, 'color', 'gamut.hlsl'), 'w').write(gamut)
++
++# Matrices as literals (RenoDX's rgb.hlsl values; the LMS inverse in double precision): glslang's
++# HLSL front end crashes on the shim's function-call initializers (Invert3x3) in this shader.
++shim = r'''static const float3x3 BT709_TO_XYZ_MAT = float3x3(
++    0.4123907993f, 0.3575843394f, 0.1804807884f,
++    0.2126390059f, 0.7151686788f, 0.0721923154f,
++    0.0193308187f, 0.1191947798f, 0.9505321522f);
++static const float3x3 XYZ_TO_BT709_MAT = float3x3(
++    3.2409699419f, -1.5373831776f, -0.4986107603f,
++    -0.9692436363f, 1.8759675015f, 0.0415550574f,
++    0.0556300797f, -0.2039769589f, 1.0569715142f);
++static const float3x3 STOCKMAN_CVRL_XYZ_TO_LMS_2DEG_FIT = float3x3(
++    0.2670502842655792, 0.8471990148492798, -0.03470416612462053,
++    -0.38706882411220156, 1.165429935890458, 0.10302286696614202,
++    0.026727793989083093, -0.02729131667566509, 0.5333267257603284);
++static const float3x3 STOCKMAN_CVRL_LMS_TO_XYZ_2DEG_FIT = float3x3(
++    1.81146296369, -1.30814926125, 0.370569464061,
++    0.606912405731, 0.415906259283, -0.0408482553314,
++    -0.0597250591702, 0.0868409009978, 1.8543617735);
++static const float3 CIE1702_MB_CIE_WEIGHTS = float3(0.68990272f, 0.34832189f, 0.0371597069161f);
++float Max(float3 v) { return max(v.x, max(v.y, v.z)); }
++static const float FLT_MAX = 3.402823466e+38f;
++float DivideSafe(float a, float b, float f) { return b == 0.f ? f : a / b; }
++float3 DivideSafe(float3 a, float3 b, float f) {
++  return float3(DivideSafe(a.x, b.x, f), DivideSafe(a.y, b.y, f), DivideSafe(a.z, b.z, f));
++}
++float3 mb_WeighLMS(float3 lms) { return lms * CIE1702_MB_CIE_WEIGHTS; }
++float3 mb_UnweighLMS(float3 w) { return w / CIE1702_MB_CIE_WEIGHTS; }
++float3 mb_WeightedLMSFromMacleodBoynton(float2 mb, float l_plus_m) {
++  return float3(mb.x, (1.f - mb.x), mb.y) * l_plus_m;
++}
++float3 mb_from_WeightedLMS(float3 weighted_lms) {
++  float y_mb = max(weighted_lms.x + weighted_lms.y, 0);
++  float inv = DivideSafe(1.f, y_mb, 0.f);
++  return float3(weighted_lms.x * inv, weighted_lms.z * inv, y_mb);
++}
++static const float3x3 MB_BT709_TO_LMS_WEIGHTED_MAT = mul(float3x3(
++    CIE1702_MB_CIE_WEIGHTS.x, 0.f, 0.f, 0.f, CIE1702_MB_CIE_WEIGHTS.y, 0.f, 0.f, 0.f,
++    CIE1702_MB_CIE_WEIGHTS.z), mul(STOCKMAN_CVRL_XYZ_TO_LMS_2DEG_FIT, BT709_TO_XYZ_MAT));
++float3 xyz_from_xyY(float3 xyY) {
++  float3 XYZ;
++  XYZ.xz = float2(xyY.x, (1.f - xyY.x - xyY.y)) / xyY.y * xyY[2];
++  XYZ.y = xyY[2];
++  return XYZ;
++}
++float2 mb_D65XY() {
++  float3 xyz = xyz_from_xyY(float3(0.31272f, 0.32903f, 1.f));
++  return mb_from_WeightedLMS(mb_WeighLMS(mul(STOCKMAN_CVRL_XYZ_TO_LMS_2DEG_FIT, xyz))).xy;
++}
++float3 lms_from_BT709(float3 bt709) { return mul(STOCKMAN_CVRL_XYZ_TO_LMS_2DEG_FIT, mul(BT709_TO_XYZ_MAT, bt709)); }
++float3 bt709_from_LMS(float3 lms) { return mul(XYZ_TO_BT709_MAT, mul(STOCKMAN_CVRL_LMS_TO_XYZ_2DEG_FIT, lms)); }
++float Neutwo(float x) { return x * rsqrt(mad(x, x, 1.0)); }
++float ComputeMaxChannelScale(float3 color) {
++  float max_channel = Max(abs(color.rgb));
++  float new_max = Neutwo(max_channel);
++  return max_channel != 0 ? (new_max / max_channel) : 1.f;
++}
++'''
++open(os.path.join(out, 'color', 'mb_shim.hlsl'), 'w').write(shim)
+diff --git a/docs/hdr-tools/gamut_bridge_check/run.py b/docs/hdr-tools/gamut_bridge_check/run.py
+new file mode 100644
+index 0000000..b559b5b
+--- /dev/null
++++ b/docs/hdr-tools/gamut_bridge_check/run.py
+@@ -0,0 +1,66 @@
++#!/usr/bin/env python3
++"""Check gamut_bridge.glsl (the color table's gamut bridge) against RenoDX's HLSL.
++
++Both are compiled with glslang (RenoDX's color/gamut.hlsl through its HLSL front end), turned
++into C++ by SPIRV-Cross and run on the CPU over grey, BT.709 and BT.2020 colors from dark to
++well above white: the compression scale, the compressed color, compressed then decompressed,
++and Neutwo's max-channel scale must agree within 1e-3 of the largest channel.
++
++Needs glslangValidator, spirv-cross, g++, GLM and SPIRV-Cross' CPU support headers. Set
++RENODX_DIR to a RenoDX checkout, SPIRV_CROSS_INCLUDE to <SPIRV-Cross checkout>/include;
++GLM_INCLUDE is optional. GLSLANG, SPIRV_CROSS and CXX can override the executable names.
++"""
++import os
++from pathlib import Path
++import re
++import subprocess
++import sys
++import tempfile
++
++
++def run(*args):
++    subprocess.run([str(a) for a in args], check=True)
++
++
++here = Path(__file__).resolve().parent
++hdr = here.parents[2] / 'gpu/shadps4/video_core/host_shaders/hdr'
++glslang = os.environ.get('GLSLANG', 'glslangValidator')
++cxx = os.environ.get('CXX', 'g++')
++with tempfile.TemporaryDirectory(prefix='gamut-bridge-') as tmp:
++    work = Path(tmp)
++    (work / 'hlsl' / 'color').mkdir(parents=True)
++    run(sys.executable, '-I', here / 'prepare_gamut.py', os.environ['RENODX_DIR'], work / 'hlsl')
++    # SPIR-V 1.3: SPIRV-Cross' CPU backend needs a literal LocalSize.
++    run(glslang, '-V', '--target-env', 'vulkan1.3', '--target-env', 'spirv1.3', f'-I{hdr}',
++        here / 'port.comp', '-o', work / 'port.spv')
++    run(glslang, '-V', '-D', '-e', 'main', '-S', 'comp', '--target-env', 'vulkan1.3',
++        '--target-env', 'spirv1.3', '-UVULKAN', f'-I{work / "hlsl"}', here / 'orig.hlsl',
++        '-o', work / 'orig.spv')
++    includes = ['-I' + str(here)]
++    for key in ['SPIRV_CROSS_INCLUDE', 'GLM_INCLUDE']:
++        if os.environ.get(key): includes.append('-I' + os.environ[key])
++    objects = []
++    for name in ['orig', 'port']:
++        cpp = work / f'{name}.cpp'
++        run(os.environ.get('SPIRV_CROSS', 'spirv-cross'), work / f'{name}.spv', '--cpp', '--output', cpp)
++        source = cpp.read_text()
++        source = source.replace('#include <stdint.h>', '#include <stdint.h>\n#include "glob.h"', 1)
++        source = source.replace('inputs._data[', 'g_in[').replace('outputs._data[', 'g_out[')
++        source = re.sub(r'_\d+\.inputs\[', 'g_in[', source)
++        source = re.sub(r'_\d+\.outputs\[', 'g_out[', source)
++        source = re.sub(r'_\d+\.pc\.', 'g_pc.', source)
++        source = source.replace('#define pc __res->pc.get()', '#define pc g_pc')
++        source = source.replace('s.register_push_constant(pc__);', '')
++        cpp.write_text(source)
++        # Two SPIRV-Cross modules in one program: their entry points renamed apart.
++        run(cxx, '-std=c++17', '-O1', '-w', '-DGLM_FORCE_SWIZZLE', *includes,
++            '-DSPIRV_CROSS_BRANCH=', '-DSPIRV_CROSS_FLATTEN=', '-DSPIRV_CROSS_UNROLL=',
++            '-DSPIRV_CROSS_LOOP=', f'-DImpl=Impl_{name}',
++            f'-Dspirv_cross_get_interface={name}_iface', f'-Dspirv_cross_construct={name}_construct',
++            f'-Dspirv_cross_destruct={name}_destruct', f'-Dspirv_cross_invoke={name}_invoke',
++            '-c', cpp, '-o', work / f'{name}.o')
++        objects.append(work / f'{name}.o')
++    linker = ['-Wl,--allow-multiple-definition']
++    run(cxx, '-std=c++17', '-O1', '-w', '-DGLM_FORCE_SWIZZLE', *includes, here / 'main.cpp',
++        *objects, '-o', work / 'check', *linker)
++    run(work / 'check')
 diff --git a/docs/hdr-tools/upscale_transfer_check/check.comp b/docs/hdr-tools/upscale_transfer_check/check.comp
 new file mode 100644
 index 0000000..b66e374
@@ -367,24 +680,34 @@ index 4cb88a7..128d60f 100644
          }
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag
 new file mode 100644
-index 0000000..5fbf9de
+index 0000000..8e5cb3f
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag
-@@ -0,0 +1,73 @@
+@@ -0,0 +1,105 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
 +// bbport HDR, mode 5 (the 16-bit chain, docs/HDR.md): replaces the game's ColorGrading pass
-+// (ed4c7668), a 16x16x16 color table applied to the image. The table only covers 0..1: above
-+// the game's white the color is brought down by its largest channel, graded, and scaled back up
-+// (RenoDX's max-channel LUT scaling), so the HDR part of the 16-bit image survives the grading
-+// with its hue. The strength of the
-+// grading (the in-game menu's Scene grading, 0 none .. 1 the game's) comes in bb_hdr.w, set by
-+// bbport for this draw only. The names are the recompiled shader's: vk_hdr_channel.cpp copies its
-+// bindings and locations onto these.
++// (ed4c7668), a 16x16x16 color table applied to the image. The table only covers BT.709 0..1;
++// the 16-bit image goes through it with RenoDX's SDR LUT bridge
++// (.agents/skills/handle-sdr-tonemap-lut/snippets/sdr_lut_bridge.hlsl): a color outside BT.709
++// is brought inside it (AdaptiveD65 gamut compression, gamut_bridge.glsl), its largest channel
++// into the table's range, graded, then both taken back out, so the HDR part keeps its hue and
++// saturation and is graded too. bb_hdr.y chooses how the range is brought in (the in-game menu's
++// Color Table Bridge, the choice plus one; 0 not set):
++//   0 Exact: the table as the game applies it up to white (the color divided by its largest
++//     channel only above it, as before); colors outside BT.709 through the gamut bridge.
++//   1 RenoDX: the snippet as it is: Neutwo's max-channel scale on every color (mid tones reach
++//     the table a little lower, so its grade on them can differ slightly from the game's).
++// The strength of the grading (the in-game menu's Color Grade Strength, 0 none .. 1 the game's)
++// comes in bb_hdr.w. Both are set by bbport for this draw only. The names are the recompiled
++// shader's: vk_hdr_channel.cpp copies its bindings and locations onto these.
 +
 +#version 450
 +#extension GL_EXT_fragment_shader_barycentric : require
++#extension GL_GOOGLE_include_directive : require
++
++#include "gamut_bridge.glsl"
 +
 +// The recompiler's push constants (shader_recompiler/resource.h, PushData) at the C++ struct's
 +// offsets (checked in vk_rasterizer.cpp); bb_hdr is bbport's, set per draw (vk_rasterizer.cpp).
@@ -409,6 +732,17 @@ index 0000000..5fbf9de
 +layout(location = 0) pervertexEXT in vec4 fs_in_attr0_p[3];
 +layout(location = 0) out vec4 frag_color0;
 +
++// The chain's encoding (gamma 2.2, the final pass decodes it so), with the sign kept below 0.
++vec3 signed_pow(vec3 v, float e) {
++    return sign(v) * pow(abs(v), vec3(e));
++}
++
++// The game's table at an encoded color in 0..1, blended with it by the strength.
++vec3 grade(vec3 sdr, float strength) {
++    vec3 graded = max(texture(sampler3D(fs_img1, fs_samp1), sdr * 0.9375 + 0.03125).xyz, 0.0);
++    return mix(sdr, graded, strength);
++}
++
 +void main() {
 +    precise float dx1 = fs_in_attr0_p[1].x - fs_in_attr0_p[0].x;
 +    precise float dx2 = fs_in_attr0_p[2].x - fs_in_attr0_p[0].x;
@@ -417,22 +751,33 @@ index 0000000..5fbf9de
 +    vec2 uv = vec2(fma(dx2, gl_BaryCoordEXT.z, fma(dx1, gl_BaryCoordEXT.y, fs_in_attr0_p[0].x)),
 +                   fma(dy2, gl_BaryCoordEXT.z, fma(dy1, gl_BaryCoordEXT.y, fs_in_attr0_p[0].y)));
 +    vec4 c = textureLod(sampler2D(fs_img0, fs_samp0), uv, 0.0);
-+    // Channels below 0 (PsychoV30 with a BT.2020 target: colors outside BT.709): the table
-+    // grades the positive part, the negative part is added back ungraded (as RenoDX's mods).
-+    vec3 v = max(c.xyz, 0.0);
-+    vec3 below = min(c.xyz, 0.0);
-+    // Above white, as RenoDX's LUT sampling: the color divided by its largest channel (its hue
-+    // and saturation kept, unlike clipping each channel at 1), graded, then scaled back up. At or
-+    // below white the table as the game applies it.
-+    float top = max(max(v.x, v.y), v.z);
-+    float scale = max(top, 1.0);
-+    vec3 sdr = v / scale;
-+    vec3 graded = max(texture(sampler3D(fs_img1, fs_samp1), sdr * 0.9375 + 0.03125).xyz, 0.0);
 +    // bb_hdr.w: the strength's bits plus one (0: not set by bbport, the game's grading).
 +    uint bits = push_data.bb_hdr.w;
 +    float strength = bits == 0u ? 1.0 : clamp(uintBitsToFloat(bits - 1u), 0.0, 1.0);
-+    graded = mix(sdr, graded, strength);
-+    vec3 o = graded * scale + below;
++    int bridge = push_data.bb_hdr.y == 0u ? 0 : int(push_data.bb_hdr.y - 1u);
++    float top = max(max(c.x, c.y), c.z);
++    vec3 o;
++    if (bridge == 0 && min(min(c.x, c.y), c.z) >= 0.0) {
++        // Inside BT.709: up to white the table as the game applies it; above, the color divided
++        // by its largest channel (hue and saturation kept), graded, and scaled back up.
++        float scale = max(top, 1.0);
++        o = grade(c.xyz / scale, strength) * scale;
++    } else {
++        // The bridge, in linear light: into BT.709, into the table's range, graded, back out.
++        vec3 linear = signed_pow(c.xyz, 2.2);
++        float gamut_scale = bb_gamut_compression_scale(linear);
++        vec3 inside = gamut_scale < 1.0 ? bb_gamut_compress(linear, gamut_scale) : linear;
++        inside = max(inside, 0.0);
++        float range_scale = bridge == 1
++                                ? bb_neutwo_max_channel_scale(inside)
++                                : 1.0 / max(max(max(inside.x, inside.y), inside.z), 1.0);
++        vec3 graded = signed_pow(grade(signed_pow(inside * range_scale, 1.0 / 2.2), strength), 2.2) /
++                      range_scale;
++        if (gamut_scale < 1.0) {
++            graded = bb_gamut_decompress(graded, gamut_scale);
++        }
++        o = signed_pow(graded, 1.0 / 2.2);
++    }
 +    // The game's channel order: its target holds them swapped.
 +    frag_color0 = vec4(o.zyx, max(c.w, 0.0));
 +    // Chain probe (in-game menu, test; bb_hdr.z): 3 magenta where the input is above white,
@@ -1533,6 +1878,212 @@ index 0000000..0d37153
 +    frag_color0 = vec4(gain, dot(sdr_encoded, luma_bgr), gain, gain);
 +    frag_aux = vec4(1.0);
 +}
+diff --git a/gpu/shadps4/video_core/host_shaders/hdr/gamut_bridge.glsl b/gpu/shadps4/video_core/host_shaders/hdr/gamut_bridge.glsl
+new file mode 100644
+index 0000000..918d58f
+--- /dev/null
++++ b/gpu/shadps4/video_core/host_shaders/hdr/gamut_bridge.glsl
+@@ -0,0 +1,200 @@
++// SPDX-FileCopyrightText: Copyright (C) 2026 Carlos Lopez (RenoDX), bbport
++// SPDX-License-Identifier: MIT
++//
++// bbport: GLSL port of RenoDX's AdaptiveD65 BT.709 gamut compression (https://github.com/
++// clshortfuse/renodx, src/shaders/color/gamut.hlsl and macleod_boynton.hlsl, MIT) and of Neutwo's
++// max-channel scale (tonemap/neutwo.hlsl), the pieces of RenoDX's SDR LUT bridge
++// (.agents/skills/handle-sdr-tonemap-lut/snippets/sdr_lut_bridge.hlsl): colors outside BT.709 are
++// brought inside it along the line to white in MacLeod-Boynton chromaticity (CIE 170-2
++// weights, Stockman-Sharpe LMS relative to D65 white), then the same line taken back out after
++// the LUT. Strength 1, not compressing in-gamut colors, as the snippet calls them. The constants
++// are RenoDX's matrices multiplied out in double precision (docs/hdr-tools/gamut_bridge_check).
++
++#ifndef BBPORT_GAMUT_BRIDGE_GLSL
++#define BBPORT_GAMUT_BRIDGE_GLSL
++
++const vec3 BB_GM_BT709_TO_LMS[3] = vec3[3](  // rows
++    vec3(0.2896057766, 0.6972466442, 0.07637127862),
++    vec3(0.09018375762, 0.7073490257, 0.1122031464),
++    vec3(0.01552874012, 0.05360930731, 0.5097978305));
++const vec3 BB_GM_LMS_TO_BT709[3] = vec3[3](  // rows
++    vec3(4.96761965, -4.922379529, 0.3391991812),
++    vec3(-0.6196828788, 2.051750652, -0.3587439844),
++    vec3(-0.08615200402, -0.065819383, 1.988954483));
++const vec3 BB_GM_WEIGHTS = vec3(0.68990272, 0.34832189, 0.03715970692);
++const vec3 BB_GM_ADAPTIVE_LMS = vec3(1.063223699, 0.9097359297, 0.5789358779); // LMS of BT.709 (1, 1, 1)
++const vec2 BB_GM_WHITE = vec2(0.6983281224, 0.02047613467);                    // D65 in MB
++// The BT.709 primaries in adaptive-relative weighted MB.
++const vec2 BB_GM_BOUND_R = vec2(0.8447741838, 0.004480724501);
++const vec2 BB_GM_BOUND_G = vec2(0.6255404359, 0.004757598166);
++const vec2 BB_GM_BOUND_B = vec2(0.5356426431, 0.3536890971);
++
++const float BB_GM_EPSILON = 1e-20;
++const float BB_GM_NEAR_WHITE = 1e-14;
++const float BB_GM_RAY_T_MAX = 1e20;
++const float BB_GM_INTERVAL_MAX = 3.402823466e38;
++const vec2 BB_GM_CIE_NORMALS[7] = vec2[7](
++    vec2(-0.043889, -0.006807), vec2(-0.007821, -0.008564), vec2(-0.000604, -0.007942),
++    vec2(0.0, -0.080835), vec2(0.953597, 0.307020), vec2(-0.060969, 0.019752),
++    vec2(-0.106895, 0.004035));
++const float BB_GM_CIE_NUMERATORS[7] = float[7](
++    0.0065035249, 0.00104900495, 0.000207697044, 0.00165556648, 0.252472349, 0.0241967351,
++    0.0199621232);
++
++vec3 bb_gm_rows(const vec3 m[3], vec3 v) {
++    return vec3(dot(m[0], v), dot(m[1], v), dot(m[2], v));
++}
++
++// macleod_boynton::from::WeightedLMS: (l, s, l + m).
++vec3 bb_gm_mb(vec3 w) {
++    float y = max(w.x + w.y, 0.0);
++    float inv = y == 0.0 ? 0.0 : 1.0 / y;
++    return vec3(w.x * inv, w.z * inv, y);
++}
++
++vec3 bb_gm_weighted(vec2 ls, float y) {
++    return vec3(ls.x, 1.0 - ls.x, ls.y) * y;
++}
++
++// RayExitTCIE1702D: from white along `direction` to the CIE 170-2 locus (its 7 half-spaces).
++float bb_gm_ray_exit_cie(vec2 direction) {
++    if (dot(direction, direction) <= BB_GM_NEAR_WHITE) {
++        return BB_GM_RAY_T_MAX;
++    }
++    float t_best = BB_GM_RAY_T_MAX;
++    bool hit_any = false;
++    for (int i = 0; i < 7; ++i) {
++        float denom = dot(BB_GM_CIE_NORMALS[i], direction);
++        float t = denom > 1e-8 ? BB_GM_CIE_NUMERATORS[i] / denom : BB_GM_RAY_T_MAX;
++        t_best = min(t_best, t);
++        hit_any = hit_any || denom > 1e-8;
++    }
++    return hit_any ? max(t_best, 0.0) : BB_GM_RAY_T_MAX;
++}
++
++float bb_gm_cross(vec2 a, vec2 b) {
++    return a.x * b.y - a.y * b.x;
++}
++
++bool bb_gm_segment_hit(vec2 origin, vec2 direction, vec2 a, vec2 b, out float t_hit) {
++    t_hit = 0.0;
++    vec2 edge = b - a;
++    float denom = bb_gm_cross(direction, edge);
++    if (abs(denom) <= BB_GM_EPSILON) return false;
++    vec2 a_origin = a - origin;
++    float t = bb_gm_cross(a_origin, edge) / denom;
++    float u = bb_gm_cross(a_origin, direction) / denom;
++    if (t < 0.0 || u < 0.0 || u > 1.0) return false;
++    t_hit = t;
++    return true;
++}
++
++// RayMaxT_RGBTriangleInMB: from white along `direction` to the BT.709 triangle.
++float bb_gm_ray_triangle(vec2 direction, out bool has_solution) {
++    has_solution = false;
++    if (dot(direction, direction) <= BB_GM_NEAR_WHITE) return 0.0;
++    float t_best = BB_GM_INTERVAL_MAX, t_hit;
++    bool hit_any = false;
++    if (bb_gm_segment_hit(BB_GM_WHITE, direction, BB_GM_BOUND_R, BB_GM_BOUND_G, t_hit)) {
++        t_best = min(t_best, t_hit);
++        hit_any = true;
++    }
++    if (bb_gm_segment_hit(BB_GM_WHITE, direction, BB_GM_BOUND_G, BB_GM_BOUND_B, t_hit)) {
++        t_best = min(t_best, t_hit);
++        hit_any = true;
++    }
++    if (bb_gm_segment_hit(BB_GM_WHITE, direction, BB_GM_BOUND_B, BB_GM_BOUND_R, t_hit)) {
++        t_best = min(t_best, t_hit);
++        hit_any = true;
++    }
++    has_solution = hit_any;
++    return hit_any ? max(t_best, 0.0) : 0.0;
++}
++
++// ClampWeightedLMSToCIE1702 (purity 1).
++vec3 bb_gm_clamp_cie(vec3 w) {
++    vec3 c = max(w, 0.0);
++    vec3 mb = bb_gm_mb(c);
++    if (!(mb.z > BB_GM_EPSILON)) return vec3(c.x, c.y, 0.0);
++    vec2 direction = mb.xy - BB_GM_WHITE;
++    if (dot(direction, direction) <= BB_GM_NEAR_WHITE) return c;
++    float t_final = min(1.0, bb_gm_ray_exit_cie(direction));
++    return bb_gm_weighted(BB_GM_WHITE + direction * t_final, mb.z);
++}
++
++// The adaptive-relative weighted LMS of a BT.709 color, and back.
++vec3 bb_gm_relative(vec3 bt709) {
++    vec3 w = BB_GM_WEIGHTS * bb_gm_rows(BB_GM_BT709_TO_LMS, bt709);
++    return vec3(BB_GM_ADAPTIVE_LMS.x == 0.0 ? 0.0 : w.x / BB_GM_ADAPTIVE_LMS.x,
++                BB_GM_ADAPTIVE_LMS.y == 0.0 ? 0.0 : w.y / BB_GM_ADAPTIVE_LMS.y,
++                BB_GM_ADAPTIVE_LMS.z == 0.0 ? 0.0 : w.z / BB_GM_ADAPTIVE_LMS.z);
++}
++
++vec3 bb_gm_bt709(vec3 relative) {
++    return bb_gm_rows(BB_GM_LMS_TO_BT709,
++                      relative * max(BB_GM_ADAPTIVE_LMS, vec3(1e-6)) / BB_GM_WEIGHTS);
++}
++
++// ComputeGamutCompressionScaleBT709AdaptiveD65(color, D65, strength 1): 1 inside BT.709, the
++// share of the line to white kept outside it.
++float bb_gamut_compression_scale(vec3 bt709) {
++    vec3 c = bb_gm_clamp_cie(max(bb_gm_relative(bt709), 0.0));
++    vec3 mb = bb_gm_mb(c);
++    if (!(mb.z > BB_GM_EPSILON)) return 1.0;
++    vec2 direction = mb.xy - BB_GM_WHITE;
++    if (dot(direction, direction) <= BB_GM_NEAR_WHITE) return 1.0;
++    bool has_peak;
++    float t_peak = bb_gm_ray_triangle(direction, has_peak);
++    float t_clip = bb_gm_ray_exit_cie(direction);
++    if (!has_peak) t_peak = t_clip;
++    float t_hard = clamp(t_peak, 0.0, 1.0);
++    // NeutwoScaleFromRayT(min(t_peak, t_clip), t_clip): Neutwo(1, peak, clip).
++    float peak = max(min(t_peak, t_clip), 0.0);
++    float clip = max(t_clip, peak);
++    float neutwo = clip * peak * inversesqrt(max((clip * clip - peak * peak) + clip * clip * peak * peak, 1e-20));
++    float t_soft = clamp(neutwo, 0.0, 1.0);
++    // SoftCompressionActivationFromRayT(t_peak, 0.08).
++    float outside = 1.0 - clamp(t_peak, 0.0, 1.0);
++    float soft_mix = outside / (outside + 0.08);
++    return mix(t_hard, t_soft, soft_mix);
++}
++
++// GamutCompressBT709AdaptiveD65.
++vec3 bb_gamut_compress(vec3 bt709, float scale) {
++    vec3 c = bb_gm_clamp_cie(max(bb_gm_relative(bt709), 0.0));
++    vec3 mb = bb_gm_mb(c);
++    vec3 out_rel;
++    if (!(mb.z > BB_GM_EPSILON)) {
++        out_rel = vec3(c.x, c.y, 0.0);
++    } else {
++        vec2 direction = mb.xy - BB_GM_WHITE;
++        out_rel = dot(direction, direction) <= BB_GM_NEAR_WHITE
++                      ? c
++                      : bb_gm_weighted(BB_GM_WHITE + clamp(scale, 0.0, 1.0) * direction, mb.z);
++    }
++    return bb_gm_bt709(out_rel);
++}
++
++// GamutDecompressBT709AdaptiveD65.
++vec3 bb_gamut_decompress(vec3 bt709, float scale) {
++    vec3 c = max(bb_gm_relative(bt709), 0.0);
++    vec3 mb = bb_gm_mb(c);
++    vec3 out_rel;
++    if (!(mb.z > BB_GM_EPSILON)) {
++        out_rel = vec3(c.x, c.y, 0.0);
++    } else {
++        vec2 direction = mb.xy - BB_GM_WHITE;
++        out_rel = dot(direction, direction) <= BB_GM_NEAR_WHITE
++                      ? c
++                      : bb_gm_weighted(BB_GM_WHITE + direction / max(scale, 1e-6), mb.z);
++    }
++    return bb_gm_bt709(out_rel);
++}
++
++// neutwo::ComputeMaxChannelScale: Neutwo (x / sqrt(1 + x^2)) of the largest channel over it.
++float bb_neutwo_max_channel_scale(vec3 color) {
++    float m = max(max(abs(color.r), abs(color.g)), abs(color.b));
++    return m != 0.0 ? (m * inversesqrt(m * m + 1.0)) / m : 1.0;
++}
++
++#endif
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/psychov30.glsl b/gpu/shadps4/video_core/host_shaders/hdr/psychov30.glsl
 new file mode 100644
 index 0000000..a8c93c4
@@ -5733,7 +6284,7 @@ index ab09c6b..32a3aa2 100644
  
  enum SchedulerType {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
-index 5b27025..d8393fe 100644
+index 5b27025..0c55525 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
 @@ -1,3 +1,4 @@
@@ -5759,7 +6310,7 @@ index 5b27025..d8393fe 100644
      scene_targets = std::make_unique<SceneTargets>(instance, scheduler, runtime, texture_cache);
      // Allocation is independent of shader compilation, including constructor-time precache.
      object_motion = std::make_unique<ObjectMotion>(instance, scheduler);
-@@ -2014,6 +2019,23 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
+@@ -2014,6 +2019,25 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
              });
          }
      }
@@ -5772,6 +6323,8 @@ index 5b27025..d8393fe 100644
 +            const float strength =
 +                std::clamp(BbSettings::Get().hdr_scene_grading.load(), 0.0f, 100.0f) / 100.0f;
 +            push_data.bb_hdr[3] = std::bit_cast<u32>(strength) + 1u;
++            // bb_hdr.y: the LUT bridge (Color Table Bridge, 0 Exact, 1 RenoDX), plus one.
++            push_data.bb_hdr[1] = u32(std::clamp(BbSettings::Get().hdr_lut_bridge.load(), 0, 1)) + 1u;
 +        }
 +        // The chain probe (in-game menu, test): which stage shows itself in color.
 +        if (const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
@@ -5783,7 +6336,7 @@ index 5b27025..d8393fe 100644
      pipeline->BindResources(set_writes, push_data, {image_infos.data(), image_infos.size()},
                              {buffer_infos.data(), buffer_infos.size()});
      if (pipeline->GetGraphicsKey().motion_vectors) {
-@@ -2079,6 +2101,83 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
+@@ -2079,6 +2103,83 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
              cmdbuf.endQuery(query.pool, query.index);
          }
      });
@@ -5867,7 +6420,7 @@ index 5b27025..d8393fe 100644
      if (FrameCapture::Active()) {
          const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
          FrameCapture::Draw(vs_info.pgm_hash, ps ? ps->pgm_hash : 0, num_indices, num_instances);
-@@ -3172,6 +3271,32 @@ bool Rasterizer::IsComputeImageCopy(const Pipeline* pipeline) {
+@@ -3172,6 +3273,32 @@ bool Rasterizer::IsComputeImageCopy(const Pipeline* pipeline) {
      // Perform image copy
      VideoCore::Image& src_image = desc0.is_written ? image1 : image0;
      VideoCore::Image& dst_image = desc0.is_written ? image0 : image1;
@@ -5900,7 +6453,7 @@ index 5b27025..d8393fe 100644
      runtime.CopyColorAndDepth(&src_image, &dst_image);
      return true;
  }
-@@ -4114,6 +4239,9 @@ vk::Sampler Rasterizer::CachedSampler(const AmdGpu::Sampler& sharp, bool is_dept
+@@ -4114,6 +4241,9 @@ vk::Sampler Rasterizer::CachedSampler(const AmdGpu::Sampler& sharp, bool is_dept
  // The sampler that reads each image is not known here: any point sampler counts.
  // BB_PROXY_POINT_NATIVE=0 (or experiment bit 0): proxies are read regardless, as before.
  bool Rasterizer::PointReadsNative(const Shader::Info& stage, const PreparedStage* prepared) const {
@@ -5910,7 +6463,7 @@ index 5b27025..d8393fe 100644
      static const bool enabled = [] {
          const char* env = std::getenv("BB_PROXY_POINT_NATIVE");
          return !(env && env[0] == '0');
-@@ -4602,6 +4730,35 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
+@@ -4602,6 +4732,35 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
                            !same_size(texture_cache.GetImage(db_desc.first), 0))) {
          reduced = false;
      }
@@ -5946,7 +6499,7 @@ index 5b27025..d8393fe 100644
      if (debug_pass) {
          if (db_desc.first) {
              const auto& depth = texture_cache.GetImage(db_desc.first);
-@@ -4611,7 +4768,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
+@@ -4611,7 +4770,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
          }
          std::printf("Scene pass: reduced %d %s\n", reduced, why.c_str());
      }
@@ -5955,7 +6508,7 @@ index 5b27025..d8393fe 100644
      if (BbStats::enabled) {
          BbStats::reduced_draws.fetch_add(reduced, std::memory_order_relaxed);
          BbStats::scene_draws.fetch_add(scene_started, std::memory_order_relaxed);
-@@ -4827,13 +4984,13 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
+@@ -4827,13 +4986,13 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
          state.num_layers = 1;
      }
  
@@ -5971,7 +6524,7 @@ index 5b27025..d8393fe 100644
          ui_pass.active = false; // the memo keeps this scale for the pass
      }
      if (FrameCapture::Active()) {
-@@ -4859,8 +5016,18 @@ void Rasterizer::Resolve() {
+@@ -4859,8 +5018,18 @@ void Rasterizer::Resolve() {
      const auto& mrt1_hint = CbExtent(1);
      VideoCore::TextureCache::ImageDesc mrt0_desc{Regs().color_buffers[0], mrt0_hint};
      VideoCore::TextureCache::ImageDesc mrt1_desc{Regs().color_buffers[1], mrt1_hint};
@@ -5992,7 +6545,7 @@ index 5b27025..d8393fe 100644
  
      ScopeMarkerBegin(fmt::format("Resolve:MRT0={:#x}:MRT1={:#x}",
                                   Regs().color_buffers[0].Address(),
-@@ -5455,7 +5622,12 @@ void Rasterizer::UpdateRasterizationState() const {
+@@ -5455,7 +5624,12 @@ void Rasterizer::UpdateRasterizationState() const {
  void Rasterizer::UpdateColorBlendingState(const GraphicsPipeline* pipeline) const {
      const auto& regs = Regs();
      auto& dynamic_state = scheduler.GetDynamicState();
@@ -7242,10 +7795,10 @@ index d6ecf12..14a1d6d 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 7ddd461..1f6e02c 100644
+index 7ddd461..bbf3771 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
-@@ -298,6 +298,284 @@ void CheatStats() {
+@@ -298,6 +298,299 @@ void CheatStats() {
      CheatUnavailable(BbEngine::Cheats::Echoes);
  }
  
@@ -7475,6 +8028,21 @@ index 7ddd461..1f6e02c 100644
 +                        "The game's own color grading: 100 is the game's look, 0 the image before "
 +                        "it.",
 +                        "Собственная цветокоррекция игры: 100 как в игре, 0 картинка до неё."));
++        static const char* bridges[] = {"Exact", "RenoDX"};
++        const int bridge = std::clamp(s.hdr_lut_bridge.load(), 0, 1);
++        if (const int chosen = ComboIndex("Color Table Bridge", bridge, bridges, 2, 0);
++            chosen != bridge) {
++            Store(s.hdr_lut_bridge, chosen, true);
++        }
++        Hint(BbSettings::MenuText(
++            "How the HDR image goes through the game's color table. Both bring colors outside "
++            "BT.709 inside it and back (RenoDX's gamut bridge), so they are graded too. Exact: the "
++            "game's own grade up to white. RenoDX: RenoDX's bridge as it is, smoother above white, "
++            "mid tones graded slightly differently. Live.",
++            "Как HDR-картинка проходит через таблицу цветов игры. Оба режима вписывают цвета вне "
++            "BT.709 и возвращают их (мост охвата RenoDX), так что они тоже грейдятся. Exact: "
++            "собственный грейд игры до белого. RenoDX: мост RenoDX как есть, мягче выше белого, "
++            "средние тона чуть иначе. Сразу."));
 +        SliderReset("Black Floor", s.hdr_black_floor, 0.0f, 2.0f, 0.0f, "%.2f nits",
 +                    BbSettings::MenuText(
 +                        "Takes the game's darkest grey down to true black (OLED). With the game's "
@@ -7530,7 +8098,7 @@ index 7ddd461..1f6e02c 100644
  // HDR output (bbport.ini hdr*): on/off on restart; paper white, peak and boost live.
  void HdrSection() {
      auto& s = BbSettings::Get();
-@@ -332,11 +610,26 @@ void HdrSection() {
+@@ -332,11 +625,26 @@ void HdrSection() {
      const char* modes[BbSettings::HdrModeCount] = {
          BbSettings::MenuText("Native (from the game's HDR scene)", "Нативный (из HDR-сцены игры)"),
          BbSettings::MenuText("Expand (from the SDR picture)", "Расширение (из SDR-картинки)"),
@@ -7557,7 +8125,7 @@ index 7ddd461..1f6e02c 100644
      Hint(BbSettings::MenuText(
          "Native: the brightness of lamps, fire, the moon and other highlights comes from the "
          "game's own HDR scene, before its tonemap clipped it to SDR white. Midtones, colours and "
-@@ -398,13 +691,20 @@ void PictureSection() {
+@@ -398,13 +706,20 @@ void PictureSection() {
      // A moved setting turns Picture tuning on: it gates them all.
      const bool vignette = s.graphics_vignette;
      // The useful range on the slider; Ctrl+click types any value (bbport_settings.cpp keeps it
@@ -7583,7 +8151,7 @@ index 7ddd461..1f6e02c 100644
      Checkbox(BbSettings::MenuText("Vignette", "Виньетка"), s.graphics_vignette);
      moved |= vignette != s.graphics_vignette;
      moved |= Slider(BbSettings::MenuText("Ambient occlusion strength", "Сила затенения (AO)"), s.graphics_ao_strength,
-@@ -425,6 +725,16 @@ void PictureSection() {
+@@ -425,6 +740,16 @@ void PictureSection() {
          Store(s.graphics_shadow_scale, 1.0f, true);
      }
      ImGui::EndDisabled();
@@ -7600,7 +8168,7 @@ index 7ddd461..1f6e02c 100644
      Hint(BbSettings::MenuText(
          "Changes apply live, Picture tuning too, to the game's own colour, fog and lighting of each area "
          "(the HUD and menus keep theirs). Moving one turns Picture tuning on; off: the game's own picture. 1.00 and Hue 0 are the game's. Fog 0 clears the haze over distant streets. The "
-@@ -801,6 +1111,7 @@ void Menu() {
+@@ -801,6 +1126,7 @@ void Menu() {
      bool restart =
          s.object_motion != s.startup_object_motion || s.model_lod != s.startup_model_lod ||
          s.live_resolution != s.startup_live_resolution || s.hdr != s.startup_hdr ||
@@ -7608,7 +8176,7 @@ index 7ddd461..1f6e02c 100644
          BbSettings::ResolutionNeedsRestart();
      for (int e = 0; e < BbSettings::EffectCount; ++e) {
          restart |= s.effects[e] != s.startup_effects[e];
-@@ -1219,6 +1530,11 @@ bool HandleEvent(const SDL_Event& event) {
+@@ -1219,6 +1545,11 @@ bool HandleEvent(const SDL_Event& event) {
      case SDL_EVENT_KEY_DOWN:
      case SDL_EVENT_KEY_UP: {
          const bool down = event.type == SDL_EVENT_KEY_DOWN;
@@ -7621,7 +8189,7 @@ index 7ddd461..1f6e02c 100644
              ((event.key.key == SDLK_INSERT && (is_open || MenuKeys() != OverlayKeys::Off)) ||
               (is_open && event.key.key == SDLK_ESCAPE))) {
 diff --git a/gpu/shim/bbport_settings.cpp b/gpu/shim/bbport_settings.cpp
-index e8557fe..52ff1fc 100644
+index e8557fe..2098f0d 100644
 --- a/gpu/shim/bbport_settings.cpp
 +++ b/gpu/shim/bbport_settings.cpp
 @@ -10,11 +10,14 @@
@@ -7672,7 +8240,7 @@ index e8557fe..52ff1fc 100644
      } else if (key == "hdr_boost") {
          v.hdr_boost = Clamp(std::isfinite(f) ? f : HdrBoostDefault, 0.0f, 1.0f);
      } else if (key == "hdr_ui_brightness") {
-@@ -269,6 +291,34 @@ void Set(Values& v, const std::string& key, const std::string& value) {
+@@ -269,6 +291,36 @@ void Set(Values& v, const std::string& key, const std::string& value) {
                          value.c_str());
          }
          v.hdr_mode = mode < 0 ? HdrModeNative : mode;
@@ -7696,6 +8264,8 @@ index e8557fe..52ff1fc 100644
 +        v.hdr_gamut_compression = Clamp(std::isfinite(f) ? f : 1.0f, 0.0f, 1.0f);
 +    } else if (key == "hdr_compression") {
 +        v.hdr_compression = Clamp(std::isfinite(f) ? f : 1.0f, 0.0f, 2.0f);
++    } else if (key == "hdr_lut_bridge") {
++        v.hdr_lut_bridge = value == "renodx" ? 1 : 0;
 +    } else if (key == "hdr_tonemapper") {
 +        v.hdr_tonemapper = i == HdrToneMapperVanilla       ? HdrToneMapperVanilla
 +                           : i == HdrToneMapperPsychoScene ? HdrToneMapperPsychoScene
@@ -7707,7 +8277,7 @@ index e8557fe..52ff1fc 100644
      } else if (key == "live_resolution") {
          v.live_resolution = value == "auto" ? -1 : std::clamp(i, 0, 1);
      } else if (key == "cheat_vials") {
-@@ -335,8 +385,123 @@ MenuLanguage LanguageOfLocale(const char* lang) {
+@@ -335,8 +387,125 @@ MenuLanguage LanguageOfLocale(const char* lang) {
      return MenuLanguage::English;
  }
  
@@ -7735,6 +8305,7 @@ index e8557fe..52ff1fc 100644
 +    add("hdr_black_floor=%.2f", v.hdr_black_floor.load());
 +    add("hdr_gamut_compression=%.2f", v.hdr_gamut_compression.load());
 +    add("hdr_compression=%.2f", v.hdr_compression.load());
++    add("hdr_lut_bridge=%s", v.hdr_lut_bridge == 1 ? "renodx" : "exact");
 +    return out;
 +}
 +
@@ -7770,6 +8341,7 @@ index e8557fe..52ff1fc 100644
 +    v.hdr_black_floor = 0.0f;
 +    v.hdr_gamut_compression = 1.0f;
 +    v.hdr_compression = 1.0f;
++    v.hdr_lut_bridge = 0;
 +}
 +
  } // namespace
@@ -7831,7 +8403,7 @@ index e8557fe..52ff1fc 100644
  // The display's size for output_res = auto: BB_DISPLAY_SIZE ("WxH", from run_windows.py), even
  // (the game has half-resolution buffers); 1920x1080 without it.
  static std::pair<int, int> DisplaySize() {
-@@ -400,8 +565,14 @@ void Load() {
+@@ -400,8 +569,14 @@ void Load() {
          }
          v.menu_language = LanguageOfLocale(lang);
      }
@@ -7847,7 +8419,7 @@ index e8557fe..52ff1fc 100644
          while (std::fgets(line, sizeof(line), file)) {
              std::string text{line};
              text.erase(text.find_last_not_of(" \t\r\n") + 1);
-@@ -414,6 +585,14 @@ void Load() {
+@@ -414,6 +589,14 @@ void Load() {
          std::fclose(file);
          std::printf("Settings: %s\n", Path());
      }
@@ -7862,7 +8434,7 @@ index e8557fe..52ff1fc 100644
      // Environment overrides (scripts, A/B tests).
      if (const char* env = std::getenv("BB_UPSCALER")) {
          v.upscaler = UpscalerOff;
-@@ -446,6 +625,7 @@ void Load() {
+@@ -446,6 +629,7 @@ void Load() {
      v.startup_output_res = v.output_res;
      v.startup_live_resolution = v.live_resolution;
      v.startup_hdr = v.hdr;
@@ -7870,7 +8442,7 @@ index e8557fe..52ff1fc 100644
  }
  
  void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss) {
-@@ -550,7 +730,35 @@ void Save() {
+@@ -550,7 +734,36 @@ void Save() {
      put("hdr_boost", fixed(v.hdr_boost, 2));
      put("hdr_ui_brightness", fixed(v.hdr_ui_brightness, 2));
      put("hdr_ui_color", fixed(v.hdr_ui_color, 2));
@@ -7884,6 +8456,7 @@ index e8557fe..52ff1fc 100644
 +    put("hdr_black_floor", fixed(v.hdr_black_floor, 3));
 +    put("hdr_gamut_compression", fixed(v.hdr_gamut_compression, 2));
 +    put("hdr_compression", fixed(v.hdr_compression, 2));
++    put("hdr_lut_bridge", v.hdr_lut_bridge == 1 ? "renodx" : "exact");
 +    put("hdr_tonemapper", std::to_string(v.hdr_tonemapper.load()));
 +    put("hdr_gamut", v.hdr_gamut == HdrGamutBt709 ? "bt709" : "bt2020");
      put("hdr_mode", HdrModeNames[std::clamp(v.hdr_mode.load(), 0, HdrModeCount - 1)]);
@@ -7906,7 +8479,7 @@ index e8557fe..52ff1fc 100644
      put("graphics_controls",flag(v.graphics_controls));
      put("graphics_vignette",flag(v.graphics_vignette));
      put("graphics_ao_strength",fixed(v.graphics_ao_strength,2));
-@@ -601,7 +809,7 @@ void Save() {
+@@ -601,7 +814,7 @@ void Save() {
      bool had_lines = false;
      std::vector<bool> written(keys.size());
      if (FILE* file = std::fopen(Path(), "r")) {
@@ -7916,7 +8489,7 @@ index e8557fe..52ff1fc 100644
              had_lines = true;
              std::string text{line};
 diff --git a/gpu/shim/bbport_settings.h b/gpu/shim/bbport_settings.h
-index 926f484..aee86e1 100644
+index 926f484..1fd01af 100644
 --- a/gpu/shim/bbport_settings.h
 +++ b/gpu/shim/bbport_settings.h
 @@ -8,6 +8,15 @@
@@ -7955,7 +8528,7 @@ index 926f484..aee86e1 100644
  static_assert(sizeof(HdrModeNames) / sizeof(HdrModeNames[0]) == HdrModeCount);
  
  /// button_prompts in bbport.ini: the game's button icons drawn as the bound keys while the keyboard
-@@ -217,6 +226,50 @@ struct Values {
+@@ -217,6 +226,54 @@ struct Values {
      int startup_model_lod = 0;
      int startup_output_res = OutputDefault;
      int startup_live_resolution = 0;
@@ -7976,6 +8549,10 @@ index 926f484..aee86e1 100644
 +    /// PsychoV30's compression (RenoDX's Compression): the shoulder's power toward the peak,
 +    /// 0 automatic, 0.1..2 manual (1 RenoDX's default).
 +    std::atomic<float> hdr_compression{1.0f};
++    /// How the 16-bit image goes through the game's color table (bb_color_grading.frag): 0 Exact
++    /// (the game's own grade up to white), 1 RenoDX (its LUT bridge as it is). bbport.ini
++    /// hdr_lut_bridge = exact / renodx.
++    std::atomic<int> hdr_lut_bridge{0};
 +    std::atomic<float> hdr_knee{60.0f}; ///< mode 5: % of the game's white where HDR starts
 +    /// Set by the presenter: the frame is sent in HDR10 (the menu shows the HDR section).
 +    /// Set by the presenter: the all-areas HDR highlights are on (strength and boost apply).
@@ -8006,7 +8583,7 @@ index 926f484..aee86e1 100644
      bool startup_hdr = false;
  };
  
-@@ -235,9 +288,25 @@ void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss = false);
+@@ -235,9 +292,25 @@ void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss = false);
  bool FixedRenderSession();
  int RenderPreset();
  bool ResolutionNeedsRestart();
@@ -8186,7 +8763,7 @@ index 78144f6..fb455e2 100644
                     '--patches', out / 'patches.bin', '--app0', merged,
                     '--user', os.environ.get('BB_USER_DIR', data / 'user'),
 diff --git a/tests/test_settings.cpp b/tests/test_settings.cpp
-index 8501ba0..dcc9dfe 100644
+index 8501ba0..26c4594 100644
 --- a/tests/test_settings.cpp
 +++ b/tests/test_settings.cpp
 @@ -154,7 +154,7 @@ int main() {
@@ -8198,7 +8775,7 @@ index 8501ba0..dcc9dfe 100644
      assert(Read(path).find("hdr_peak=1000\n") != std::string::npos);
      assert(Read(path).find("hdr_boost=0.25\n") != std::string::npos);
      // hdr_mode: native (the default: highlights from the game's HDR scene) or expand (from the
-@@ -207,6 +207,93 @@ int main() {
+@@ -207,6 +207,106 @@ int main() {
  #endif
      BbSettings::Load();
      assert(s.hdr_mode == BbSettings::HdrModeNative);
@@ -8289,6 +8866,19 @@ index 8501ba0..dcc9dfe 100644
 +                                        "hdr_gamut_compression=-1\n"; }
 +    BbSettings::Load();
 +    assert(s.hdr_compression == 2.0f && s.hdr_gamut_compression == 0.0f);
++    // The color table's bridge: Exact by default, saved by name, per preset, reset.
++    assert(s.hdr_lut_bridge == 0);
++    s.hdr_lut_bridge = 1;
++    BbSettings::Save();
++    assert(Read(path).find("hdr_lut_bridge=renodx\n") != std::string::npos);
++    BbSettings::Load();
++    assert(s.hdr_lut_bridge == 1);
++    BbSettings::SelectHdrPreset(2);
++    assert(s.hdr_lut_bridge == 0);
++    BbSettings::SelectHdrPreset(1);
++    assert(s.hdr_lut_bridge == 1);
++    BbSettings::ResetHdr();
++    assert(s.hdr_lut_bridge == 0);
      std::filesystem::remove(temporary);
      std::puts("PASS: settings save keeps other keys, menu position");
  }

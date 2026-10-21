@@ -53,6 +53,7 @@ tools last for the session only.
 | **Color Grading** | | |
 | Exposure, Highlights, Shadows, Contrast, Saturation | (1.00, 50, 50, 50, 50) | PsychoV30's own grading, as in RenoDX's mods. |
 | Color Grade Strength *(Intermediate)* | 0 to 100 % (100) | The game's own color table: 100 is the game's look. |
+| Color Table Bridge *(Intermediate)* | Exact, RenoDX (Exact) | How the HDR image goes through the game's color table: see Rendering. |
 | Black Floor *(Intermediate)* | 0 to 2 nits (0) | Takes the game's darkest grey down to true black (OLED). |
 | **Effects** | | |
 | Bloom | 0 to 100 (50) | The glow around lights: 50 is the game's. |
@@ -122,13 +123,20 @@ between releases report it.
   at the game's mid grey with the game's slope there as contrast. RenoDX takes that slope at the
   curve's inflection; for Bloodborne's curve it gives 1.1369 instead of 1.1656 in interiors
   (inflection 0.258, mid grey 0.195) and 1.0452 instead of 1.0459 outside.
-- **Color table.** Above white, the game's table is applied with RenoDX's max-channel
-  normalization, so highlights keep their hue.
+- **Color table.** The game's 16x16x16 table only covers BT.709 0..1. The HDR image goes through
+  it with RenoDX's SDR LUT bridge (its `handle-sdr-tonemap-lut` skill and `sdr_lut_bridge.hlsl`
+  snippet): a color outside BT.709 is brought inside it along the line to white (AdaptiveD65 gamut
+  compression in MacLeod-Boynton chromaticity, `gamut_bridge.glsl`), its largest channel into the
+  table's range, graded, then both are undone, so highlights and saturated colors keep their hue and
+  are graded too. *Exact* (default) brings the range in only above white (the color divided by its
+  largest channel), so up to white the table applies exactly as in the game; *RenoDX* uses Neutwo's
+  max-channel scale on every color, as the snippet does (smoother above white, mid tones reach
+  the table a little lower).
 - **BT.2020.** A color outside BT.709 has BT.709 channels below 0. They are kept, signed, through
   every pass to the final one, which converts to BT.2020 and only then drops what is still
   negative, as RenoDX's mods:
   - composite: no clip after PsychoV30 (BT.709 still clips), signed gamma encoding;
-  - color grading: the table grades the positive part, the negative part is added back ungraded;
+  - color grading: the gamut bridge above takes them inside BT.709 for the table and back out;
   - display copy: the brightness table is continued point-symmetric below 0;
   - temporal reconstruction (DLSS / FSR / TAA, `upscale_transfer.glsl`): decoded to linear
     BT.2020, where those colors are positive, and encoded back (exact inverses inside BT.2020,
@@ -139,7 +147,9 @@ between releases report it.
 - **Frame generation.** Lantern's FSR 3.1 frame generation turns itself off while HDR output is
   on (8-bit display buffers only), and so with PsychoV30.
 - **Accuracy.** The GLSL PsychoV30 matches RenoDX's test30 within 5.3e-4 relative with every
-  setting this port uses (`docs/hdr-tools/psychov30_check`).
+  setting this port uses (`docs/hdr-tools/psychov30_check`). The gamut bridge matches RenoDX's
+  `gamut.hlsl` and Neutwo within 6e-6 of the largest channel (`docs/hdr-tools/gamut_bridge_check`,
+  run by CI against RenoDX `b6b32f4`).
 
 ### Engine details
 
