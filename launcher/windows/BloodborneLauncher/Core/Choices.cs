@@ -221,7 +221,7 @@ namespace BloodborneLauncher.Core
         public static readonly Choice[] HdrToneMapper =
         {
             // The segmented buttons show the label up to " (".
-            new("PsychoV-30 (default)", "4"), new("Vanilla+ (RenoDX's Bloodborne mod)", "5"), new("Vanilla (the game's own look)", "2"),
+            new("PsychoV-30 (default)", "4"), new("Vanilla+ (by souperman9)", "5"), new("Vanilla (the game's own look)", "2"),
         };
 
         /// <summary>hdr_gamut: the color volume PsychoV30 fits the picture into (its gamut_compression_mode).</summary>

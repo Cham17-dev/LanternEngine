@@ -65,7 +65,9 @@ brightness (in nits), with the same defaults; Peak brightness follows the monito
 and each of the three sliders has a reset button.
 In PsychoV30 mode, the game's own Brightness, Contrast, Saturation and Bloom (Picture section, and
 the game's PC Colour menu) are left as the game draws them: the HDR grading above replaces them.
-Hue, Fog, Vignette, ambient occlusion and shadow distance stay. Gamma 2.2 is always on.
+Hue, Fog, Vignette, ambient occlusion and shadow distance stay. Gamma 2.2 is always on. Keep the
+game's own Brightness option (its in-game settings) at 5: it still changes the whole image,
+shadows first.
 
 ### Tone mappers
 
@@ -75,8 +77,8 @@ lights up to your display's peak.
 - **PsychoV-30** (`hdr_tonemapper=4`, default): PsychoV30 as RenoDX's mods set it (Order of the
   Sinking Star's Midgray Reference and Slope Reference): the game's mid grey kept at 0.18, the
   game's contrast there, PsychoV30's own shadows.
-- **Vanilla+** (`hdr_tonemapper=5`): as Vanilla+ in RenoDX's Bloodborne mod (souperman9), read
-  from its shaders: the game's curve up to an input of mid grey, its tangent above, the bloom
+- **Vanilla+** (`hdr_tonemapper=5`), by **souperman9**: Vanilla+ from his RenoDX Bloodborne
+  mod, read from its shaders: the game's curve up to an input of mid grey, its tangent above, the bloom
   added, RenoDX's user color grading, then RenoDX's `CInfinityRollOff` per channel to the peak.
   The game's shadows and mid tones, brighter highlights than PsychoV-30.
 - **Hybrid** (`hdr_tonemapper=3`, `bbport.ini` only): PsychoV-30 with the shadows below mid grey
@@ -148,12 +150,13 @@ between releases report it.
   - final pass: the negative part is decoded with its sign and added after Black Floor.
   Debug probe 6 shows magenta where a channel reaches the final pass below 0. At neutral
   settings the game produces almost no colors outside BT.709; they appear with more Saturation.
-- **HUD.** The engine copies the output-size frame just before the game's first UI draw. At the
-  display pass, before the game's brightness curve, `hdr_ui_mask.comp` compares the frame with
-  its UI against that copy: the pixels the UI changed are the HUD's (a mask in the copy's alpha),
-  shown as the game's SDR at UI Brightness; the others are the scene, in HDR. Without the mask
-  (a frame without a UI image) the final pass falls back to comparing luminance with a
-  tolerance. Debug probe 7 shows the pixels taken as the HUD in red.
+- **HUD.** The engine copies the output-size frame just before the game's first UI draw. The
+  final pass compares the frame's luminance with that copy, with a tolerance that widens with
+  brightness (the game's brightness curve comes after the copy): the pixels the UI changed are
+  shown as the game's SDR at UI Brightness, the others as the scene, in HDR. Debug probe 7 shows
+  the pixels taken as the HUD in red. An exact per-pixel mask (`hdr_ui_mask.comp`) is in the code
+  but off: it took the HUD's translucent backgrounds as HUD, so the scene behind them went to
+  the UI brightness.
 - **Frame generation.** Lantern's FSR 3.1 frame generation turns itself off while HDR output is
   on (8-bit display buffers only), and so with PsychoV30.
 - **Accuracy.** The GLSL PsychoV30 matches RenoDX's test30 within 5.3e-4 relative with every
@@ -186,7 +189,6 @@ between releases report it.
 
 - Dark interiors, fog, fire, saturated blue lights, menus, loading transitions and camera
   movement: HUD brightness, clipping, color order, borders and temporal stability.
-- Vanilla+ against RenoDX's Bloodborne mod (Vanilla+) on the same scene, and against PsychoV-30.
 - Compression 0.5 / 2 / auto on lanterns and fire; Gamut Compression 0 with Saturation 100.
 - Target gamut BT.2020 against BT.709 on saturated lights, with probe 6, with and without an
   upscaler.

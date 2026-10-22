@@ -154,7 +154,7 @@ namespace BloodborneLauncher.Views
                     : L.T("This display shows no HDR");
             IniToggle(SymbolRegular.Hdr24, L.T("HDR output"), hdrHint, "hdr");
             ComboRow(SymbolRegular.Lightbulb24, L.T("HDR source"),
-                "PsychoV30: HDR tone mapping with dark tones matched to the game's SDR rendering. Native: highlights derived from the game's HDR scene. Expanded: bright SDR pixels expanded towards the peak. Entering or leaving PsychoV30 requires restarting the game.",
+                "PsychoV30: the game's own light in 16 bits, tone mapped as RenoDX's mods (PsychoV-30 or Vanilla+). Native: highlights derived from the game's HDR scene. Expanded: bright SDR pixels expanded towards the peak. Entering or leaving PsychoV30 requires restarting the game.",
                 Choices.HdrMode, () => Ini.Get("hdr_mode", "native"), v => Ini.Set("hdr_mode", v), changed: RefreshHdrRows);
             // Defaults, as the engine's: paper white 203 (BT.2408's reference white), the peak
             // Windows reports for the chosen display (in HDR).
@@ -207,7 +207,7 @@ namespace BloodborneLauncher.Views
                 Choices.HdrBoost, () => Ini.Get("hdr_boost", "0.25"), v => Ini.Set("hdr_boost", v));
             _hdrBoostRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
             ComboRow(SymbolRegular.Lightbulb24, L.T("Tone mapper"),
-                "PsychoV30 only. PsychoV-30: as RenoDX's mods, its own shadows. Vanilla+: as RenoDX's Bloodborne mod, the game's image up to mid grey, brighter highlights up to your display's peak. Vanilla: the game's own look. Also in the in-game menu, live",
+                "PsychoV30 only. PsychoV-30: as RenoDX's mods, its own shadows. Vanilla+ (by souperman9, from his RenoDX Bloodborne mod): the game's image up to mid grey, brighter highlights up to your display's peak. Vanilla: the game's own look. Also in the in-game menu, live",
                 Choices.HdrToneMapper, () => Ini.Get("hdr_tonemapper", "4"), v => Ini.Set("hdr_tonemapper", v));
             _hdrToneMapperRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
             ComboRow(SymbolRegular.Color24, L.T("Target gamut"),

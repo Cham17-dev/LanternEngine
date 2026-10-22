@@ -7066,7 +7066,7 @@ index c07d7e5..885f4c2 100644
                  hdr_format == SURFACE_FORMAT_HDR ? "HDR10 PQ (BT.2020)" : "scRGB (FP16, linear BT.709)",
                  settings.hdr_paper_white.load(), settings.hdr_peak.load(),
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
-index ad2c2b4..7f50947 100644
+index ad2c2b4..8092be3 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
 @@ -1,3 +1,6 @@
@@ -7177,7 +7177,7 @@ index ad2c2b4..7f50947 100644
                                    camera_motion.Ready() && ldr_target == color,
                                    Active() && !failed)) {
      case UiComposition::Background::None:
-@@ -1664,12 +1695,17 @@ void TemporalUpscaler::OnDisplayPass(VAddr address, VideoCore::ImageId frame) {
+@@ -1664,12 +1695,19 @@ void TemporalUpscaler::OnDisplayPass(VAddr address, VideoCore::ImageId frame) {
      // bbport: a frame with no UI draw at all (the HUD hidden in the game's options, #23) reaches
      // its display pass without the upscale its first UI draw would start: run it here, so the
      // display pass reads the upscaled frame instead of the render-size one.
@@ -7191,12 +7191,14 @@ index ad2c2b4..7f50947 100644
 +    if (HdrChannel::Native16() && !ui_phase && LdrFrame(ldr_target)) {
 +        RunUiOnly(ldr_target, camera_motion.Depth());
 +    }
-+    if (HdrChannel::Native16() && ui_phase) MaskPsychoSnapshot();
++    // The HUD's mask (MaskPsychoSnapshot) is off: it took the HUD's translucent backgrounds as
++    // HUD, so the scene behind them went to the UI brightness (white at 500 nits, black at 48).
++    // The final pass tells the HUD by its luminance, as before.
 +    if (HdrChannel::Native16()) PublishPsychoSnapshot(address);
      // bbport: frame generation: a frame without UI is its own frame without UI.
      if (frame_gen && frame_gen->WantsHudless()) {
          if (ui_phase) {
-@@ -1760,6 +1796,11 @@ void TemporalUpscaler::EnsureUiResources(u32 w, u32 h, vk::Format color, vk::For
+@@ -1760,6 +1798,11 @@ void TemporalUpscaler::EnsureUiResources(u32 w, u32 h, vk::Format color, vk::For
              .initialLayout = vk::ImageLayout::eUndefined,
          });
          ui_format = color;
@@ -7208,7 +7210,7 @@ index ad2c2b4..7f50947 100644
      }
      if (new_depth) {
          ui_depth_view.reset();
-@@ -1860,27 +1901,31 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
+@@ -1860,27 +1903,31 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
      const auto& color = texture_cache.GetImage(color_id);
      const auto depth_format = depth_id ? texture_cache.GetImage(depth_id).info.pixel_format
                                        : vk::Format::eD32SfloatS8Uint;
@@ -7249,7 +7251,7 @@ index ad2c2b4..7f50947 100644
          runtime.FlushBarriers();
      }
      // bbport: with Widescreen on another screen shape (BB_UI_SIZE), a frame without the 3D world
-@@ -1941,6 +1986,20 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
+@@ -1941,6 +1988,20 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
          barrier.newLayout = vk::ImageLayout::eGeneral;
          cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier});
      });
@@ -7270,7 +7272,7 @@ index ad2c2b4..7f50947 100644
      reset = true; // returning to 3D must not reuse history from before a menu/loading screen
      done_this_frame = ui_phase = true;
      ui_color = color_id;
-@@ -1948,6 +2007,7 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
+@@ -1948,6 +2009,7 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
  }
  
  void TemporalUpscaler::RunScaled() {
@@ -7278,7 +7280,7 @@ index ad2c2b4..7f50947 100644
      if (auto* profiler = GpuProfiler::Get()) {
          const char* label = BbSettings::Get().upscaler == BbSettings::UpscalerTaa
              ? "upscaler RunScaled (TAA)" : "upscaler RunScaled (FSR)";
-@@ -2328,7 +2388,7 @@ vk::ImageView TemporalUpscaler::Mirror(vk::Image image, std::vector<MirrorView>&
+@@ -2328,7 +2390,7 @@ vk::ImageView TemporalUpscaler::Mirror(vk::Image image, std::vector<MirrorView>&
  bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
                                       const VideoCore::ImageViewInfo& view_info, Target& target) {
      if (ui_phase && color == ui_color) {
@@ -7287,7 +7289,7 @@ index ad2c2b4..7f50947 100644
                    vk::ImageLayout::eGeneral, ui_width, ui_height, true};
          return true;
      }
-@@ -2336,6 +2396,7 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
+@@ -2336,6 +2398,7 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
      const VAddr address = image.info.guest_address;
      if (!FrameCapture::IsDisplayBuffer(address)) {
          display_redirect = false;
@@ -7295,7 +7297,7 @@ index ad2c2b4..7f50947 100644
          return false;
      }
      std::scoped_lock lock{display_mutex};
-@@ -2344,13 +2405,16 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
+@@ -2344,13 +2407,16 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
          display.valid = false; // not upscaled: the presenter shows the guest buffer
          return false;
      }
@@ -7314,7 +7316,7 @@ index ad2c2b4..7f50947 100644
          display.width = ui_width;
          display.height = ui_height;
          display.image = VideoCore::UniqueImage(device, instance.GetAllocator());
-@@ -2384,7 +2448,7 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
+@@ -2384,7 +2450,7 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
          cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &b});
      });
      display.valid = true;
@@ -7323,7 +7325,7 @@ index ad2c2b4..7f50947 100644
                vk::ImageLayout::eGeneral, ui_width, ui_height};
      return true;
  }
-@@ -2420,7 +2484,7 @@ bool TemporalUpscaler::RedirectSampled(VideoCore::ImageId image,
+@@ -2420,7 +2486,7 @@ bool TemporalUpscaler::RedirectSampled(VideoCore::ImageId image,
              cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &b});
          });
      }
@@ -7332,7 +7334,7 @@ index ad2c2b4..7f50947 100644
      layout = vk::ImageLayout::eGeneral;
      return true;
  }
-@@ -2431,7 +2495,7 @@ bool TemporalUpscaler::DisplayOverride(VAddr address, Display& display) {
+@@ -2431,7 +2497,7 @@ bool TemporalUpscaler::DisplayOverride(VAddr address, Display& display) {
      if (it == displays.end() || !it->second.valid) {
          return false;
      }
@@ -7341,7 +7343,7 @@ index ad2c2b4..7f50947 100644
      // Diagnostic capture of the actual completed display buffer, including native UI.
      // BB_PRESENT_DUMP_COUNT=N: the trigger dumps N consecutive frames (temporal stability).
      static const char* dump = std::getenv("BB_PRESENT_DUMP_TRIGGER");
-@@ -2449,9 +2513,10 @@ bool TemporalUpscaler::DisplayOverride(VAddr address, Display& display) {
+@@ -2449,9 +2515,10 @@ bool TemporalUpscaler::DisplayOverride(VAddr address, Display& display) {
          scheduler.EndRendering();
          const bool bgra = display.format == vk::Format::eB8G8R8A8Unorm ||
                            display.format == vk::Format::eB8G8R8A8Srgb;
@@ -7354,7 +7356,7 @@ index ad2c2b4..7f50947 100644
      }
      return true;
  }
-@@ -2477,8 +2542,10 @@ bool TemporalUpscaler::PresentDumpDue() {
+@@ -2477,8 +2544,10 @@ bool TemporalUpscaler::PresentDumpDue() {
  void TemporalUpscaler::DumpPresented(vk::Image image, u32 width, u32 height, vk::Format format) {
      scheduler.EndRendering();
      const bool bgra = format == vk::Format::eB8G8R8A8Unorm || format == vk::Format::eB8G8R8A8Srgb;
@@ -7366,7 +7368,7 @@ index ad2c2b4..7f50947 100644
  }
  
  } // namespace Vulkan
-@@ -2561,3 +2628,621 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image
+@@ -2561,3 +2630,621 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image
  }
  
  } // namespace Vulkan
@@ -8063,10 +8065,10 @@ index d6ecf12..b5f8b65 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 7ddd461..35bd88b 100644
+index 7ddd461..9f95c2b 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
-@@ -298,6 +298,311 @@ void CheatStats() {
+@@ -298,6 +298,313 @@ void CheatStats() {
      CheatUnavailable(BbEngine::Cheats::Echoes);
  }
  
@@ -8220,14 +8222,15 @@ index 7ddd461..35bd88b 100644
 +    Hint(BbSettings::MenuText(
 +        "PsychoV-30: RenoDX's tone mapper on the game's scene in place of its curve, as RenoDX's "
 +        "mods set it: the game's mid tones and contrast, PsychoV-30's own shadows, the lights up "
-+        "to your display's peak. Vanilla+: as RenoDX's Bloodborne mod, the game's own image up "
-+        "to mid grey, the lights continued above it and rolled off to your display's peak "
-+        "(brighter highlights). Vanilla: the game's own look (no HDR highlights). Live.",
++        "to your display's peak. Vanilla+ (by souperman9, from his RenoDX Bloodborne mod): the "
++        "game's own image up to mid grey, the lights continued above it and rolled off to your "
++        "display's peak (brighter highlights). Vanilla: the game's own look (no HDR highlights). "
++        "Live.",
 +        "PsychoV-30: тонмаппер RenoDX вместо кривой игры, как в модах RenoDX: средние тона и "
-+        "контраст игры, собственные тени PsychoV-30, свет до пика вашего дисплея. Vanilla+: как в "
-+        "моде RenoDX для Bloodborne, картинка игры до среднего серого, свет выше продолжен и "
-+        "плавно доведён до пика дисплея (ярче блики). Vanilla: собственная картинка игры (без "
-+        "HDR-бликов). Сразу."));
++        "контраст игры, собственные тени PsychoV-30, свет до пика вашего дисплея. Vanilla+ (автор "
++        "souperman9, из его мода RenoDX для Bloodborne): картинка игры до среднего серого, свет "
++        "выше продолжен и плавно доведён до пика дисплея (ярче блики). Vanilla: собственная "
++        "картинка игры (без HDR-бликов). Сразу."));
 +    // Target gamut and PsychoV30's compressions: PsychoV30 only.
 +    ImGui::BeginDisabled(s.hdr_tonemapper == BbSettings::HdrToneMapperVanilla ||
 +                         s.hdr_tonemapper == BbSettings::HdrToneMapperVanillaPlus);
@@ -8323,10 +8326,10 @@ index 7ddd461..35bd88b 100644
 +            "средние тона чуть иначе. Сразу."));
 +        SliderReset("Black Floor", s.hdr_black_floor, 0.0f, 2.0f, 0.0f, "%.2f nits",
 +                    BbSettings::MenuText(
-+                        "Takes the game's darkest grey down to true black (OLED). With the game's "
-+                        "brightness at 5, try 0.4.",
-+                        "Опускает самый тёмный серый игры до чистого чёрного (OLED). При яркости "
-+                        "игры 5 попробуйте 0.4."));
++                        "Takes the game's darkest greys down to true black (OLED). 0 keeps the "
++                        "game's own blacks; keep the game's Brightness option at 5.",
++                        "Опускает самые тёмные серые тона игры до чистого чёрного (OLED). 0 "
++                        "оставляет чёрный как в игре; держите яркость в настройках игры на 5."));
 +    }
 +
 +    ImGui::SeparatorText("Effects");
@@ -8373,12 +8376,13 @@ index 7ddd461..35bd88b 100644
 +    ImGui::SeparatorText("About");
 +    ImGui::TextDisabled("PsychoV30 and this menu's layout from RenoDX");
 +    ImGui::TextDisabled("(github.com/clshortfuse/renodx, Carlos Lopez and contributors, MIT).");
++    ImGui::TextDisabled("Vanilla+ by souperman9 (RenoDX Bloodborne mod).");
 +}
 +
  // HDR output (bbport.ini hdr*): on/off on restart; paper white, peak and boost live.
  void HdrSection() {
      auto& s = BbSettings::Get();
-@@ -332,11 +637,26 @@ void HdrSection() {
+@@ -332,11 +639,27 @@ void HdrSection() {
      const char* modes[BbSettings::HdrModeCount] = {
          BbSettings::MenuText("Native (from the game's HDR scene)", "Нативный (из HDR-сцены игры)"),
          BbSettings::MenuText("Expand (from the SDR picture)", "Расширение (из SDR-картинки)"),
@@ -8389,10 +8393,11 @@ index 7ddd461..35bd88b 100644
                                             modes, BbSettings::HdrModeCount);
      Store(s.hdr_mode, mode, mode_changed);
 +    Hint(BbSettings::MenuText(
-+        "PsychoV30: the game's own light in 16 bits, tone mapped by RenoDX's PsychoV30, with the "
-+        "RenoDX-style settings below. Entering or leaving it applies after restarting the game.",
-+        "PsychoV30: собственный свет игры в 16 битах, тонмаппинг PsychoV30 из RenoDX, с "
-+        "настройками в стиле RenoDX ниже. Включение и выключение применяются после перезапуска."));
++        "PsychoV30: the game's own light in 16 bits, tone mapped by RenoDX's PsychoV30 or Vanilla+, "
++        "with the RenoDX-style settings below. Entering or leaving it applies after restarting the "
++        "game.",
++        "PsychoV30: собственный свет игры в 16 битах, тонмаппинг PsychoV30 или Vanilla+ из RenoDX, "
++        "с настройками в стиле RenoDX ниже. Включение и выключение применяются после перезапуска."));
 +    if (mode == BbSettings::HdrModePsychoV30) {
 +        PsychoSection(s);
 +        return;
@@ -8405,7 +8410,7 @@ index 7ddd461..35bd88b 100644
      Hint(BbSettings::MenuText(
          "Native: the brightness of lamps, fire, the moon and other highlights comes from the "
          "game's own HDR scene, before its tonemap clipped it to SDR white. Midtones, colours and "
-@@ -355,17 +675,17 @@ void HdrSection() {
+@@ -355,17 +678,17 @@ void HdrSection() {
      Slider(BbSettings::MenuText("Highlight boost", "Усиление светлых участков"), s.hdr_boost, 0.0f,
             1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
      if (mode == BbSettings::HdrModeNative) {
@@ -8427,7 +8432,7 @@ index 7ddd461..35bd88b 100644
              "1 — более насыщенные, как на мониторе с широким охватом в SDR (привычный вид; точный sRGB "
              "рядом с ним может казаться блёклым). Меняются сразу."));
      }
-@@ -398,13 +718,20 @@ void PictureSection() {
+@@ -398,13 +721,20 @@ void PictureSection() {
      // A moved setting turns Picture tuning on: it gates them all.
      const bool vignette = s.graphics_vignette;
      // The useful range on the slider; Ctrl+click types any value (bbport_settings.cpp keeps it
@@ -8453,7 +8458,7 @@ index 7ddd461..35bd88b 100644
      Checkbox(BbSettings::MenuText("Vignette", "Виньетка"), s.graphics_vignette);
      moved |= vignette != s.graphics_vignette;
      moved |= Slider(BbSettings::MenuText("Ambient occlusion strength", "Сила затенения (AO)"), s.graphics_ao_strength,
-@@ -425,6 +752,16 @@ void PictureSection() {
+@@ -425,6 +755,16 @@ void PictureSection() {
          Store(s.graphics_shadow_scale, 1.0f, true);
      }
      ImGui::EndDisabled();
@@ -8470,7 +8475,7 @@ index 7ddd461..35bd88b 100644
      Hint(BbSettings::MenuText(
          "Changes apply live, Picture tuning too, to the game's own colour, fog and lighting of each area "
          "(the HUD and menus keep theirs). Moving one turns Picture tuning on; off: the game's own picture. 1.00 and Hue 0 are the game's. Fog 0 clears the haze over distant streets. The "
-@@ -801,6 +1138,7 @@ void Menu() {
+@@ -801,6 +1141,7 @@ void Menu() {
      bool restart =
          s.object_motion != s.startup_object_motion || s.model_lod != s.startup_model_lod ||
          s.live_resolution != s.startup_live_resolution || s.hdr != s.startup_hdr ||
@@ -8478,7 +8483,7 @@ index 7ddd461..35bd88b 100644
          BbSettings::ResolutionNeedsRestart();
      for (int e = 0; e < BbSettings::EffectCount; ++e) {
          restart |= s.effects[e] != s.startup_effects[e];
-@@ -1219,6 +1557,11 @@ bool HandleEvent(const SDL_Event& event) {
+@@ -1219,6 +1560,11 @@ bool HandleEvent(const SDL_Event& event) {
      case SDL_EVENT_KEY_DOWN:
      case SDL_EVENT_KEY_UP: {
          const bool down = event.type == SDL_EVENT_KEY_DOWN;
