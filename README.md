@@ -42,6 +42,8 @@ the launcher, or use *Reset all*.
 
 ## Tips
 
+- **NVIDIA only for now.** On AMD and Intel GPUs, HDR16 does not start its tone mapping and the
+  game stays in its SDR look (not tested on them; Native and Expanded are not affected).
 - Keep the game's own **Brightness** option (in its in-game settings) at **5**. It still changes
   the whole image, shadows first.
 - **Peak Brightness** follows what Windows reports for your display. Set it by hand if Windows
@@ -122,7 +124,10 @@ and assembles the package with the official 0.9.36 runtime files. Pinned inputs:
 - RenoDX `b6b32f47789ff9d0e640a0e0db6c9421b5397f34` (shader checks).
 
 HDR16 needs a GPU with 176 bytes of Vulkan push constants (checked at startup) and uses the
-legacy shader compiler (the engine turns native shaders off in this mode).
+legacy shader compiler (the engine turns native shaders off in this mode). Its composite reads
+the game shader's inputs per vertex (fragment-shader barycentrics), which the recompiler only
+emits on NVIDIA's driver; elsewhere the composite is not built ("inputs not interpolated per
+vertex" in the log).
 
 ## Credits and licenses
 
