@@ -60,7 +60,7 @@ def assemble(engine, overlay, destination, cache):
                         ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     shutil.copytree(overlay / 'out', runtime / 'out', dirs_exist_ok=True)
     shutil.copytree(overlay / 'licenses', destination / 'licenses', dirs_exist_ok=True)
-    shutil.copy2(overlay / 'README-PsychoV30.md', destination / 'README-PsychoV30.md')
+    shutil.copy2(overlay / 'README-HDR16.md', destination / 'README-HDR16.md')
     # The launcher build is Lantern Engine.exe since Lantern 9.8 (Bloodborne Launcher.exe before).
     launcher = overlay / 'Lantern Engine.exe'
     if not launcher.is_file():
@@ -101,7 +101,7 @@ def assemble(engine, overlay, destination, cache):
     # out\ at the top is the layout before engine\ (bb-start.exe in engine\out is ours, built here).
     if (destination / 'out').exists():
         raise RuntimeError('Mixed engine layouts in distribution')
-    print(f'Complete PsychoV30 package: {destination}')
+    print(f'Complete HDR16 package: {destination}')
 
 
 if __name__ == '__main__':

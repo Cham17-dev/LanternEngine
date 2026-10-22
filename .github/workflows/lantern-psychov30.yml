@@ -48,6 +48,14 @@ jobs:
           path: .ci/spirv-cross
           sparse-checkout: include
           persist-credentials: false
+      # RenoDX's shader library, the reference of the color table's gamut bridge.
+      - uses: actions/checkout@v4
+        with:
+          repository: clshortfuse/renodx
+          ref: b6b32f47789ff9d0e640a0e0db6c9421b5397f34
+          path: .ci/renodx
+          sparse-checkout: src/shaders
+          persist-credentials: false
       - name: Reconstruct and patch
         run: |
           python3 ports/lantern/prepare.py baseline engine-src upstream-lantern
@@ -61,6 +69,12 @@ jobs:
         env:
           SPIRV_CROSS_INCLUDE: ${{ github.workspace }}/.ci/spirv-cross/include
         run: python3 -I docs/hdr-tools/upscale_transfer_check/run.py
+      - name: Gamut bridge against RenoDX
+        working-directory: engine-src
+        env:
+          SPIRV_CROSS_INCLUDE: ${{ github.workspace }}/.ci/spirv-cross/include
+          RENODX_DIR: ${{ github.workspace }}/.ci/renodx
+        run: python3 -I docs/hdr-tools/gamut_bridge_check/run.py
   windows:
     runs-on: windows-latest
     timeout-minutes: 120
@@ -182,8 +196,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.full }}
         run: |
           New-Item -ItemType Directory release-files, pack | Out-Null
-          Copy-Item distribution pack/LanternEngine-PsychoV30 -Recurse
-          7z a -tzip -mx=5 "release-files/LanternEngine-PsychoV30-v$env:VERSION-win64.zip" ./pack/LanternEngine-PsychoV30
+          Copy-Item distribution pack/LanternEngine-HDR16 -Recurse
+          7z a -tzip -mx=5 "release-files/LanternEngine-HDR16-v$env:VERSION-win64.zip" ./pack/LanternEngine-HDR16
           if ($LASTEXITCODE -ne 0) { throw "7z failed" }
           Copy-Item "distribution/Lantern Engine.exe", distribution/package.json release-files/
           Get-ChildItem release-files | Format-Table Name, Length

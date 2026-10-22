@@ -213,18 +213,18 @@ namespace BloodborneLauncher.Core
         public static readonly Choice[] HdrMode =
         {
             new(L.T("Native"), "native"), new(L.T("Expanded"), "expand"),
-            new("PsychoV30 (16-bit, restart)", "psychov30",
-                "PsychoV30 — RenoDX · © 2026 Carlos Lopez · MIT License. GLSL adaptation for bbport. github.com/clshortfuse/renodx"),
+            new("HDR16 (16-bit, restart)", "psychov30",
+                "Vanilla+ by souperman9 (RenoDX Bloodborne mod). PsychoV-30 — RenoDX · © 2026 Carlos Lopez · MIT License. GLSL adaptation for bbport. github.com/clshortfuse/renodx"),
         };
 
-        /// <summary>hdr_tonemapper with PsychoV30 (bbport_settings.h): 4 PsychoV-30 (as RenoDX's mods), 3 Hybrid (its shadows matched to the game's), 2 Vanilla.</summary>
+        /// <summary>hdr_tonemapper with HDR16 (hdr_mode=psychov30, bbport_settings.h): 5 Vanilla+ (souperman9's, RenoDX's Bloodborne mod; the default), 4 PsychoV-30 (as RenoDX's mods), 2 Vanilla. 3 (Hybrid) is bbport.ini only.</summary>
         public static readonly Choice[] HdrToneMapper =
         {
             // The segmented buttons show the label up to " (".
-            new("PsychoV-30 (default)", "4"), new("Hybrid (the game's shadows)", "3"), new("Vanilla (the game's own look)", "2"),
+            new("Vanilla+ (by souperman9, default)", "5"), new("PsychoV-30 (as RenoDX's mods)", "4"), new("Vanilla (the game's own look)", "2"),
         };
 
-        /// <summary>hdr_gamut: the color volume PsychoV30 fits the picture into (its gamut_compression_mode).</summary>
+        /// <summary>hdr_gamut: the color volume PsychoV-30 fits the picture into (its gamut_compression_mode).</summary>
         public static readonly Choice[] HdrGamut =
         {
             new("BT.2020 (default)", "bt2020"), new("BT.709", "bt709"),
@@ -235,10 +235,6 @@ namespace BloodborneLauncher.Core
             new(L.T("Off"), "0"), new(L.T("Low (default)"), "0.25"), new(L.T("Medium"), "0.5"), new(L.T("High"), "1"),
         };
 
-        public static readonly Choice[] HdrUiBrightness =
-        {
-            new(L.T("Dimmer"), "0.75"), new(L.T("Paper white (default)"), "1"), new(L.T("Brighter"), "1.25"), new(L.T("Much brighter"), "1.5"),
-        };
 
         public static readonly Choice[] HdrUiColor =
         {

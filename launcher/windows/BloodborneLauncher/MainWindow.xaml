@@ -5,7 +5,7 @@
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
                  xmlns:views="clr-namespace:BloodborneLauncher.Views"
-                 Title="Lantern Engine + PsychoV30"
+                 Title="Lantern Engine + HDR16"
                  Icon="app.ico"
                  Height="780" Width="1040"
                  MinHeight="560" MinWidth="820"
@@ -341,7 +341,7 @@
                 </Grid>
 
                 <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" IsHitTestVisible="False">
-                    <Run Text="Lantern Engine + PsychoV30" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <Run Text="Lantern Engine + HDR16" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                     <Run x:Name="TitlePage" Text="" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
                 </TextBlock>
 

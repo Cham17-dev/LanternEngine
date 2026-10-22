@@ -154,7 +154,7 @@ namespace BloodborneLauncher.Views
                     : L.T("This display shows no HDR");
             IniToggle(SymbolRegular.Hdr24, L.T("HDR output"), hdrHint, "hdr");
             ComboRow(SymbolRegular.Lightbulb24, L.T("HDR source"),
-                "PsychoV30: HDR tone mapping with dark tones matched to the game's SDR rendering. Native: highlights derived from the game's HDR scene. Expanded: bright SDR pixels expanded towards the peak. Entering or leaving PsychoV30 requires restarting the game.",
+                "HDR16: the game's own light in 16 bits, tone mapped by Vanilla+ or PsychoV-30. Native: highlights derived from the game's HDR scene. Expanded: bright SDR pixels expanded towards the peak. Entering or leaving HDR16 requires restarting the game.",
                 Choices.HdrMode, () => Ini.Get("hdr_mode", "native"), v => Ini.Set("hdr_mode", v), changed: RefreshHdrRows);
             // Defaults, as the engine's: paper white 203 (BT.2408's reference white), the peak
             // Windows reports for the chosen display (in HDR).
@@ -179,21 +179,42 @@ namespace BloodborneLauncher.Views
                 peakRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24,
                     "Reset to the peak Windows reports for this display (1000 when it reports none)",
                     (_, _) => peak.Value = Math.Clamp(DetectedPeak(), peak.Minimum, peak.Maximum)));
+            // UI brightness in nits, as RenoDX's (48..500, 203 by default), whatever Paper white. An
+            // older bbport.ini's hdr_ui_brightness (times paper white) shows converted, as the
+            // engine reads it, and goes once this is set.
+            const double DefaultUiNits = 203;
+            double UiNits()
+            {
+                if (Ini.Raw("hdr_ui_nits") is { } nits) return ParseDouble(nits, DefaultUiNits);
+                if (Ini.Raw("hdr_ui_brightness") is { } ratio)
+                    return Math.Round(ParseDouble(ratio, 1) * ParseDouble(Ini.Get("hdr_paper_white", ""), DefaultPaperWhite));
+                return DefaultUiNits;
+            }
+            var uiNits = SliderRow(SymbolRegular.TextFont24, L.T("UI brightness"),
+                "Native and HDR16: how bright the HUD, menus and subtitles are, in nits, whatever Paper white. Default: 203. Range: 48–500. Also in the in-game menu, live",
+                48, 500, 1, UiNits,
+                v =>
+                {
+                    Ini.Set("hdr_ui_nits", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+                    Ini.Set("hdr_ui_brightness", null);
+                },
+                format: L.T("0' nits'"), valueWidth: 82);
+            _hdrBrightnessRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
+            if (uiNits.Parent is Panel uiNitsRow)
+                uiNitsRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24, "Reset to 203 nits",
+                    (_, _) => uiNits.Value = DefaultUiNits));
             ComboRow(SymbolRegular.Sparkle24, L.T("Highlight boost"), L.T("Off keeps the game's own look; higher makes lamps, fire and the sky brighter"),
                 Choices.HdrBoost, () => Ini.Get("hdr_boost", "0.25"), v => Ini.Set("hdr_boost", v));
             _hdrBoostRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
             ComboRow(SymbolRegular.Lightbulb24, L.T("Tone mapper"),
-                "PsychoV30 only. PsychoV-30: as RenoDX's mods, its own shadows. Hybrid: the shadows matched to the game's below mid grey; compare them in dark interiors and fog. Vanilla: the game's own look. Also in the in-game menu, live",
-                Choices.HdrToneMapper, () => Ini.Get("hdr_tonemapper", "4"), v => Ini.Set("hdr_tonemapper", v));
+                "HDR16 only. Vanilla+ (by souperman9, from his RenoDX Bloodborne mod): the game's image up to mid grey, brighter highlights up to your display's peak. PsychoV-30: as RenoDX's mods, its own shadows. Vanilla: the game's own look. Also in the in-game menu, live",
+                Choices.HdrToneMapper, () => Ini.Get("hdr_tonemapper", "5"), v => Ini.Set("hdr_tonemapper", v));
             _hdrToneMapperRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
             ComboRow(SymbolRegular.Color24, L.T("Target gamut"),
-                "PsychoV30 only: the color volume it fits the picture into. BT.2020 is RenoDX's HDR default; compare with BT.709 on saturated lights (lanterns, fire, blue lights). Also in the in-game menu, live",
+                "HDR16 with PsychoV-30 only: the color volume it fits the picture into. BT.2020 is RenoDX's HDR default; compare with BT.709 on saturated lights (lanterns, fire, blue lights). Also in the in-game menu, live",
                 Choices.HdrGamut, () => Ini.Get("hdr_gamut", "bt2020"), v => Ini.Set("hdr_gamut", v));
             _hdrGamutRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
             var hdrMore = Advanced();
-            ComboRow(SymbolRegular.TextFont24, L.T("UI brightness"), "Native and PsychoV30: how bright the HUD, menus and subtitles are, against paper white",
-                Choices.HdrUiBrightness, () => Ini.Get("hdr_ui_brightness", "1"), v => Ini.Set("hdr_ui_brightness", v), hdrMore);
-            _hdrBrightnessRow = (FrameworkElement)hdrMore.Children[hdrMore.Children.Count - 1];
             ComboRow(SymbolRegular.Color24, L.T("UI colour"), L.T("Native source only: Vivid shows the HUD and menus with the colours a wide-gamut monitor gives SDR; Exact keeps sRGB's"),
                 Choices.HdrUiColor, () => Ini.Get("hdr_ui_color", "1"), v => Ini.Set("hdr_ui_color", v), hdrMore);
             _hdrColourRow = (FrameworkElement)hdrMore.Children[hdrMore.Children.Count - 1];
