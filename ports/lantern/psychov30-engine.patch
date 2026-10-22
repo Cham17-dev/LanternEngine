@@ -7066,7 +7066,7 @@ index c07d7e5..885f4c2 100644
                  hdr_format == SURFACE_FORMAT_HDR ? "HDR10 PQ (BT.2020)" : "scRGB (FP16, linear BT.709)",
                  settings.hdr_paper_white.load(), settings.hdr_peak.load(),
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
-index ad2c2b4..3a5322d 100644
+index ad2c2b4..7f50947 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
 @@ -1,3 +1,6 @@
@@ -7366,7 +7366,7 @@ index ad2c2b4..3a5322d 100644
  }
  
  } // namespace Vulkan
-@@ -2561,3 +2628,618 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image
+@@ -2561,3 +2628,621 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image
  }
  
  } // namespace Vulkan
@@ -7515,8 +7515,11 @@ index ad2c2b4..3a5322d 100644
 +
 +void TemporalUpscaler::MaskPsychoSnapshot() {
 +    // The UI image now holds the frame with its UI (General layout, written by the UI's draws);
-+    // the snapshot, the frame before them (General, read by the final pass).
-+    if (!snapshot_ready || !scene_snapshot_view || !ui_image || !ui_view ||
++    // the snapshot, the frame before them (General, read by the final pass). The pipeline comes
++    // with the upscaler's resources (CreatePipelines): the first frames in game can come before
++    // them (DLSS), and binding no pipeline crashed the driver (nvoglv64); the final pass then
++    // tells the HUD by its luminance.
++    if (!hdr_ui_mask_pipeline || !snapshot_ready || !scene_snapshot_view || !ui_image || !ui_view ||
 +        snapshot_width != ui_width || snapshot_height != ui_height) {
 +        return;
 +    }
