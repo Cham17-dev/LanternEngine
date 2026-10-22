@@ -43,7 +43,7 @@ tools last for the session only.
 | Preset | Off, #1 to #3 (#1) | Off is the game's own look. Each numbered preset keeps its own settings. |
 | Settings Mode | Simple, Intermediate, Advanced (Simple) | How many settings the menu shows. |
 | **Tone Mapping** | | |
-| Tone Mapper | PsychoV-30, Hybrid, Vanilla (PsychoV-30) | See [Tone mappers](#tone-mappers). |
+| Tone Mapper | PsychoV-30, Vanilla+, Vanilla (PsychoV-30) | See [Tone mappers](#tone-mappers). |
 | Target gamut | BT.2020, BT.709 (BT.2020) | The color volume PsychoV30 fits the picture into. |
 | Gamut Compression *(Intermediate)* | 0 to 1 (1) | How far colors outside the target gamut are brought into it. |
 | Compression *(Intermediate)* | 0 to 2, 0 = auto (1) | How fast lights reach the peak: higher is brighter and harder, lower softer. |
@@ -69,14 +69,18 @@ Hue, Fog, Vignette, ambient occlusion and shadow distance stay. Gamma 2.2 is alw
 
 ### Tone mappers
 
-All PsychoV30 modes replace the game's tone curve on the scene itself, before the game's color
-table, and bring the lights up to your display's peak.
+PsychoV-30 and Vanilla+ work on the scene itself, before the game's color table, and bring the
+lights up to your display's peak.
 
 - **PsychoV-30** (`hdr_tonemapper=4`, default): PsychoV30 as RenoDX's mods set it (Order of the
   Sinking Star's Midgray Reference and Slope Reference): the game's mid grey kept at 0.18, the
   game's contrast there, PsychoV30's own shadows.
-- **Hybrid** (`hdr_tonemapper=3`): the same, with the shadows below mid grey matched to the
-  game's. An addition of this port; compare the two in dark interiors and fog.
+- **Vanilla+** (`hdr_tonemapper=5`): as Vanilla+ in RenoDX's Bloodborne mod (souperman9), read
+  from its shaders: the game's curve up to an input of mid grey, its tangent above, the bloom
+  added, RenoDX's user color grading, then RenoDX's `CInfinityRollOff` per channel to the peak.
+  The game's shadows and mid tones, brighter highlights than PsychoV-30.
+- **Hybrid** (`hdr_tonemapper=3`, `bbport.ini` only): PsychoV-30 with the shadows below mid grey
+  matched to the game's.
 - **Vanilla** (`hdr_tonemapper=2`): the game's own look in HDR10, without HDR highlights.
 
 ## Technical notes
@@ -182,7 +186,7 @@ between releases report it.
 
 - Dark interiors, fog, fire, saturated blue lights, menus, loading transitions and camera
   movement: HUD brightness, clipping, color order, borders and temporal stability.
-- PsychoV-30 against Hybrid in dark interiors and fog.
+- Vanilla+ against RenoDX's Bloodborne mod (Vanilla+) on the same scene, and against PsychoV-30.
 - Compression 0.5 / 2 / auto on lanterns and fire; Gamut Compression 0 with Saturation 100.
 - Target gamut BT.2020 against BT.709 on saturated lights, with probe 6, with and without an
   upscaler.

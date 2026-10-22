@@ -207,7 +207,7 @@ namespace BloodborneLauncher.Views
                 Choices.HdrBoost, () => Ini.Get("hdr_boost", "0.25"), v => Ini.Set("hdr_boost", v));
             _hdrBoostRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
             ComboRow(SymbolRegular.Lightbulb24, L.T("Tone mapper"),
-                "PsychoV30 only. PsychoV-30: as RenoDX's mods, its own shadows. Hybrid: the shadows matched to the game's below mid grey; compare them in dark interiors and fog. Vanilla: the game's own look. Also in the in-game menu, live",
+                "PsychoV30 only. PsychoV-30: as RenoDX's mods, its own shadows. Vanilla+: as RenoDX's Bloodborne mod, the game's image up to mid grey, brighter highlights up to your display's peak. Vanilla: the game's own look. Also in the in-game menu, live",
                 Choices.HdrToneMapper, () => Ini.Get("hdr_tonemapper", "4"), v => Ini.Set("hdr_tonemapper", v));
             _hdrToneMapperRow = (FrameworkElement)Body.Children[Body.Children.Count - 1];
             ComboRow(SymbolRegular.Color24, L.T("Target gamut"),
