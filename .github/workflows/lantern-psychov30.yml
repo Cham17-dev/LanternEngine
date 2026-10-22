@@ -196,8 +196,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.full }}
         run: |
           New-Item -ItemType Directory release-files, pack | Out-Null
-          Copy-Item distribution pack/LanternEngine-PsychoV30 -Recurse
-          7z a -tzip -mx=5 "release-files/LanternEngine-PsychoV30-v$env:VERSION-win64.zip" ./pack/LanternEngine-PsychoV30
+          Copy-Item distribution pack/LanternEngine-HDR16 -Recurse
+          7z a -tzip -mx=5 "release-files/LanternEngine-HDR16-v$env:VERSION-win64.zip" ./pack/LanternEngine-HDR16
           if ($LASTEXITCODE -ne 0) { throw "7z failed" }
           Copy-Item "distribution/Lantern Engine.exe", distribution/package.json release-files/
           Get-ChildItem release-files | Format-Table Name, Length

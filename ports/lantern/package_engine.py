@@ -41,8 +41,8 @@ while queue:
 for src in launcher.iterdir():
     if src.is_file():
         shutil.copy2(src, stage / src.name)
-# The repository's README (this port's) is the package's README-PsychoV30.md.
-shutil.copy2(Path(__file__).resolve().parents[2] / 'README.md', stage / 'README-PsychoV30.md')
+# The repository's README (this port's) is the package's README-HDR16.md.
+shutil.copy2(Path(__file__).resolve().parents[2] / 'README.md', stage / 'README-HDR16.md')
 notices = Path(__file__).with_name('licenses')
 shutil.copytree(notices, stage / 'licenses', dirs_exist_ok=True)
 (stage / 'psychov30-example.ini').write_text(

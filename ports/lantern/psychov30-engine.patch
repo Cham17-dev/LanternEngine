@@ -6156,7 +6156,7 @@ index c607d38..4bf2d83 100644
  
  class HdrNative {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index 620920f..5e2b582 100644
+index 620920f..ba29c47 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 @@ -11,6 +11,8 @@
@@ -6185,7 +6185,7 @@ index 620920f..5e2b582 100644
        desc_heap{instance, scheduler.GetWorkSemaphore(), DescriptorHeapSizes} {
 +    ASSERT_MSG(!HdrChannel::Native16() ||
 +        instance.GetPhysicalDevice().getProperties().limits.maxPushConstantsSize >= 176,
-+        "PsychoV30 requires 176 bytes of Vulkan push constants; choose Native or Expand on this GPU");
++        "HDR16 requires 176 bytes of Vulkan push constants; choose Native or Expand on this GPU");
      sel.regs = &liverpool->regs;
      const auto& vk12_props = instance.GetVk12Properties();
      profile = Shader::Profile{
@@ -6201,7 +6201,7 @@ index 620920f..5e2b582 100644
 -                return !(env && env[0] == '0');
 +                const bool wanted = !(env && env[0] == '0');
 +                if (wanted && HdrChannel::Native16()) {
-+                    std::printf("Native shaders: off in HDR mode PsychoV30 (its shaders need the "
++                    std::printf("Native shaders: off in HDR mode HDR16 (its shaders need the "
 +                                "legacy compiler's constant buffers)\n");
 +                    return false;
 +                }
@@ -6281,7 +6281,7 @@ index 235f1e3..746e7bf 100644
      vk::ShaderModule module;
      if (perm_idx < target->modules.size() && target->modules[perm_idx].module) {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
-index e388f5d..6ab6bd6 100644
+index e388f5d..10bca2e 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
 @@ -1,3 +1,4 @@
@@ -6384,7 +6384,7 @@ index e388f5d..6ab6bd6 100644
                      scrgb ? "scRGB (FP16)" : "HDR10 (PQ, BT.2020)", BbSettings::HdrModeNames[mode],
 -                    mode == BbSettings::HdrModeNative
 +                    HdrChannel::Native16()
-+                        ? "PsychoV30 on the game's scene, 16-bit chain"
++                        ? "HDR16, tone mapped on the game's scene, 16-bit chain"
 +                    : mode == BbSettings::HdrModeNative
                          ? "highlights from the game's HDR scene, plain SDR where a frame has none"
                          : "highlights expanded from the SDR picture");
@@ -6483,7 +6483,7 @@ index ab09c6b..32a3aa2 100644
  
  enum SchedulerType {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
-index 5b27025..e72a7fa 100644
+index 5b27025..b788916 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp
 @@ -1,3 +1,4 @@
@@ -6505,7 +6505,7 @@ index 5b27025..e72a7fa 100644
      draw_prep = std::make_unique<DrawPreparation>(pipeline_cache);
 +    ASSERT_MSG(!HdrChannel::Native16() ||
 +        instance.GetPhysicalDevice().getProperties().limits.maxPushConstantsSize >= 176,
-+        "PsychoV30 mode requires 176 bytes of Vulkan push constants; choose Native or Expand on this GPU");
++        "HDR16 requires 176 bytes of Vulkan push constants; choose Native or Expand on this GPU");
      scene_targets = std::make_unique<SceneTargets>(instance, scheduler, runtime, texture_cache);
      // Allocation is independent of shader compilation, including constructor-time precache.
      object_motion = std::make_unique<ObjectMotion>(instance, scheduler);
@@ -8065,10 +8065,10 @@ index d6ecf12..b5f8b65 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 7ddd461..baf0026 100644
+index 7ddd461..78c87c4 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
-@@ -298,6 +298,313 @@ void CheatStats() {
+@@ -298,6 +298,314 @@ void CheatStats() {
      CheatUnavailable(BbEngine::Cheats::Echoes);
  }
  
@@ -8172,8 +8172,8 @@ index 7ddd461..baf0026 100644
 +void PsychoSection(BbSettings::Values& s) {
 +    if (!s.startup_psychov30) {
 +        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "%s",
-+                           BbSettings::MenuText("PsychoV30 starts with the next game start.",
-+                                                "PsychoV30 включится при следующем запуске игры."));
++                           BbSettings::MenuText("HDR16 starts with the next game start.",
++                                                "HDR16 включится при следующем запуске игры."));
 +    } else if (s.hdr_native16_live) {
 +        ImGui::TextColored(ImVec4(0.45f, 0.9f, 0.45f, 1.0f), "%s",
 +                           BbSettings::MenuText("HDR 16-bit: active", "HDR 16 бит: активен"));
@@ -8243,10 +8243,11 @@ index 7ddd461..baf0026 100644
 +              chosen == 1 ? int(BbSettings::HdrGamutBt709) : int(BbSettings::HdrGamutBt2020), true);
 +    }
 +    Hint(BbSettings::MenuText(
-+        "The color volume PsychoV30 fits the picture into: BT.2020 (RenoDX's HDR default) or BT.709. "
-+        "Compare them on saturated lights (lanterns, fire, blue lights). Live.",
-+        "Цветовой объём, в который PsychoV30 вписывает картинку: BT.2020 (по умолчанию в HDR-модах "
-+        "RenoDX) или BT.709. Сравните на насыщенных источниках (фонари, огонь, синий свет). Сразу."));
++        "PsychoV-30 only: the color volume it fits the picture into, BT.2020 (RenoDX's HDR "
++        "default) or BT.709. Compare them on saturated lights (lanterns, fire, blue lights). Live.",
++        "Только PsychoV-30: цветовой объём, в который он вписывает картинку, BT.2020 (по умолчанию "
++        "в HDR-модах RenoDX) или BT.709. Сравните на насыщенных источниках (фонари, огонь, синий "
++        "свет). Сразу."));
 +    if (level >= 1) {
 +        SliderReset("Gamut Compression", s.hdr_gamut_compression, 0.0f, 1.0f, 1.0f, "%.2f",
 +                    BbSettings::MenuText(
@@ -8374,7 +8375,7 @@ index 7ddd461..baf0026 100644
 +        Hint("BB_GPU_LOG=info: the HDR trace lines in the log.");
 +    }
 +    ImGui::SeparatorText("About");
-+    ImGui::TextDisabled("PsychoV30 and this menu's layout from RenoDX");
++    ImGui::TextDisabled("PsychoV-30 and this menu's layout from RenoDX");
 +    ImGui::TextDisabled("(github.com/clshortfuse/renodx, Carlos Lopez and contributors, MIT).");
 +    ImGui::TextDisabled("Vanilla+ by souperman9 (RenoDX Bloodborne mod).");
 +}
@@ -8382,30 +8383,29 @@ index 7ddd461..baf0026 100644
  // HDR output (bbport.ini hdr*): on/off on restart; paper white, peak and boost live.
  void HdrSection() {
      auto& s = BbSettings::Get();
-@@ -332,11 +639,27 @@ void HdrSection() {
+@@ -332,11 +640,26 @@ void HdrSection() {
      const char* modes[BbSettings::HdrModeCount] = {
          BbSettings::MenuText("Native (from the game's HDR scene)", "Нативный (из HDR-сцены игры)"),
          BbSettings::MenuText("Expand (from the SDR picture)", "Расширение (из SDR-картинки)"),
-+        "PsychoV30 (16-bit, restart required)",
++        "HDR16 (16-bit, restart required)",
      };
      int mode = std::clamp(s.hdr_mode.load(), 0, BbSettings::HdrModeCount - 1);
      const bool mode_changed = ImGui::Combo(BbSettings::MenuText("HDR mode", "Режим HDR"), &mode,
                                             modes, BbSettings::HdrModeCount);
      Store(s.hdr_mode, mode, mode_changed);
 +    Hint(BbSettings::MenuText(
-+        "PsychoV30: the game's own light in 16 bits, tone mapped by RenoDX's PsychoV30 or Vanilla+, "
-+        "with the RenoDX-style settings below. Entering or leaving it applies after restarting the "
-+        "game.",
-+        "PsychoV30: собственный свет игры в 16 битах, тонмаппинг PsychoV30 или Vanilla+ из RenoDX, "
-+        "с настройками в стиле RenoDX ниже. Включение и выключение применяются после перезапуска."));
++        "HDR16: the game's own light in 16 bits, tone mapped by Vanilla+ or PsychoV-30, with the "
++        "RenoDX-style settings below. Entering or leaving it applies after restarting the game.",
++        "HDR16: собственный свет игры в 16 битах, тонмаппинг Vanilla+ или PsychoV-30, с "
++        "настройками в стиле RenoDX ниже. Включение и выключение применяются после перезапуска."));
 +    if (mode == BbSettings::HdrModePsychoV30) {
 +        PsychoSection(s);
 +        return;
 +    }
 +    if (s.startup_psychov30) {
 +        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "%s",
-+                           BbSettings::MenuText("PsychoV30 stays on until the game restarts.",
-+                                                "PsychoV30 работает до перезапуска игры."));
++                           BbSettings::MenuText("HDR16 stays on until the game restarts.",
++                                                "HDR16 работает до перезапуска игры."));
 +    }
      Hint(BbSettings::MenuText(
          "Native: the brightness of lamps, fire, the moon and other highlights comes from the "
@@ -8464,10 +8464,10 @@ index 7ddd461..baf0026 100644
      ImGui::EndDisabled();
 +    if (hdr_grading) {
 +        Hint(BbSettings::MenuText(
-+            "HDR PsychoV30: brightness, contrast, saturation and bloom are set in the HDR section "
++            "HDR16: brightness, contrast, saturation and bloom are set in the HDR section "
 +            "above (Exposure, Contrast, Saturation, Bloom); the game's own ones stay as drawn here "
 +            "and in the game's PC Colour menu.",
-+            "HDR PsychoV30: яркость, контраст, насыщенность и bloom задаются в разделе HDR выше "
++            "HDR16: яркость, контраст, насыщенность и bloom задаются в разделе HDR выше "
 +            "(Exposure, Contrast, Saturation, Bloom); собственные значения игры здесь и в меню PC "
 +            "Colour не меняются."));
 +        return;
