@@ -48,7 +48,7 @@ shutil.copytree(notices, stage / 'licenses', dirs_exist_ok=True)
 (stage / 'psychov30-example.ini').write_text(
     # No hdr_peak / hdr_paper_white: the engine and launcher take them from the display's peak.
     'hdr=1\nhdr_mode=psychov30\n'
-    'hdr_tonemapper=4\nhdr_exposure=1\nhdr_grade_highlights=50\nhdr_shadows=50\n'
+    'hdr_tonemapper=5\nhdr_exposure=1\nhdr_grade_highlights=50\nhdr_shadows=50\n'
     'hdr_contrast=50\nhdr_saturation=50\nhdr_bloom=50\nhdr_scene_grading=100\n'
     'hdr_black_floor=0\n', encoding='utf-8')
 print(f'Engine overlay: {len(seen)} imported DLL names checked, {stage}')

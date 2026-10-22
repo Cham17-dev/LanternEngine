@@ -1,7 +1,8 @@
 # Lantern Engine + PsychoV30 (experimental)
 
 HDR for Bloodborne on [Lantern Engine](https://github.com/Awakenchan/LanternEngine) by Awaken,
-with RenoDX's PsychoV30 tone mapper and a menu laid out like a RenoDX mod. This fork carries a
+with souperman9's Vanilla+ (the default) and RenoDX's PsychoV30 tone mappers, and a menu laid out
+like a RenoDX mod. This fork carries a
 reproducible patch over Lantern (in `ports/lantern/`), not a copy of its engine; Lantern's own
 README and credits are in [README-Lantern.md](README-Lantern.md). A successful build is not an
 in-game validation: see [Validation](#validation-still-required).
@@ -43,7 +44,7 @@ tools last for the session only.
 | Preset | Off, #1 to #3 (#1) | Off is the game's own look. Each numbered preset keeps its own settings. |
 | Settings Mode | Simple, Intermediate, Advanced (Simple) | How many settings the menu shows. |
 | **Tone Mapping** | | |
-| Tone Mapper | PsychoV-30, Vanilla+, Vanilla (PsychoV-30) | See [Tone mappers](#tone-mappers). |
+| Tone Mapper | Vanilla, Vanilla+, PsychoV-30 (Vanilla+) | See [Tone mappers](#tone-mappers). |
 | Target gamut | BT.2020, BT.709 (BT.2020) | The color volume PsychoV30 fits the picture into. |
 | Gamut Compression *(Intermediate)* | 0 to 1 (1) | How far colors outside the target gamut are brought into it. |
 | Compression *(Intermediate)* | 0 to 2, 0 = auto (1) | How fast lights reach the peak: higher is brighter and harder, lower softer. |
@@ -74,16 +75,19 @@ shadows first.
 PsychoV-30 and Vanilla+ work on the scene itself, before the game's color table, and bring the
 lights up to your display's peak.
 
-- **PsychoV-30** (`hdr_tonemapper=4`, default): PsychoV30 as RenoDX's mods set it (Order of the
+- **Vanilla+** (`hdr_tonemapper=5`, default), by **souperman9**: Vanilla+ from his RenoDX
+  Bloodborne mod, read from its shaders: the game's curve up to an input of mid grey, its tangent
+  above, the bloom added, RenoDX's user color grading, then RenoDX's `CInfinityRollOff` per
+  channel to the peak. The game's shadows and mid tones, brighter highlights than PsychoV-30.
+- **PsychoV-30** (`hdr_tonemapper=4`): PsychoV30 as RenoDX's mods set it (Order of the
   Sinking Star's Midgray Reference and Slope Reference): the game's mid grey kept at 0.18, the
   game's contrast there, PsychoV30's own shadows.
-- **Vanilla+** (`hdr_tonemapper=5`), by **souperman9**: Vanilla+ from his RenoDX Bloodborne
-  mod, read from its shaders: the game's curve up to an input of mid grey, its tangent above, the bloom
-  added, RenoDX's user color grading, then RenoDX's `CInfinityRollOff` per channel to the peak.
-  The game's shadows and mid tones, brighter highlights than PsychoV-30.
 - **Hybrid** (`hdr_tonemapper=3`, `bbport.ini` only): PsychoV-30 with the shadows below mid grey
   matched to the game's.
 - **Vanilla** (`hdr_tonemapper=2`): the game's own look in HDR10, without HDR highlights.
+
+A `bbport.ini` written by an earlier version keeps the tone mapper saved in it (PsychoV-30 before
+0.9.36 beta 2): pick Vanilla+ in the menu or the launcher, or use Reset all.
 
 ## Technical notes
 

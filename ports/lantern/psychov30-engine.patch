@@ -8065,7 +8065,7 @@ index d6ecf12..b5f8b65 100644
          std::vector<MirrorView> views;
          vk::Format format{};
 diff --git a/gpu/shim/bbport_overlay.cpp b/gpu/shim/bbport_overlay.cpp
-index 7ddd461..9f95c2b 100644
+index 7ddd461..baf0026 100644
 --- a/gpu/shim/bbport_overlay.cpp
 +++ b/gpu/shim/bbport_overlay.cpp
 @@ -298,6 +298,313 @@ void CheatStats() {
@@ -8210,12 +8210,12 @@ index 7ddd461..9f95c2b 100644
 +                                     BbSettings::HdrToneMapperVanillaPlus,
 +                                     BbSettings::HdrToneMapperPsychoPure,
 +                                     BbSettings::HdrToneMapperPsychoScene};
-+    int tone = 2;
++    int tone = 1; // Vanilla+, the default
 +    for (int i = 0; i < 4; ++i) {
 +        tone = stored[i] == s.hdr_tonemapper ? i : tone;
 +    }
 +    const int entries = tone == 3 ? 4 : 3;
-+    if (const int chosen = ComboIndex("Tone Mapper", tone, tonemappers, entries, 2);
++    if (const int chosen = ComboIndex("Tone Mapper", tone, tonemappers, entries, 1);
 +        chosen != tone) {
 +        Store(s.hdr_tonemapper, stored[chosen], true);
 +    }
@@ -8496,7 +8496,7 @@ index 7ddd461..9f95c2b 100644
              ((event.key.key == SDLK_INSERT && (is_open || MenuKeys() != OverlayKeys::Off)) ||
               (is_open && event.key.key == SDLK_ESCAPE))) {
 diff --git a/gpu/shim/bbport_settings.cpp b/gpu/shim/bbport_settings.cpp
-index e8557fe..dfe7acb 100644
+index e8557fe..4ac20d7 100644
 --- a/gpu/shim/bbport_settings.cpp
 +++ b/gpu/shim/bbport_settings.cpp
 @@ -10,11 +10,14 @@
@@ -8586,8 +8586,8 @@ index e8557fe..dfe7acb 100644
 +    } else if (key == "hdr_tonemapper") {
 +        v.hdr_tonemapper = i == HdrToneMapperVanilla       ? HdrToneMapperVanilla
 +                           : i == HdrToneMapperPsychoScene ? HdrToneMapperPsychoScene
-+                           : i == HdrToneMapperVanillaPlus ? HdrToneMapperVanillaPlus
-+                                                           : HdrToneMapperPsychoPure;
++                           : i == HdrToneMapperPsychoPure  ? HdrToneMapperPsychoPure
++                                                           : HdrToneMapperVanillaPlus;
 +    } else if (key == "hdr_gamut") {
 +        v.hdr_gamut = value == "bt709" ? HdrGamutBt709 : HdrGamutBt2020;
 +    } else if (key == "hdr_compare") {
@@ -8647,7 +8647,7 @@ index e8557fe..dfe7acb 100644
 +    v.hdr_paper_white = DefaultGameNits();
 +    v.hdr_peak = DefaultPeakNits();
 +    v.hdr_ui_nits = HdrUiNitsDefault;
-+    v.hdr_tonemapper = HdrToneMapperPsychoPure;
++    v.hdr_tonemapper = HdrToneMapperVanillaPlus;
 +    v.hdr_gamut = HdrGamutBt2020;
 +    v.hdr_exposure = 1.0f;
 +    v.hdr_contrast = 50.0f;
@@ -8821,19 +8821,20 @@ index e8557fe..dfe7acb 100644
                                               [&](const auto& k) { return k.first == key; });
                  if (it != keys.end()) {
 diff --git a/gpu/shim/bbport_settings.h b/gpu/shim/bbport_settings.h
-index 926f484..3c4142e 100644
+index 926f484..399d774 100644
 --- a/gpu/shim/bbport_settings.h
 +++ b/gpu/shim/bbport_settings.h
-@@ -8,6 +8,18 @@
+@@ -8,6 +8,19 @@
  #include <atomic>
  
  namespace BbSettings {
 +inline constexpr int HdrToneMapperVanilla = 2, HdrToneMapperPsychoScene = 3;
-+/// hdr_tonemapper = 4 (the default; menu and launcher: PsychoV-30): PsychoV30 on the scene without
++/// hdr_tonemapper = 4 (menu and launcher: PsychoV-30): PsychoV30 on the scene without
 +/// the match of its shadows to the game's (3, Hybrid: bbport.ini only, no longer in the menu and
 +/// launcher); otherwise the same (HdrChannel::Tonemapper reports HdrToneMapperPsychoScene).
 +inline constexpr int HdrToneMapperPsychoPure = 4;
-+/// hdr_tonemapper = 5 (menu and launcher: Vanilla+): RenoDX's Bloodborne mod's Vanilla+ on the
++/// hdr_tonemapper = 5 (the default; menu and launcher: Vanilla+): souperman9's Vanilla+ (RenoDX's
++/// Bloodborne mod) on the
 +/// scene, in the same pass (HdrChannel::Tonemapper reports HdrToneMapperPsychoScene too).
 +inline constexpr int HdrToneMapperVanillaPlus = 5;
 +/// hdr_gamut (bbport.ini "bt2020" / "bt709"): PsychoV30's target gamut, its
@@ -8843,7 +8844,7 @@ index 926f484..3c4142e 100644
  
  enum Upscaler : int { UpscalerOff = 0, UpscalerFsr3 = 1, UpscalerFsr4 = 2, UpscalerFsr411 = 3,
                        UpscalerTaa = 4, UpscalerDlss = 5, UpscalerCount };
-@@ -85,19 +97,22 @@ inline constexpr int CheatGunRanges[] = {0, 150, 200, 300};
+@@ -85,19 +98,22 @@ inline constexpr int CheatGunRanges[] = {0, 150, 200, 300};
  /// cheat_echo_multiplier: Blood Echoes from kills times this (1: the game's own).
  inline constexpr int CheatEchoMultipliers[] = {1, 2, 5, 10};
  /// HDR output (hdr_paper_white / hdr_peak in nits, hdr_boost 0..1): defaults and ranges.
@@ -8871,7 +8872,7 @@ index 926f484..3c4142e 100644
  static_assert(sizeof(HdrModeNames) / sizeof(HdrModeNames[0]) == HdrModeCount);
  
  /// button_prompts in bbport.ini: the game's button icons drawn as the bound keys while the keyboard
-@@ -196,7 +211,7 @@ struct Values {
+@@ -196,7 +212,7 @@ struct Values {
      /// BB_HDR_BOOST).
      std::atomic<float> hdr_paper_white{HdrPaperWhiteDefault}, hdr_peak{HdrPeakDefault},
          hdr_boost{HdrBoostDefault};
@@ -8880,7 +8881,7 @@ index 926f484..3c4142e 100644
      /// HdrMode (hdr_mode, BB_HDR_MODE); live. In native mode boost is the share of the scene's
      /// highlight range shown: sqrt(boost) of it in log2 (0.25: half, 1: all of it).
      std::atomic<int> hdr_mode{HdrModeNative};
-@@ -217,6 +232,53 @@ struct Values {
+@@ -217,6 +233,53 @@ struct Values {
      int startup_model_lod = 0;
      int startup_output_res = OutputDefault;
      int startup_live_resolution = 0;
@@ -8921,7 +8922,7 @@ index 926f484..3c4142e 100644
 +    std::atomic<bool> hdr_channel_live{false};   ///< this frame has HDR highlights
 +    std::atomic<bool> hdr_native16_live{false}; ///< this frame is the 16-bit chain's
 +    std::atomic<unsigned> hdr_variant{0};        ///< last composite with the HDR pass
-+    std::atomic<int> hdr_tonemapper{HdrToneMapperPsychoPure};
++    std::atomic<int> hdr_tonemapper{HdrToneMapperVanillaPlus};
 +    std::atomic<int> hdr_gamut{HdrGamutBt2020}; ///< PsychoV30's target gamut, live
 +    /// The in-game menu's HDR preset (PsychoV30), as RenoDX's: 0 Off (the game's own look),
 +    /// 1..3 the player's own settings, each kept in bbport.ini (hdr_preset1..3); the sliders
@@ -8934,7 +8935,7 @@ index 926f484..3c4142e 100644
      bool startup_hdr = false;
  };
  
-@@ -235,9 +297,25 @@ void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss = false);
+@@ -235,9 +298,25 @@ void ConfigureUpscalerSupport(bool fsr4, bool fsr411, bool dlss = false);
  bool FixedRenderSession();
  int RenderPreset();
  bool ResolutionNeedsRestart();
@@ -9114,7 +9115,7 @@ index 78144f6..fb455e2 100644
                     '--patches', out / 'patches.bin', '--app0', merged,
                     '--user', os.environ.get('BB_USER_DIR', data / 'user'),
 diff --git a/tests/test_settings.cpp b/tests/test_settings.cpp
-index 8501ba0..5731a2b 100644
+index 8501ba0..c0f92a1 100644
 --- a/tests/test_settings.cpp
 +++ b/tests/test_settings.cpp
 @@ -154,7 +154,7 @@ int main() {
@@ -9143,7 +9144,7 @@ index 8501ba0..5731a2b 100644
 +    { std::ofstream file(path); file << "hdr=0\nhdr_mode=psychov30\nhdr_tonemapper=99\n"
 +        "hdr_exposure=nan\nhdr_bloom=999\nhdr_scene_grading=-5\n"; }
 +    BbSettings::Load();
-+    assert(!s.startup_psychov30 && s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoPure);
++    assert(!s.startup_psychov30 && s.hdr_tonemapper == BbSettings::HdrToneMapperVanillaPlus);
 +    assert(s.hdr_exposure == 1.0f && s.hdr_bloom == 100.0f && s.hdr_scene_grading == 0.0f);
 +    // HDR presets (PsychoV30 menu): a file from before them becomes Preset #1; another preset
 +    // starts from the defaults; each keeps its own settings through a save and a reload.
@@ -9167,7 +9168,7 @@ index 8501ba0..5731a2b 100644
 +    BbSettings::SelectHdrPreset(2);
 +    assert(s.hdr_saturation == 65.0f && s.hdr_exposure == 1.0f);
 +    BbSettings::ResetHdr();
-+    assert(s.hdr_saturation == 50.0f && s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoPure);
++    assert(s.hdr_saturation == 50.0f && s.hdr_tonemapper == BbSettings::HdrToneMapperVanillaPlus);
 +    // Game Brightness: 203 whatever the display's peak; the peak follows the display's.
 +    BbSettings::SetDisplayPeak(600.0f);
 +    BbSettings::ResetHdr();
@@ -9188,24 +9189,24 @@ index 8501ba0..5731a2b 100644
 +    assert(Read(path).find("hdr_gamut=bt709\n") != std::string::npos);
 +    BbSettings::Load();
 +    assert(s.hdr_gamut == BbSettings::HdrGamutBt709);
-+    // PsychoV-30 (pure) the default; Hybrid (the game's shadows) saved, kept per preset.
-+    assert(s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoPure);
++    // Vanilla+ the default; Hybrid (bbport.ini only) saved, kept per preset.
++    assert(s.hdr_tonemapper == BbSettings::HdrToneMapperVanillaPlus);
 +    s.hdr_tonemapper = BbSettings::HdrToneMapperPsychoScene;
 +    BbSettings::Save();
 +    assert(Read(path).find("hdr_tonemapper=3\n") != std::string::npos);
 +    BbSettings::Load();
 +    assert(s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoScene);
 +    BbSettings::SelectHdrPreset(2);
-+    assert(s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoPure);
++    assert(s.hdr_tonemapper == BbSettings::HdrToneMapperVanillaPlus);
 +    BbSettings::SelectHdrPreset(1);
 +    assert(s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoScene);
-+    // Vanilla+ saved and read back.
-+    s.hdr_tonemapper = BbSettings::HdrToneMapperVanillaPlus;
-+    BbSettings::Save();
-+    assert(Read(path).find("hdr_tonemapper=5\n") != std::string::npos);
-+    BbSettings::Load();
-+    assert(s.hdr_tonemapper == BbSettings::HdrToneMapperVanillaPlus);
++    // PsychoV-30 saved and read back.
 +    s.hdr_tonemapper = BbSettings::HdrToneMapperPsychoPure;
++    BbSettings::Save();
++    assert(Read(path).find("hdr_tonemapper=4\n") != std::string::npos);
++    BbSettings::Load();
++    assert(s.hdr_tonemapper == BbSettings::HdrToneMapperPsychoPure);
++    s.hdr_tonemapper = BbSettings::HdrToneMapperVanillaPlus;
 +    // PsychoV30's gamut compression and compression: 1 by default, saved, clamped, per preset.
 +    assert(s.hdr_gamut_compression == 1.0f && s.hdr_compression == 1.0f);
 +    s.hdr_gamut_compression = 0.5f;
