@@ -5294,7 +5294,7 @@ index 79993a3..806b337 100644
  
      uses_push_descriptors = binding < instance.MaxPushDescriptors();
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.cpp
-index 91ec1d7..37686af 100644
+index 91ec1d7..5e6bdf6 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.cpp
 @@ -19,6 +19,7 @@
@@ -5309,59 +5309,166 @@ index 91ec1d7..37686af 100644
  
  void FrameGenerator::CaptureHudless(Scheduler& scheduler, vk::Image image, vk::Format format,
                                      u32 w, u32 h) {
-+    // HDR16 (DLSS Frame Generation): the UI image is the 16-bit chain's, as the copy made for it.
-+    const bool hdr16 = HdrChannel::Native16() && !resources_fsr && format == HdrChannel::Native16Format;
++    // HDR16: the UI image is the 16-bit chain's, as the copy made for it (EnsureResources).
++    const bool hdr16 = resources16 && format == HdrChannel::Native16Format;
      if (!WantsHudless() || !image ||
 -        (format != vk::Format::eR8G8B8A8Unorm && format != vk::Format::eR8G8B8A8Srgb)) {
 +        (format != vk::Format::eR8G8B8A8Unorm && format != vk::Format::eR8G8B8A8Srgb && !hdr16)) {
          return;
      }
      hudless_width = w;
-@@ -235,10 +238,14 @@ std::optional<FrameGenerator::Job> FrameGenerator::Prepare(vk::Extent2D display,
-         why = "HDR output is on (BB_DLSSG_HDR=0)";
-     } else if (other_scaler) {
-         why = "the presenter's FSR 1 scaling is on";
-+    } else if (!dlss && HdrChannel::Native16()) {
-+        // FSR 3.1 interpolates the 8-bit frame before the HDR encode; HDR16's are 16-bit.
-+        why = "HDR16: FSR 3.1 interpolates 8-bit frames (DLSS frame generation works with HDR16)";
+@@ -238,7 +241,8 @@ std::optional<FrameGenerator::Job> FrameGenerator::Prepare(vk::Extent2D display,
      } else if (view_format != vk::Format::eR8G8B8A8Unorm &&
                 view_format != vk::Format::eR8G8B8A8Srgb &&
                 view_format != vk::Format::eB8G8R8A8Unorm &&
 -               view_format != vk::Format::eB8G8R8A8Srgb) {
 +               view_format != vk::Format::eB8G8R8A8Srgb &&
-+               !(dlss && HdrChannel::Native16() && view_format == HdrChannel::Native16Format)) {
++               !(HdrChannel::Native16() && view_format == HdrChannel::Native16Format)) {
          why = "the display buffer is not 8 bits per channel";
      } else if (input_width != 0 &&
                 ((dlss ? resources_fsr || render_width == 0 : !context) ||
-@@ -560,7 +567,14 @@ bool FrameGenerator::EnsureResources(u32 w, u32 h, u32 rw, u32 rh, bool fsr) {
+@@ -343,8 +347,23 @@ bool FrameGenerator::Record(vk::CommandBuffer cmdbuf, const Job& job, vk::ImageV
+     in_flight.emplace_back(job.frame_id, job.tick);
+ 
+     GlobalBarrier(cmdbuf);
+-    const auto color = FfxImage(vk::Image(hudless_image), vk::Format::eR8G8B8A8Unorm, width,
+-                                height, ColorUsage);
++    const vk::Format color_format =
++        resources16 ? HdrChannel::Native16Format : vk::Format::eR8G8B8A8Unorm;
++    // HDR16: the chain's values, gamma encoded with the game's white at 1 and the highlights
++    // above, up to the display's peak. FSR's sRGB transfer assumes 0..1 (its optical flow
++    // stores the luminance in 8 bits and overflowed above white); as scRGB with the encoded
++    // peak as its maximum luminance they map to 0..1. The interpolation itself blends the raw
++    // values either way.
++    auto transfer = FFX_VK_FSR3_3_1_6_FRAMEGEN_TRANSFER_SRGB;
++    float max_luminance = 1.0f;
++    if (resources16) {
++        const auto& settings = BbSettings::Get();
++        const float paper = std::max(settings.hdr_paper_white.load(std::memory_order_relaxed), 1.0f);
++        const float peak = std::max(BbSettings::HdrPeakNits(settings) / paper, 1.0f);
++        transfer = FFX_VK_FSR3_3_1_6_FRAMEGEN_TRANSFER_SCRGB;
++        max_luminance = 80.0f * std::pow(peak, 1.0f / 2.2f); // scRGB: 1.0 is 80 nits
++    }
++    const auto color = FfxImage(vk::Image(hudless_image), color_format, width, height, ColorUsage);
+     FfxVkFsr3_3_1_6FrameGenerationPrepareInfo prepare{};
+     prepare.commandBuffer = cmdbuf;
+     prepare.color = color;
+@@ -364,8 +383,8 @@ bool FrameGenerator::Record(vk::CommandBuffer cmdbuf, const Job& job, vk::ImageV
+     prepare.motionVectorScaleY = 1.0f;
+     prepare.frameTimeMilliseconds = job.frame_ms;
+     prepare.minLuminance = 0.0f;
+-    prepare.maxLuminance = 1.0f;
+-    prepare.transferFunction = FFX_VK_FSR3_3_1_6_FRAMEGEN_TRANSFER_SRGB;
++    prepare.maxLuminance = max_luminance;
++    prepare.transferFunction = transfer;
+     prepare.cameraNear = job.near_plane;
+     prepare.cameraFar = std::max(FarPlane, job.near_plane * 2.0f);
+     prepare.viewSpaceToMeters = 1.0f;
+@@ -377,8 +396,8 @@ bool FrameGenerator::Record(vk::CommandBuffer cmdbuf, const Job& job, vk::ImageV
+         FfxVkFsr3_3_1_6FrameGenerationDispatchInfo dispatch{};
+         dispatch.commandBuffer = cmdbuf;
+         dispatch.color = color;
+-        dispatch.output = FfxImage(vk::Image(generated_image), vk::Format::eR8G8B8A8Unorm, width,
+-                                   height, ColorUsage);
++        dispatch.output = FfxImage(vk::Image(generated_image), color_format, width, height,
++                                   ColorUsage);
+         dispatch.displayWidth = width;
+         dispatch.displayHeight = height;
+         dispatch.frameTimeMilliseconds = job.frame_ms;
+@@ -387,8 +406,8 @@ bool FrameGenerator::Record(vk::CommandBuffer cmdbuf, const Job& job, vk::ImageV
+         dispatch.viewSpaceToMeters = 1.0f;
+         dispatch.cameraVerticalFovRadians = job.vertical_fov;
+         dispatch.minLuminance = 0.0f;
+-        dispatch.maxLuminance = 1.0f;
+-        dispatch.transferFunction = FFX_VK_FSR3_3_1_6_FRAMEGEN_TRANSFER_SRGB;
++        dispatch.maxLuminance = max_luminance;
++        dispatch.transferFunction = transfer;
+         dispatch.frameId = job.frame_id;
+         dispatch.reset = prepare.reset;
+         result = ffxVkFsr3_3_1_6FrameGenerationContextRecordDispatch(context, &dispatch);
+@@ -407,8 +426,9 @@ bool FrameGenerator::Record(vk::CommandBuffer cmdbuf, const Job& job, vk::ImageV
+     // The UI from the real frame, the rest from the interpolated one.
+     // The real frame is sampled through its own view (BGRA or RGBA, the channels come out in
+     // order either way); the copies are read in the same encoding, sRGB-decoded or not.
+-    const bool srgb = job.view_format == vk::Format::eR8G8B8A8Srgb ||
+-                      job.view_format == vk::Format::eB8G8R8A8Srgb;
++    // HDR16: all three are the chain's RGBA16F values, encoded alike (no sRGB view decodes).
++    const bool srgb = !resources16 && (job.view_format == vk::Format::eR8G8B8A8Srgb ||
++                                       job.view_format == vk::Format::eB8G8R8A8Srgb);
+     const vk::ImageMemoryBarrier2 to_write{
+         .srcStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+         .srcAccessMask = vk::AccessFlagBits2::eNone,
+@@ -560,18 +580,31 @@ bool FrameGenerator::EnsureResources(u32 w, u32 h, u32 rw, u32 rh, bool fsr) {
              .image = vk::Image(source), .viewType = vk::ImageViewType::e2D, .format = format,
              .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}}));
      };
 -    image(hudless_image, vk::Format::eR8G8B8A8Unorm, w, h, ColorUsage, true);
-+    // HDR16 with DLSS Frame Generation: the frame without its UI is the 16-bit chain's (values
-+    // above the game's white kept), as the frames themselves.
-+    const bool hudless16 = !fsr && HdrChannel::Native16();
+-    image(generated_image, vk::Format::eR8G8B8A8Unorm, w, h, ColorUsage, true);
++    // HDR16: the frame without its UI and FSR 3.1's generated one are the 16-bit chain's (values
++    // above the game's white kept, gamma encoded), as the frames themselves.
++    const bool hudless16 = HdrChannel::Native16();
++    resources16 = hudless16;
 +    if (hudless16) {
 +        image(hudless_image, HdrChannel::Native16Format, w, h, ColorUsage, false);
++        image(generated_image, HdrChannel::Native16Format, w, h, ColorUsage, false);
 +    } else {
 +        image(hudless_image, vk::Format::eR8G8B8A8Unorm, w, h, ColorUsage, true);
++        image(generated_image, vk::Format::eR8G8B8A8Unorm, w, h, ColorUsage, true);
 +    }
-     image(generated_image, vk::Format::eR8G8B8A8Unorm, w, h, ColorUsage, true);
      image(composed_image, vk::Format::eR16G16B16A16Sfloat, w, h,
            vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage, false);
-@@ -568,8 +582,10 @@ bool FrameGenerator::EnsureResources(u32 w, u32 h, u32 rw, u32 rh, bool fsr) {
+     image(depth_image, vk::Format::eR32Sfloat, rw, rh,
            vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage, false);
      image(motion_image, vk::Format::eR16G16Sfloat, rw, rh,
            vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst, false);
 -    hudless_view_unorm = view(hudless_image, vk::Format::eR8G8B8A8Unorm, true);
 -    hudless_view_srgb = view(hudless_image, vk::Format::eR8G8B8A8Srgb, true);
+-    generated_view_unorm = view(generated_image, vk::Format::eR8G8B8A8Unorm, true);
+-    generated_view_srgb = view(generated_image, vk::Format::eR8G8B8A8Srgb, true);
 +    hudless_view_unorm = view(hudless_image,
 +                              hudless16 ? HdrChannel::Native16Format : vk::Format::eR8G8B8A8Unorm, true);
 +    hudless_view_srgb = view(hudless_image,
 +                             hudless16 ? HdrChannel::Native16Format : vk::Format::eR8G8B8A8Srgb, true);
-     generated_view_unorm = view(generated_image, vk::Format::eR8G8B8A8Unorm, true);
-     generated_view_srgb = view(generated_image, vk::Format::eR8G8B8A8Srgb, true);
++    generated_view_unorm = view(generated_image,
++                                hudless16 ? HdrChannel::Native16Format : vk::Format::eR8G8B8A8Unorm, true);
++    generated_view_srgb = view(generated_image,
++                               hudless16 ? HdrChannel::Native16Format : vk::Format::eR8G8B8A8Srgb, true);
      composed_view = view(composed_image, vk::Format::eR16G16B16A16Sfloat, false);
+     depth_view = view(depth_image, vk::Format::eR32Sfloat, false);
+ 
+@@ -594,7 +627,7 @@ bool FrameGenerator::EnsureResources(u32 w, u32 h, u32 rw, u32 rh, bool fsr) {
+     create.maxRenderHeight = std::max(rh, h);
+     create.displayWidth = w;
+     create.displayHeight = h;
+-    create.colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
++    create.colorFormat = hudless16 ? VK_FORMAT_R16G16B16A16_SFLOAT : VK_FORMAT_R8G8B8A8_UNORM;
+     FfxVkFsr3_3_1_6FrameGenerationContext* created = nullptr;
+     const auto result = ffxVkFsr3_3_1_6FrameGenerationContextCreate(&create, &created);
+     if (result != FFX_VK_FSR3_3_1_6_FRAMEGEN_OK || !created) {
+diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.h b/gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.h
+index e933b7f..a744a67 100644
+--- a/gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.h
++++ b/gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.h
+@@ -161,6 +161,8 @@ private:
+     float input_near = 0.1f, input_fov = 1.0f;
+     CameraMotion::Matrices input_camera{};
+     bool resources_fsr = false; ///< the resources have the FSR 3.1 context (not DLSS's captures only)
++    /// HDR16: the HUD-less and generated images are RGBA16F, the chain's gamma-encoded values.
++    bool resources16 = false;
+     bool need_reset = true;
+     u64 next_frame_id = 1;
+     Clock::time_point last_prepare{};
+@@ -173,8 +175,8 @@ private:
+     // Resources (made on the draw thread after the GPU is idle).
+     u32 width = 0, height = 0, render_width = 0, render_height = 0;
+     FfxVkFsr3_3_1_6FrameGenerationContext* context = nullptr;
+-    VideoCore::UniqueImage hudless_image;   ///< RGBA8 Unorm (mutable: Srgb view for the compose)
+-    VideoCore::UniqueImage generated_image; ///< FSR's output, RGBA8 Unorm
++    VideoCore::UniqueImage hudless_image;   ///< RGBA8 Unorm (mutable: Srgb view for the compose); HDR16 RGBA16F
++    VideoCore::UniqueImage generated_image; ///< FSR's output, RGBA8 Unorm; HDR16 RGBA16F
+     VideoCore::UniqueImage composed_image;  ///< RGBA16F, the post process's input
+     VideoCore::UniqueImage depth_image;     ///< R32F, render size
+     VideoCore::UniqueImage motion_image;    ///< RG16F, render size
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_graphics_pipeline.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
 index 37daab0..6396680 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
@@ -6495,7 +6602,7 @@ index 97087c8..4b6caad 100644
      vk::ShaderModule module;
      if (perm_idx < target->modules.size() && target->modules[perm_idx].module) {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
-index 96efc90..be21a6f 100644
+index 96efc90..9b13911 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
 @@ -1,3 +1,4 @@
@@ -6779,7 +6886,7 @@ index 96efc90..be21a6f 100644
      std::optional<FrameGenerator::Job> gen_job;
      Frame* generated = nullptr;
      {
-+        // PsychoV30's frames are HDR too (16-bit): frame generation stays off for them.
++        // HDR16's frames are HDR too (16-bit): FSR 3.1 interpolates them as they are.
          const bool hdr = BbSettings::Get().hdr_output.load(std::memory_order_relaxed) !=
                               BbSettings::HdrOutputOff ||
 -                         frame->is_hdr;
@@ -6806,7 +6913,21 @@ index 96efc90..be21a6f 100644
          if (fsr_crumb) {
              Breadcrumbs::Mark(cmdbuf, stream, fsr_crumb, true);
              Breadcrumbs::Mark(cmdbuf, stream, pp_crumb, false);
-@@ -1223,6 +1343,7 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
+@@ -1013,6 +1133,13 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+         generated->ready_semaphore = frame->ready_semaphore;
+         generated->ready_tick = frame->ready_tick;
+         generated->hdr_native = false;
++        // HDR16 (FSR 3.1 frame generation): the generated frame is the chain's 16-bit image
++        // like the real one, encoded alike by the final pass; without the real frame's pre-HUD
++        // snapshot (the scene moved since: what moved would be taken for HUD), so its HUD is
++        // shown as the scene's white.
++        generated->psycho_frame = frame->psycho_frame;
++        generated->psycho_encoded = frame->psycho_encoded;
++        generated->psycho_snapshot.reset();
+         frame->generated = generated;
+     }
+     SubmitInfo info{};
+@@ -1223,6 +1350,7 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
      const vk::Image swapchain_image = swapchain.Image();
      auto& scheduler = present_scheduler;
      const auto cmdbuf = scheduler.CommandBuffer();
@@ -6814,7 +6935,7 @@ index 96efc90..be21a6f 100644
      DumpFinalFrameIfDue(instance, scheduler, cmdbuf, frame->image, frame->width, frame->height,
                          swapchain.GetSurfaceFormat().format);
  
-@@ -1365,6 +1486,7 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
+@@ -1365,6 +1493,7 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
      if (EmulatorSettings.IsVkHostMarkersEnabled()) {
          cmdbuf.endDebugUtilsLabelEXT();
      }
