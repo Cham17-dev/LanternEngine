@@ -3273,7 +3273,7 @@ index 0000000..d51e40b
 +
 +#endif
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr_output.frag b/gpu/shadps4/video_core/host_shaders/hdr_output.frag
-index 28ba9ed..5849d95 100644
+index 28ba9ed..1eff236 100644
 --- a/gpu/shadps4/video_core/host_shaders/hdr_output.frag
 +++ b/gpu/shadps4/video_core/host_shaders/hdr_output.frag
 @@ -13,6 +13,7 @@
@@ -3308,7 +3308,7 @@ index 28ba9ed..5849d95 100644
  
  // Linear brightness (SDR white = 1) above which the highlights are expanded: high, so large
  // bright areas (fog, sky) stay near paper white and only lamps, fire and sparks reach the peak.
-@@ -92,9 +101,341 @@ vec3 Heat(float t) {
+@@ -92,9 +101,334 @@ vec3 Heat(float t) {
                        1.5 - abs(4.0 * t - 1.0)), 0.0, 1.0);
  }
  
@@ -3563,13 +3563,16 @@ index 28ba9ed..5849d95 100644
 +    }
 +    vec3 nits = scene_to_nits(t);
 +    // The HUD: the pixels the UI changed since the scene's snapshot (bound as hdrChannel in
-+    // mode 5), shown as the game's SDR at the HUD brightness, guessed from luminance: the
-+    // brightness curve comes after the snapshot, so the tolerance widens with brightness (as in
-+    // mode 4). Its translucent backgrounds stay the scene's.
++    // mode 5), shown as the game's SDR at the HUD brightness. With its mask (hdr_ui_mask.comp,
++    // the UI image against the snapshot before the game's brightness curve) the snapshot's alpha
++    // says which they are; without it they are guessed from luminance: the brightness curve comes
++    // after the snapshot, so the tolerance widens with brightness (as in mode 4).
 +    float scene = 1.0;
-+    if (pp.hdr_channel) {
-+        vec4 snap = texture(hdrChannel, uv);
-+        vec3 s = max(snap.rgb, 0.0);
++    if (pp.hdr_channel && pp.hdr_ui_mask) {
++        scene = 1.0 - clamp(texture(hdrChannel, uv).a, 0.0, 1.0);
++        nits = mix(ui_to_nits(signal), nits, scene);
++    } else if (pp.hdr_channel) {
++        vec3 s = max(texture(hdrChannel, uv).rgb, 0.0);
 +        float l_snap = dot(min(s, 1.0), LUMA709);
 +        float l_now = dot(signal, LUMA709);
 +        float tolerance = 0.04 + 0.22 * l_snap * l_snap;
@@ -3577,16 +3580,6 @@ index 28ba9ed..5849d95 100644
 +        scene = 1.0 - smoothstep(tolerance, tolerance + 0.10, miss);
 +        vec3 ui = ui_to_nits(signal);
 +        nits = mix(ui, nits, scene);
-+        // Above white the test above sees nothing (both clamped at 1): the HUD over the sun kept
-+        // the sun's light. With the mask (hdr_ui_mask.comp: the pixels the UI drew, exactly),
-+        // those pixels are capped at the HUD's white, their hue kept.
-+        if (pp.hdr_ui_mask) {
-+            float hud = clamp(snap.a, 0.0, 1.0);
-+            float l = dot(nits, vec3(0.2627, 0.6780, 0.0593));
-+            if (hud > 0.0 && l > pp.hdr_ui_nits) {
-+                nits *= mix(1.0, pp.hdr_ui_nits / l, hud);
-+            }
-+        }
 +    }
 +    return debug_nits(nits, t, l_sdr, scene, peak);
 +}
@@ -7284,7 +7277,7 @@ index 8333b19..acdae8f 100644
      mutable std::unordered_map<vk::Format, vk::FormatFeatureFlags> format_features;
      mutable std::array<vk::FormatFeatureFlags, 256> format_table{};
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
-index feaf2c5..9413235 100644
+index feaf2c5..b16afcf 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_temporal_upscaler.cpp
 @@ -1,3 +1,6 @@
@@ -7396,7 +7389,7 @@ index feaf2c5..9413235 100644
                                    camera_motion.Ready() && ldr_target == color,
                                    Active() && !failed)) {
      case UiComposition::Background::None:
-@@ -1792,12 +1824,23 @@ void TemporalUpscaler::OnDisplayPass(VAddr address, VideoCore::ImageId frame) {
+@@ -1792,12 +1824,20 @@ void TemporalUpscaler::OnDisplayPass(VAddr address, VideoCore::ImageId frame) {
      // bbport: a frame with no UI draw at all (the HUD hidden in the game's options, #23) reaches
      // its display pass without the upscale its first UI draw would start: run it here, so the
      // display pass reads the upscaled frame instead of the render-size one.
@@ -7410,18 +7403,15 @@ index feaf2c5..9413235 100644
 +    if (HdrChannel::Native16() && !ui_phase && LdrFrame(ldr_target)) {
 +        RunUiOnly(ldr_target, camera_motion.Depth(), true); // the scene's own target: the world
 +    }
-+    // The HUD's mask (MaskPsychoSnapshot): the final pass still tells the HUD by its luminance
-+    // (the mask takes the HUD's translucent backgrounds as HUD: the scene behind them went to the
-+    // UI brightness), and only caps the pixels the HUD drew at the UI's white (a HUD over the sun
-+    // kept its 1000 nits: both are white for the luminance test).
-+    if (HdrChannel::Native16()) {
-+        MaskPsychoSnapshot();
-+        PublishPsychoSnapshot(address);
-+    }
++    // The HUD's mask (MaskPsychoSnapshot) is off: it took the HUD's translucent backgrounds as
++    // HUD, so the scene behind them went to the UI brightness (white at 500 nits, black at 48),
++    // and capping them at the UI's white drew dark boxes over the moon. The final pass tells the
++    // HUD by its luminance; over highlights the HUD blends with the scene, as in RenoDX.
++    if (HdrChannel::Native16()) PublishPsychoSnapshot(address);
      // bbport: frame generation: a frame without UI is its own frame without UI.
      if (frame_gen && frame_gen->WantsHudless()) {
          if (ui_phase) {
-@@ -1888,6 +1931,11 @@ void TemporalUpscaler::EnsureUiResources(u32 w, u32 h, vk::Format color, vk::For
+@@ -1888,6 +1928,11 @@ void TemporalUpscaler::EnsureUiResources(u32 w, u32 h, vk::Format color, vk::For
              .initialLayout = vk::ImageLayout::eUndefined,
          });
          ui_format = color;
@@ -7433,7 +7423,7 @@ index feaf2c5..9413235 100644
      }
      if (new_depth) {
          ui_depth_view.reset();
-@@ -1989,27 +2037,31 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
+@@ -1989,27 +2034,31 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
      const auto& color = texture_cache.GetImage(color_id);
      const auto depth_format = depth_id ? texture_cache.GetImage(depth_id).info.pixel_format
                                        : vk::Format::eD32SfloatS8Uint;
@@ -7474,7 +7464,7 @@ index feaf2c5..9413235 100644
          runtime.FlushBarriers();
      }
      // bbport: with Widescreen on another screen shape (BB_UI_SIZE), a frame without the 3D world
-@@ -2072,6 +2124,20 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
+@@ -2072,6 +2121,20 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
          barrier.newLayout = vk::ImageLayout::eGeneral;
          cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier});
      });
@@ -7495,7 +7485,7 @@ index feaf2c5..9413235 100644
      reset = true; // returning to 3D must not reuse history from before a menu/loading screen
      done_this_frame = ui_phase = true;
      ui_color = color_id;
-@@ -2079,6 +2145,7 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
+@@ -2079,6 +2142,7 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
  }
  
  void TemporalUpscaler::RunScaled() {
@@ -7503,7 +7493,7 @@ index feaf2c5..9413235 100644
      if (auto* profiler = GpuProfiler::Get()) {
          const char* label = BbSettings::Get().upscaler == BbSettings::UpscalerTaa
              ? "upscaler RunScaled (TAA)" : "upscaler RunScaled (FSR)";
-@@ -2462,7 +2529,7 @@ vk::ImageView TemporalUpscaler::Mirror(vk::Image image, std::vector<MirrorView>&
+@@ -2462,7 +2526,7 @@ vk::ImageView TemporalUpscaler::Mirror(vk::Image image, std::vector<MirrorView>&
  bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
                                       const VideoCore::ImageViewInfo& view_info, Target& target) {
      if (ui_phase && color == ui_color) {
@@ -7512,7 +7502,7 @@ index feaf2c5..9413235 100644
                    vk::ImageLayout::eGeneral, ui_width, ui_height, true};
          return true;
      }
-@@ -2470,6 +2537,7 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
+@@ -2470,6 +2534,7 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
      const VAddr address = image.info.guest_address;
      if (!FrameCapture::IsDisplayBuffer(address)) {
          display_redirect = false;
@@ -7520,7 +7510,7 @@ index feaf2c5..9413235 100644
          return false;
      }
      std::scoped_lock lock{display_mutex};
-@@ -2478,13 +2546,16 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
+@@ -2478,13 +2543,16 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
          display.valid = false; // not upscaled: the presenter shows the guest buffer
          return false;
      }
@@ -7539,7 +7529,7 @@ index feaf2c5..9413235 100644
          display.width = ui_width;
          display.height = ui_height;
          display.image = VideoCore::UniqueImage(device, instance.GetAllocator());
-@@ -2518,7 +2589,7 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
+@@ -2518,7 +2586,7 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
          cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &b});
      });
      display.valid = true;
@@ -7548,7 +7538,7 @@ index feaf2c5..9413235 100644
                vk::ImageLayout::eGeneral, ui_width, ui_height};
      return true;
  }
-@@ -2554,7 +2625,7 @@ bool TemporalUpscaler::RedirectSampled(VideoCore::ImageId image,
+@@ -2554,7 +2622,7 @@ bool TemporalUpscaler::RedirectSampled(VideoCore::ImageId image,
              cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &b});
          });
      }
@@ -7557,7 +7547,7 @@ index feaf2c5..9413235 100644
      layout = vk::ImageLayout::eGeneral;
      return true;
  }
-@@ -2565,7 +2636,7 @@ bool TemporalUpscaler::DisplayOverride(VAddr address, Display& display) {
+@@ -2565,7 +2633,7 @@ bool TemporalUpscaler::DisplayOverride(VAddr address, Display& display) {
      if (it == displays.end() || !it->second.valid) {
          return false;
      }
@@ -7566,7 +7556,7 @@ index feaf2c5..9413235 100644
      // Diagnostic capture of the actual completed display buffer, including native UI.
      // BB_PRESENT_DUMP_COUNT=N: the trigger dumps N consecutive frames (temporal stability).
      static const char* dump = std::getenv("BB_PRESENT_DUMP_TRIGGER");
-@@ -2583,9 +2654,10 @@ bool TemporalUpscaler::DisplayOverride(VAddr address, Display& display) {
+@@ -2583,9 +2651,10 @@ bool TemporalUpscaler::DisplayOverride(VAddr address, Display& display) {
          scheduler.EndRendering();
          const bool bgra = display.format == vk::Format::eB8G8R8A8Unorm ||
                            display.format == vk::Format::eB8G8R8A8Srgb;
@@ -7579,7 +7569,7 @@ index feaf2c5..9413235 100644
      }
      return true;
  }
-@@ -2611,8 +2683,10 @@ bool TemporalUpscaler::PresentDumpDue() {
+@@ -2611,8 +2680,10 @@ bool TemporalUpscaler::PresentDumpDue() {
  void TemporalUpscaler::DumpPresented(vk::Image image, u32 width, u32 height, vk::Format format) {
      scheduler.EndRendering();
      const bool bgra = format == vk::Format::eB8G8R8A8Unorm || format == vk::Format::eB8G8R8A8Srgb;
@@ -7591,7 +7581,7 @@ index feaf2c5..9413235 100644
  }
  
  } // namespace Vulkan
-@@ -2699,3 +2773,624 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image
+@@ -2699,3 +2770,624 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image
  }
  
  } // namespace Vulkan
