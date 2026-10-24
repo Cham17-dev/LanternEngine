@@ -1,5 +1,5 @@
 diff --git a/launcher/windows/BloodborneLauncher/Core/Choices.cs b/launcher/windows/BloodborneLauncher/Core/Choices.cs
-index c8c7cdf..d0140b7 100644
+index 8443ac6..e678ef5 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Choices.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Choices.cs
 @@ -1,4 +1,4 @@
@@ -8,7 +8,7 @@ index c8c7cdf..d0140b7 100644
  {
      /// <summary>A drop-down entry. Note is shown under the row while this entry is selected.</summary>
      public sealed record Choice(string Label, string Value, string? Note = null);
-@@ -183,7 +183,7 @@
+@@ -208,7 +208,7 @@
  
          public static readonly Choice[] HdrPaperWhite =
          {
@@ -17,7 +17,7 @@ index c8c7cdf..d0140b7 100644
              new(L.T("250 nits"), "250"), new(L.T("300 nits"), "300"), new(L.T("400 nits"), "400"),
          };
  
-@@ -212,19 +212,30 @@
+@@ -237,19 +237,30 @@
  
          public static readonly Choice[] HdrMode =
          {
@@ -184,7 +184,7 @@ index 0000000..e5cbd26
 +    }
 +}
 diff --git a/launcher/windows/BloodborneLauncher/Core/GameEnvironment.cs b/launcher/windows/BloodborneLauncher/Core/GameEnvironment.cs
-index 249e178..eca65b2 100644
+index bd170c2..a363bd5 100644
 --- a/launcher/windows/BloodborneLauncher/Core/GameEnvironment.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/GameEnvironment.cs
 @@ -1,4 +1,4 @@
@@ -194,7 +194,7 @@ index 249e178..eca65b2 100644
  namespace BloodborneLauncher.Core
  {
 diff --git a/launcher/windows/BloodborneLauncher/Core/GameRunner.cs b/launcher/windows/BloodborneLauncher/Core/GameRunner.cs
-index 0c81693..1024f7c 100644
+index 3c63c7a..e099fc4 100644
 --- a/launcher/windows/BloodborneLauncher/Core/GameRunner.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/GameRunner.cs
 @@ -1,4 +1,4 @@
@@ -203,7 +203,7 @@ index 0c81693..1024f7c 100644
  using System.IO;
  using System.Text;
  
-@@ -92,6 +92,8 @@ namespace BloodborneLauncher.Core
+@@ -103,6 +103,8 @@ namespace BloodborneLauncher.Core
              // code pages cannot write.
              info.Environment["PYTHONUTF8"] = "1";
              info.Environment["PYTHONIOENCODING"] = "utf-8";
@@ -212,7 +212,7 @@ index 0c81693..1024f7c 100644
              info.UseShellExecute = false;
              info.CreateNoWindow = true;
              info.RedirectStandardOutput = true;
-@@ -104,7 +106,8 @@ namespace BloodborneLauncher.Core
+@@ -115,7 +117,8 @@ namespace BloodborneLauncher.Core
                  var process = new Process { StartInfo = info, EnableRaisingEvents = true };
                  OpenLog();
                  // The first line of every log, the Output page's export included: which build ran.
@@ -223,10 +223,10 @@ index 0c81693..1024f7c 100644
                  process.ErrorDataReceived += (_, e) => { if (e.Data != null) Emit(e.Data); };
                  process.Exited += (_, _) =>
 diff --git a/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs b/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
-index 5ce1f54..8bfd355 100644
+index 2215079..5804480 100644
 --- a/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/LauncherSettings.cs
-@@ -46,7 +46,7 @@ namespace BloodborneLauncher.Core
+@@ -47,7 +47,7 @@ namespace BloodborneLauncher.Core
              ["custom_command"] = "",
              ["custom_args"] = "",
              ["switch_to_output"] = true,
@@ -236,26 +236,69 @@ index 5ce1f54..8bfd355 100644
              ["discord_status"] = "off",
              ["discord_timer"] = true,
 diff --git a/launcher/windows/BloodborneLauncher/Core/Paths.cs b/launcher/windows/BloodborneLauncher/Core/Paths.cs
-index 8d56324..466119c 100644
+index 9221006..f5ec50c 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Paths.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Paths.cs
-@@ -8,12 +8,12 @@ namespace BloodborneLauncher.Core
-     /// player's files - bbport.ini, mods.json, patches.json, user, mods, logs (its data folder,
+@@ -8,53 +8,13 @@ namespace BloodborneLauncher.Core
+     /// player's files - lantern.ini, mods.json, patches.json, user, mods, logs (its data folder,
      /// BB_DATA_DIR) - and the engine in engine\: out\bb-probe.exe, scripts\run_windows.py and a
      /// bundled Python. Older packages had the engine at the top (EngineDirOf handles both).
--    /// Launcher settings are per-user, in %APPDATA%\bbport-launcher\settings.json.
-+    /// Launcher settings are per-user, in %APPDATA%\bbport-launcher-psychov30\settings.json.
+-    /// Launcher settings are per-user, in %APPDATA%\Lantern Engine\settings.json.
++    /// Launcher settings are per-user, in %APPDATA%\bbport-launcher-psychov30\settings.json: this
++    /// port's own, apart from Lantern's (%APPDATA%\Lantern Engine), so neither changes the other's.
      /// </summary>
      public static class Paths
      {
-         public static readonly string ConfigDir = Path.Combine(
--            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "bbport-launcher");
+-        public static readonly string ConfigDir = MigratedConfigDir();
+-
+-        /// <summary>%APPDATA%\Lantern Engine; it was %APPDATA%\bbport-launcher before 0.9.37 beta 2
+-        /// and is copied once (the old folder stays in use if it cannot be copied). The old folder
+-        /// stays: launchers of 0.9.36 and earlier (the stable channel, a rollback) read only it, and
+-        /// without it they start with no saves folder and no player profiles. Beta 2 moved it; when
+-        /// it is missing, the new folder is copied back to it once.</summary>
+-        private static string MigratedConfigDir()
+-        {
+-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+-            var dir = Path.Combine(appData, "Lantern Engine");
+-            var old = Path.Combine(appData, "bbport-launcher");
+-            if (!Directory.Exists(dir) && Directory.Exists(old))
+-            {
+-                try
+-                {
+-                    CopyMissing(old, dir);
+-                }
+-                catch (IOException) { return old; }
+-                catch (UnauthorizedAccessException) { return old; }
+-            }
+-            else if (Directory.Exists(dir) && !Directory.Exists(old))
+-            {
+-                try { CopyMissing(dir, old); }
+-                catch (IOException) { }
+-                catch (UnauthorizedAccessException) { }
+-            }
+-            return dir;
+-        }
+-
+-        /// <summary>Copies the files of <paramref name="from"/> (subfolders too) that
+-        /// <paramref name="to"/> does not have yet.</summary>
+-        private static void CopyMissing(string from, string to)
+-        {
+-            Directory.CreateDirectory(to);
+-            foreach (var file in Directory.GetFiles(from))
+-            {
+-                var target = Path.Combine(to, Path.GetFileName(file));
+-                if (!File.Exists(target)) File.Copy(file, target);
+-            }
+-            foreach (var sub in Directory.GetDirectories(from))
+-                CopyMissing(sub, Path.Combine(to, Path.GetFileName(sub)));
+-        }
++        public static readonly string ConfigDir = Path.Combine(
 +            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "bbport-launcher-psychov30");
  
          public static readonly string ConfigFile = Path.Combine(ConfigDir, "settings.json");
  
 diff --git a/launcher/windows/BloodborneLauncher/Core/Updater.cs b/launcher/windows/BloodborneLauncher/Core/Updater.cs
-index f568a50..db24fd4 100644
+index 060768c..af9a0df 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Updater.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Updater.cs
 @@ -1,4 +1,4 @@
@@ -264,7 +307,7 @@ index f568a50..db24fd4 100644
  using System.IO;
  using System.IO.Compression;
  using System.Net.Http;
-@@ -22,11 +22,11 @@ namespace BloodborneLauncher.Core
+@@ -23,11 +23,11 @@ namespace BloodborneLauncher.Core
      /// </summary>
      public static class Updater
      {
@@ -273,13 +316,13 @@ index f568a50..db24fd4 100644
          public static string ReleasesPage => $"https://github.com/{Repository}/releases";
  
          /// <summary>The engine build this launcher is made for (package.json "engine").</summary>
--        public const string EngineId = "bbhost-0.4.0-fps84";
-+        public const string EngineId = "lantern-16d7b51-psychov30-v1";
+-        public const string EngineId = "lantern-fps94";
++        public const string EngineId = "lantern-d901fbd-hdr16-v1";
  
          public const string ExeName = "Lantern Engine.exe";
          /// <summary>The launcher's name before 0.9.34 beta 8 (now a forwarder to ExeName).</summary>
 diff --git a/launcher/windows/BloodborneLauncher/MainWindow.xaml b/launcher/windows/BloodborneLauncher/MainWindow.xaml
-index f30035a..8d3698f 100644
+index 26f31a3..5156b14 100644
 --- a/launcher/windows/BloodborneLauncher/MainWindow.xaml
 +++ b/launcher/windows/BloodborneLauncher/MainWindow.xaml
 @@ -5,7 +5,7 @@
@@ -291,7 +334,7 @@ index f30035a..8d3698f 100644
                   Icon="app.ico"
                   Height="780" Width="1040"
                   MinHeight="560" MinWidth="820"
-@@ -341,7 +341,7 @@
+@@ -373,7 +373,7 @@
                  </Grid>
  
                  <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" IsHitTestVisible="False">
@@ -301,7 +344,7 @@ index f30035a..8d3698f 100644
                  </TextBlock>
  
 diff --git a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
-index 290c9e1..26727d8 100644
+index a61642a..d1c47ec 100644
 --- a/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 +++ b/launcher/windows/BloodborneLauncher/Views/DisplayPage.cs
 @@ -1,4 +1,4 @@
@@ -346,7 +389,7 @@ index 290c9e1..26727d8 100644
  
          private void RefreshMonitors()
          {
-@@ -128,23 +154,71 @@ namespace BloodborneLauncher.Views
+@@ -173,12 +199,18 @@ namespace BloodborneLauncher.Views
                      : L.T("This display shows no HDR");
              IniToggle(SymbolRegular.Hdr24, L.T("HDR output"), hdrHint, "hdr");
              ComboRow(SymbolRegular.Lightbulb24, L.T("HDR source"),
@@ -356,31 +399,23 @@ index 290c9e1..26727d8 100644
 -                10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", "200"), 200),
 +                "HDR16: the game's own light in 16 bits, tone mapped by Vanilla+ or PsychoV-30. Native: highlights derived from the game's HDR scene. Expanded: bright SDR pixels expanded towards the peak. Entering or leaving HDR16 requires restarting the game.",
 +                Choices.HdrMode, () => Ini.Get("hdr_mode", "native"), v => Ini.Set("hdr_mode", v), changed: RefreshHdrRows);
-+            // Defaults, as the engine's: paper white 203 (BT.2408's reference white), the peak
-+            // Windows reports for the chosen display (in HDR).
++            // Defaults, as the engine's: paper white 203 (BT.2408's reference white); the peak from
++            // the display (hdr_peak_auto) unless it is set.
 +            const double DefaultPaperWhite = 203;
-+            double DetectedPeak() => DisplayPeak.Default(S.Str("display_device"));
 +            var paperWhite = SliderRow(SymbolRegular.BrightnessHigh24, L.T("Paper white"), "How bright the game's white is, in nits. Default: 203. Range: 10–500",
 +                10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", ""), DefaultPaperWhite),
                  v => Ini.Set("hdr_paper_white", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
                  format: L.T("0' nits'"), valueWidth: 82);
--            SliderRow(SymbolRegular.WeatherSunny24, L.T("Peak brightness"), L.T("Your display's peak brightness, in nits. Range: 10–4000"),
--                10, 4000, 10, () => ParseDouble(Ini.Get("hdr_peak", "1000"), 1000),
 +            if (paperWhite.Parent is Panel paperWhiteRow)
 +                paperWhiteRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24, "Reset to 203 nits",
 +                    (_, _) => paperWhite.Value = DefaultPaperWhite));
-+            var detected = DisplayPeak.Nits(S.Str("display_device"));
-+            var peakHint = detected > 0
-+                ? $"Your display's peak brightness, in nits. Windows reports {detected:0} nits for it: the default. Range: 10–4000"
-+                : "Your display's peak brightness, in nits. Windows reports none (is Windows HDR on?): 1000 by default. Range: 10–4000";
-+            var peak = SliderRow(SymbolRegular.WeatherSunny24, L.T("Peak brightness"), peakHint,
-+                10, 4000, 1, () => ParseDouble(Ini.Get("hdr_peak", ""), DetectedPeak()),
+             ToggleRow(SymbolRegular.Desktop24, L.T("Peak brightness from the display"),
+                 L.T("The peak Windows reports for the display the game is on (the Windows HDR Calibration app's, once it has run). Off: the value below"),
+                 () => Ini.Get("hdr_peak_auto", "1") != "0", v => Ini.Set("hdr_peak_auto", v ? "1" : "0"));
+@@ -186,13 +218,46 @@ namespace BloodborneLauncher.Views
+                 10, 4000, 10, () => ParseDouble(Ini.Get("hdr_peak", "1000"), 1000),
                  v => Ini.Set("hdr_peak", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
                  format: L.T("0' nits'"), valueWidth: 82);
-+            if (peak.Parent is Panel peakRow)
-+                peakRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24,
-+                    "Reset to the peak Windows reports for this display (1000 when it reports none)",
-+                    (_, _) => peak.Value = Math.Clamp(DetectedPeak(), peak.Minimum, peak.Maximum)));
 +            // UI brightness in nits, as RenoDX's (48..500, 203 by default), whatever Paper white. An
 +            // older bbport.ini's hdr_ui_brightness (times paper white) shows converted, as the
 +            // engine reads it, and goes once this is set.
@@ -427,7 +462,7 @@ index 290c9e1..26727d8 100644
              Group(L.T("Language"));
              ComboRow(SymbolRegular.LocalLanguage24, L.T("In-game menu language"), L.T("The port's settings menu (Insert or L3 + R3)"),
 diff --git a/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs b/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
-index a922e1c..e55903c 100644
+index 612a70b..530a22c 100644
 --- a/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
 +++ b/launcher/windows/BloodborneLauncher/Views/GraphicsPage.cs
 @@ -1,4 +1,4 @@

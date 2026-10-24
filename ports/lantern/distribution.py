@@ -14,8 +14,8 @@ import urllib.request
 from zipfile import ZipFile
 
 BASE_URL = ('https://github.com/Awakenchan/LanternEngine/releases/download/'
-            'v0.9.36/LanternEngine-v0.9.36-win64.zip')
-BASE_SHA = '38b0de16231da36daa8ffd01f8d2a2be5040209d6f03e8ceef38b1a4c77f385c'
+            'v0.9.37/LanternEngine-v0.9.37-win64.zip')
+BASE_SHA = '0982583284a5ea3d28028fa188db5b025134ef52b3d320440e99d2119e6b9e4e'
 PYTHON_URL = 'https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip'
 PYTHON_SHA = '4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3'
 
@@ -77,13 +77,15 @@ def assemble(engine, overlay, destination, cache):
     version = os.environ.get('BB_RELEASE_VERSION') or (Path(__file__).with_name('VERSION')
                                                         .read_text(encoding='utf-8').strip())
     (destination / 'package.json').write_text(json.dumps({
-        'version': version, 'engine': 'lantern-16d7b51-psychov30-v1',
+        'version': version, 'engine': 'lantern-d901fbd-hdr16-v1',
         'source': 'https://github.com/Cham17-dev/LanternEngine/tree/lantern-psychov30',
-        'runtime_resources': 'v0.9.36', 'python': '3.12.10',
+        'runtime_resources': 'v0.9.37', 'python': '3.12.10',
     }, indent=2), encoding='utf-8')
-    # Explicit shipped HDR defaults, without replacing any player's existing INI.
-    ini = destination / 'bbport.ini'
-    defaults = dict(line.split('=', 1) for line in (overlay / 'psychov30-example.ini').read_text().splitlines())
+    # Explicit shipped HDR defaults in the shipped settings (engine\lantern.default.ini, which the
+    # launcher copies to lantern.ini when a folder has neither it nor an older bbport.ini), so no
+    # player's existing settings are replaced.
+    ini = runtime / 'lantern.default.ini'
+    defaults = dict(line.split('=', 1) for line in (overlay / 'hdr16-example.ini').read_text().splitlines())
     defaults.pop('hdr')  # HDR output remains opt-in; Windows HDR must be enabled too.
     # Peak and paper white come from the display's peak unless the player sets them.
     unset = {'hdr_peak', 'hdr_paper_white'}

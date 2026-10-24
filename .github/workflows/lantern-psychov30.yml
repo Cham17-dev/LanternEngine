@@ -1,10 +1,10 @@
-name: Lantern PsychoV30 port
+name: Lantern HDR16 port
 
 on:
   push:
     branches: [lantern-psychov30, lantern-psychov30-beta]
     paths: ['ports/lantern/**', 'launcher/**', 'engine/**', 'README.md', '.github/workflows/lantern-psychov30.yml']
-  # A release published on GitHub (tag v<version>, e.g. v0.9.36-beta.1): built with that
+  # A release published on GitHub (tag v<version>, e.g. v0.9.37-beta.1): built with that
   # version, its package, launcher and package.json attached to it (job publish).
   release:
     types: [published]
@@ -32,14 +32,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Awakenchan/LanternEngine
-          ref: 16d7b51a6da36bc60e1fd7c5bbd5b0fd52ddf2fd
+          ref: d901fbd2ea4bea114b37c26a2a9278d1e97f7b46
           path: upstream-lantern
-          persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: DarkIzuku/bloodborne_pc
-          ref: 8ecba9a4abdd54747e31d7fee54982e422b5f8e2
-          path: engine-src
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
@@ -56,10 +50,11 @@ jobs:
           path: .ci/renodx
           sparse-checkout: src/shaders
           persist-credentials: false
-      - name: Reconstruct and patch
+      # Lantern 0.9.37 and later hold the engine's full source in engine/.
+      - name: Engine source and patches
         run: |
-          python3 ports/lantern/prepare.py baseline engine-src upstream-lantern
-          python3 ports/lantern/prepare.py port engine-src upstream-lantern
+          cp -r upstream-lantern/engine engine-src
+          python3 ports/lantern/prepare.py engine-src upstream-lantern
       - name: Install shader tools
         run: sudo apt-get update -qq && sudo apt-get install -y -qq glslang-tools spirv-tools spirv-cross libglm-dev g++
       - name: Compile and validate registered shaders
@@ -85,15 +80,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Awakenchan/LanternEngine
-          ref: 16d7b51a6da36bc60e1fd7c5bbd5b0fd52ddf2fd
+          ref: d901fbd2ea4bea114b37c26a2a9278d1e97f7b46
           path: upstream-lantern
-          persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: DarkIzuku/bloodborne_pc
-          ref: 8ecba9a4abdd54747e31d7fee54982e422b5f8e2
-          path: engine-src
-          submodules: recursive
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -112,8 +100,10 @@ jobs:
           "full=$v" >> $env:GITHUB_OUTPUT
           "number=$(($v -split '-')[0])" >> $env:GITHUB_OUTPUT
           Write-Output "Version $v"
-      - name: Reconstruct Lantern baseline
-        run: python ports/lantern/prepare.py baseline engine-src upstream-lantern
+      # Lantern 0.9.37 and later hold the engine's full source in engine/: a copy of it.
+      - name: Lantern engine source
+        shell: pwsh
+        run: Copy-Item upstream-lantern/engine engine-src -Recurse
       - uses: msys2/setup-msys2@v2
         with:
           msystem: CLANG64
@@ -137,8 +127,8 @@ jobs:
           export CFLAGS=-Wno-error=unused-but-set-global
           export CXXFLAGS="-include $(cygpath -m "$PWD/gpu/win_compat.h")"
           bash build.sh
-      - name: Apply separate PsychoV30 patches
-        run: python ports/lantern/prepare.py port engine-src upstream-lantern
+      - name: Apply separate HDR16 patches
+        run: python ports/lantern/prepare.py engine-src upstream-lantern
       - name: Build HDR engine and settings tests
         shell: msys2 {0}
         working-directory: engine-src
@@ -155,7 +145,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Build launcher with PsychoV30 selector
+      - name: Build launcher with HDR16
         run: >-
           dotnet publish launcher/windows/BloodborneLauncher/BloodborneLauncher.csproj
           -c Release -r win-x64 --self-contained true

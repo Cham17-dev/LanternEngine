@@ -45,8 +45,9 @@ for src in launcher.iterdir():
 shutil.copy2(Path(__file__).resolve().parents[2] / 'README.md', stage / 'README-HDR16.md')
 notices = Path(__file__).with_name('licenses')
 shutil.copytree(notices, stage / 'licenses', dirs_exist_ok=True)
-(stage / 'psychov30-example.ini').write_text(
-    # No hdr_peak / hdr_paper_white: the engine and launcher take them from the display's peak.
+(stage / 'hdr16-example.ini').write_text(
+    # No hdr_peak / hdr_paper_white: the peak comes from the display (hdr_peak_auto), the paper
+    # white is the engine's 203 nits.
     'hdr=1\nhdr_mode=psychov30\n'
     'hdr_tonemapper=5\nhdr_exposure=1\nhdr_grade_highlights=50\nhdr_shadows=50\n'
     'hdr_contrast=50\nhdr_saturation=50\nhdr_bloom=50\nhdr_scene_grading=100\n'
