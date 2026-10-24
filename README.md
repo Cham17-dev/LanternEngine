@@ -52,8 +52,10 @@ the launcher, or use *Reset all*.
   to the display's.
 - Changing the HDR source (HDR16, Native, Expanded) needs a game restart; everything in the
   HDR16 menu applies live.
-- Frame generation in HDR16: **DLSS** frame generation works (NVIDIA RTX 40/50). FSR 3.1 frame
-  generation turns itself off in HDR16: it interpolates 8-bit frames, and HDR16's are 16-bit.
+- Frame generation works in HDR16: **DLSS** (NVIDIA RTX 40/50) and **FSR 3.1** (any GPU), which
+  interpolates HDR16's 16-bit frames. With FSR 3.1 the HUD of the generated frames is shown at
+  Game Brightness: keep UI Brightness at the same value (both 203 nits by default), or the HUD
+  flickers.
 - HDR16 uses Lantern's native shader compiler, its shader catalog and the same shader cache as
   the other modes: switching the HDR source does not rebuild the shaders.
 
