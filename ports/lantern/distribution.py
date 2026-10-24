@@ -78,7 +78,7 @@ def assemble(engine, overlay, destination, cache):
                                                         .read_text(encoding='utf-8').strip())
     (destination / 'package.json').write_text(json.dumps({
         'version': version, 'engine': 'lantern-d901fbd-hdr16-v1',
-        'source': 'https://github.com/Cham17-dev/LanternEngine/tree/lantern-psychov30',
+        'source': 'https://github.com/Cham17-dev/LanternEngine/tree/lantern-HDR16',
         'runtime_resources': 'v0.9.37', 'python': '3.12.10',
     }, indent=2), encoding='utf-8')
     # Explicit shipped HDR defaults in the shipped settings (engine\lantern.default.ini, which the

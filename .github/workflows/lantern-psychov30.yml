@@ -2,7 +2,7 @@ name: Lantern HDR16 port
 
 on:
   push:
-    branches: [lantern-psychov30, lantern-psychov30-beta]
+    branches: [lantern-HDR16, lantern-HDR16-beta]
     paths: ['ports/lantern/**', 'launcher/**', 'engine/**', 'README.md', '.github/workflows/lantern-psychov30.yml']
   # A release published on GitHub (tag v<version>, e.g. v0.9.37-beta.1): built with that
   # version, its package, launcher and package.json attached to it (job publish).
