@@ -584,10 +584,10 @@ index 0000000..668262d
 +        *includes, cpp, here / 'main.cpp', '-o', work / 'check')
 +    run(work / 'check')
 diff --git a/gpu/CMakeLists.txt b/gpu/CMakeLists.txt
-index 519779e..9750d75 100644
+index 519779e..e8c9c0c 100644
 --- a/gpu/CMakeLists.txt
 +++ b/gpu/CMakeLists.txt
-@@ -154,6 +154,14 @@ function(add_host_shader FILENAME SHADER_NAME)
+@@ -154,6 +154,19 @@ function(add_host_shader FILENAME SHADER_NAME)
          DEPENDS ${SHADER_SRC}/${FILENAME} VERBATIM)
      set(SHADER_HEADERS ${SHADER_HEADERS} ${OUT} PARENT_SCOPE)
  endfunction()
@@ -596,6 +596,11 @@ index 519779e..9750d75 100644
 +add_host_shader(hdr/bb_display_copy.frag bb_display_copy_frag)
 +add_host_shader(hdr/bb_glow_source.frag bb_glow_source_frag)
 +add_host_shader(hdr/bb_color_grading.frag bb_color_grading_frag)
++# HDR16's replacements for a game shader whose inputs the GPU interpolates (hdr/bb_inputs.glsl).
++add_host_shader(hdr/bb_composite_hdr.frag bb_composite_hdr_hw_frag BB_HW_INTERP=1)
++add_host_shader(hdr/bb_copy.frag bb_copy_hw_frag BB_HW_INTERP=1)
++add_host_shader(hdr/bb_glow_source.frag bb_glow_source_hw_frag BB_HW_INTERP=1)
++add_host_shader(hdr/bb_color_grading.frag bb_color_grading_hw_frag BB_HW_INTERP=1)
 +add_host_shader(hdr_upscale_transfer.comp hdr_upscale_transfer_comp)
 +add_host_shader(hdr_ui_mask.comp hdr_ui_mask_comp)
 +
@@ -655,10 +660,10 @@ index 5d808b4..95a6287 100644
      if (EmulatorSettings.IsPipelineCacheArchived()) {
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag
 new file mode 100644
-index 0000000..8e5cb3f
+index 0000000..6ec8eb6
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,102 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -679,9 +684,12 @@ index 0000000..8e5cb3f
 +// shader's: vk_hdr_channel.cpp copies its bindings and locations onto these.
 +
 +#version 450
++#ifndef BB_HW_INTERP
 +#extension GL_EXT_fragment_shader_barycentric : require
++#endif
 +#extension GL_GOOGLE_include_directive : require
 +
++#include "bb_inputs.glsl"
 +#include "gamut_bridge.glsl"
 +
 +// The recompiler's push constants (shader_recompiler/resource.h, PushData) at the C++ struct's
@@ -704,7 +712,7 @@ index 0000000..8e5cb3f
 +layout(set = 0, binding = 2) uniform sampler fs_samp0;
 +layout(set = 0, binding = 3) uniform sampler fs_samp1;
 +
-+layout(location = 0) pervertexEXT in vec4 fs_in_attr0_p[3];
++BB_INPUT(0, fs_in_attr0);
 +layout(location = 0) out vec4 frag_color0;
 +
 +// The chain's encoding (gamma 2.2, the final pass decodes it so), with the sign kept below 0.
@@ -719,13 +727,7 @@ index 0000000..8e5cb3f
 +}
 +
 +void main() {
-+    precise float dx1 = fs_in_attr0_p[1].x - fs_in_attr0_p[0].x;
-+    precise float dx2 = fs_in_attr0_p[2].x - fs_in_attr0_p[0].x;
-+    precise float dy1 = fs_in_attr0_p[1].y - fs_in_attr0_p[0].y;
-+    precise float dy2 = fs_in_attr0_p[2].y - fs_in_attr0_p[0].y;
-+    vec2 uv = vec2(fma(dx2, gl_BaryCoordEXT.z, fma(dx1, gl_BaryCoordEXT.y, fs_in_attr0_p[0].x)),
-+                   fma(dy2, gl_BaryCoordEXT.z, fma(dy1, gl_BaryCoordEXT.y, fs_in_attr0_p[0].y)));
-+    vec4 c = textureLod(sampler2D(fs_img0, fs_samp0), uv, 0.0);
++    vec4 c = textureLod(sampler2D(fs_img0, fs_samp0), BB_UV(fs_in_attr0), 0.0);
 +    // bb_hdr.w: the strength's bits plus one (0: not set by bbport, the game's grading).
 +    uint bits = push_data.bb_hdr.w;
 +    float strength = bits == 0u ? 1.0 : clamp(uintBitsToFloat(bits - 1u), 0.0, 1.0);
@@ -1068,10 +1070,10 @@ index 0000000..5bbaf8f
 +#endif // BBPORT_BB_COMPOSITE_GLSL
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag
 new file mode 100644
-index 0000000..f9d8bf8
+index 0000000..3525caa
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag
-@@ -0,0 +1,462 @@
+@@ -0,0 +1,469 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -1091,8 +1093,12 @@ index 0000000..f9d8bf8
 +// gains of 1.
 +
 +#version 450
++#ifndef BB_HW_INTERP
 +#extension GL_EXT_fragment_shader_barycentric : require
++#endif
 +#extension GL_GOOGLE_include_directive : require
++
++#include "bb_inputs.glsl"
 +
 +layout(constant_id = 1) const float BB_HDR_PEAK = 4.926;
 +layout(constant_id = 2) const float BB_HDR_KNEE = 0.6;
@@ -1151,10 +1157,12 @@ index 0000000..f9d8bf8
 +layout(set = 0, binding = 5) uniform sampler bb_samp_mult;
 +layout(set = 0, binding = 6) uniform sampler bb_samp_bloom;
 +
-+layout(location = 0) pervertexEXT in vec4 bb_in_scene[3];
-+layout(location = 1) pervertexEXT in vec4 bb_in_mult[3];
-+layout(location = 2) pervertexEXT in vec4 bb_in_bloom[3];
-+layout(location = 3) pervertexEXT in vec4 bb_in_vig[3];
++// The game's inputs, per vertex or interpolated by the GPU (bb_inputs.glsl); their locations are
++// the variant's (vk_hdr_channel.cpp).
++BB_INPUT(0, bb_in_scene);
++BB_INPUT(1, bb_in_mult);
++BB_INPUT(2, bb_in_bloom);
++BB_INPUT(3, bb_in_vig);
 +
 +layout(location = 0) out vec4 frag_color0;
 +// The game's effects as ratios, for the live sliders of the final pass: rgb = the untonemapped
@@ -1372,12 +1380,17 @@ index 0000000..f9d8bf8
 +    return bb_c_infinity_rolloff(rows, peak);
 +}
 +
++#ifndef BB_HW_INTERP
 +// The game's interpolation, as recompiled: attribute with the barycentrics.
 +vec2 interp(vec4 a0, vec4 a1, vec4 a2) {
 +    vec3 b = gl_BaryCoordEXT;
 +    return vec2(fma(a2.x - a0.x, b.z, fma(a1.x - a0.x, b.y, a0.x)),
 +                fma(a2.y - a0.y, b.z, fma(a1.y - a0.y, b.y, a0.y)));
 +}
++#define BB_IN_UV(NAME) interp(NAME[0], NAME[1], NAME[2])
++#else
++#define BB_IN_UV(NAME) BB_UV(NAME)
++#endif
 +
 +void main() {
 +    // buf_offsets holds one byte per buffer binding, as the recompiler reads it:
@@ -1390,14 +1403,10 @@ index 0000000..f9d8bf8
 +                                BB_GAMMA, BB_ADDITIVE, BB_GAIN, BB_FLOOR_ON, BB_SCENE_MAT,
 +                                BB_GLOW_MAT, BB_GRADE);
 +
-+    vec4 scene = textureLod(sampler2D(bb_img_scene, bb_samp_scene),
-+                            interp(bb_in_scene[0], bb_in_scene[1], bb_in_scene[2]), 0.0);
-+    vec3 mult = texture(sampler2D(bb_img_mult, bb_samp_mult),
-+                        interp(bb_in_mult[0], bb_in_mult[1], bb_in_mult[2])).rgb;
-+    vec3 bloom = textureLod(sampler2D(bb_img_bloom, bb_samp_bloom),
-+                            interp(bb_in_bloom[0], bb_in_bloom[1], bb_in_bloom[2]), 0.0).rgb;
-+    vec2 vig_uv = (BB_COS4 || BB_VIG888) ? interp(bb_in_vig[0], bb_in_vig[1], bb_in_vig[2])
-+                                         : vec2(0.0);
++    vec4 scene = textureLod(sampler2D(bb_img_scene, bb_samp_scene), BB_IN_UV(bb_in_scene), 0.0);
++    vec3 mult = texture(sampler2D(bb_img_mult, bb_samp_mult), BB_IN_UV(bb_in_mult)).rgb;
++    vec3 bloom = textureLod(sampler2D(bb_img_bloom, bb_samp_bloom), BB_IN_UV(bb_in_bloom), 0.0).rgb;
++    vec2 vig_uv = (BB_COS4 || BB_VIG888) ? BB_IN_UV(bb_in_vig) : vec2(0.0);
 +
 +    // The game's output, and the same with the HDR curve.
 +    vec3 ms = bb_scene_tint(mult);
@@ -1536,10 +1545,10 @@ index 0000000..f9d8bf8
 +}
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_copy.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_copy.frag
 new file mode 100644
-index 0000000..cc826a2
+index 0000000..9037e71
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_copy.frag
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,45 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -1550,7 +1559,12 @@ index 0000000..cc826a2
 +// vk_hdr_channel.cpp copies its bindings and locations onto these.
 +
 +#version 450
++#ifndef BB_HW_INTERP
 +#extension GL_EXT_fragment_shader_barycentric : require
++#endif
++#extension GL_GOOGLE_include_directive : require
++
++#include "bb_inputs.glsl"
 +
 +// The recompiler's push constants (shader_recompiler/resource.h, PushData) at the C++ struct's
 +// offsets (checked in vk_rasterizer.cpp); bb_hdr is bbport's, set per draw (vk_rasterizer.cpp).
@@ -1570,17 +1584,11 @@ index 0000000..cc826a2
 +layout(set = 0, binding = 0) uniform texture2D fs_img0;
 +layout(set = 0, binding = 1) uniform sampler fs_samp0;
 +
-+layout(location = 0) pervertexEXT in vec4 fs_in_attr0_p[3];
++BB_INPUT(0, fs_in_attr0);
 +layout(location = 0) out vec4 frag_color0;
 +
 +void main() {
-+    precise float dx1 = fs_in_attr0_p[1].x - fs_in_attr0_p[0].x;
-+    precise float dx2 = fs_in_attr0_p[2].x - fs_in_attr0_p[0].x;
-+    precise float dy1 = fs_in_attr0_p[1].y - fs_in_attr0_p[0].y;
-+    precise float dy2 = fs_in_attr0_p[2].y - fs_in_attr0_p[0].y;
-+    vec2 uv = vec2(fma(dx2, gl_BaryCoordEXT.z, fma(dx1, gl_BaryCoordEXT.y, fs_in_attr0_p[0].x)),
-+                   fma(dy2, gl_BaryCoordEXT.z, fma(dy1, gl_BaryCoordEXT.y, fs_in_attr0_p[0].y)));
-+    vec4 c = textureLod(sampler2D(fs_img0, fs_samp0), uv, 0.0);
++    vec4 c = textureLod(sampler2D(fs_img0, fs_samp0), BB_UV(fs_in_attr0), 0.0);
 +    frag_color0 = vec4(c.zyx, c.w);
 +    if (push_data.bb_hdr.z == 5u && max(max(c.x, c.y), c.z) > 1.001) {
 +        frag_color0 = vec4(1.0, 0.0, 1.0, c.w);
@@ -1657,10 +1665,10 @@ index 0000000..d8fb667
 +}
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_glow_source.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_glow_source.frag
 new file mode 100644
-index 0000000..b9baee6
+index 0000000..33d83ee
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_glow_source.frag
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,28 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -1671,25 +1679,69 @@ index 0000000..b9baee6
 +// shader's: vk_hdr_channel.cpp copies its bindings and locations onto these.
 +
 +#version 450
++#ifndef BB_HW_INTERP
 +#extension GL_EXT_fragment_shader_barycentric : require
++#endif
++#extension GL_GOOGLE_include_directive : require
++
++#include "bb_inputs.glsl"
 +
 +layout(set = 0, binding = 0) uniform texture2D fs_img0;
 +layout(set = 0, binding = 1) uniform sampler fs_samp0;
 +
-+layout(location = 0) pervertexEXT in vec4 fs_in_attr0_p[3];
++BB_INPUT(0, fs_in_attr0);
 +layout(location = 0) out vec4 frag_color0;
 +
 +void main() {
-+    precise float dx1 = fs_in_attr0_p[1].x - fs_in_attr0_p[0].x;
-+    precise float dx2 = fs_in_attr0_p[2].x - fs_in_attr0_p[0].x;
-+    precise float dy1 = fs_in_attr0_p[1].y - fs_in_attr0_p[0].y;
-+    precise float dy2 = fs_in_attr0_p[2].y - fs_in_attr0_p[0].y;
-+    vec2 uv = vec2(fma(dx2, gl_BaryCoordEXT.z, fma(dx1, gl_BaryCoordEXT.y, fs_in_attr0_p[0].x)),
-+                   fma(dy2, gl_BaryCoordEXT.z, fma(dy1, gl_BaryCoordEXT.y, fs_in_attr0_p[0].y)));
-+    vec4 c = textureLod(sampler2D(fs_img0, fs_samp0), uv, 0.0);
++    vec4 c = textureLod(sampler2D(fs_img0, fs_samp0), BB_UV(fs_in_attr0), 0.0);
 +    // The game's channel order: its target holds them swapped.
 +    frag_color0 = vec4(min(c.zyx, vec3(1.0)), c.w);
 +}
+diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_inputs.glsl b/gpu/shadps4/video_core/host_shaders/hdr/bb_inputs.glsl
+new file mode 100644
+index 0000000..88023fe
+--- /dev/null
++++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_inputs.glsl
+@@ -0,0 +1,39 @@
++// SPDX-FileCopyrightText: Copyright 2026 bbport
++// SPDX-License-Identifier: GPL-2.0-or-later
++//
++// bbport HDR16: how a replacement reads the game shader's inputs. Each replacement is built twice
++// (gpu/CMakeLists.txt); vk_hdr_channel.cpp picks one per game shader:
++//   - per vertex (the default): every input of the game's pixel shader is read per vertex and
++//     interpolated by GCN's own formula (the recompiler's manual interpolation on NVIDIA), so the
++//     replacement reads them so too and computes the game's values bit for bit;
++//   - BB_HW_INTERP: the GPU interpolates them (Lantern 0.9.37's hardware interpolation pass gave
++//     them back, or a GPU without fragment-shader barycentrics: AMD, Intel). The game's vertex
++//     shader outputs the same values at the same locations either way.
++// The includer puts, right after its #version line:
++//     #ifndef BB_HW_INTERP
++//     #extension GL_EXT_fragment_shader_barycentric : require
++//     #endif
++
++#ifndef BBPORT_BB_INPUTS_GLSL
++#define BBPORT_BB_INPUTS_GLSL
++
++#ifdef BB_HW_INTERP
++// An input as the GPU interpolates it: BB_UV(name) is its value's first two components.
++#define BB_INPUT(L, NAME) layout(location = L) in vec4 NAME
++#define BB_UV(NAME) (NAME).xy
++#else
++// An input read per vertex: BB_UV(name) interpolates it as GCN does (v_interp_p1/p2:
++// P0 + I (P1 - P0) + J (P2 - P0)), with the hardware's barycentrics.
++#define BB_INPUT(L, NAME) layout(location = L) pervertexEXT in vec4 NAME[3]
++#define BB_UV(NAME) bb_interp_uv(NAME[0], NAME[1], NAME[2])
++vec2 bb_interp_uv(vec4 a0, vec4 a1, vec4 a2) {
++    precise float dx1 = a1.x - a0.x;
++    precise float dx2 = a2.x - a0.x;
++    precise float dy1 = a1.y - a0.y;
++    precise float dy2 = a2.y - a0.y;
++    return vec2(fma(dx2, gl_BaryCoordEXT.z, fma(dx1, gl_BaryCoordEXT.y, a0.x)),
++                fma(dy2, gl_BaryCoordEXT.z, fma(dy1, gl_BaryCoordEXT.y, a0.y)));
++}
++#endif
++
++#endif // BBPORT_BB_INPUTS_GLSL
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_tonemap.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_tonemap.frag
 new file mode 100644
 index 0000000..a9722f7
@@ -5384,10 +5436,10 @@ index 65fb22f..8e38232 100644
      std::optional<const Shader::Gcn::FetchShaderData> fetch_shader{};
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp
 new file mode 100644
-index 0000000..1b85704
+index 0000000..946ca08
 --- /dev/null
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp
-@@ -0,0 +1,619 @@
+@@ -0,0 +1,667 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -5408,10 +5460,14 @@ index 0000000..1b85704
 +#include "common/logging/log.h"
 +#include "core/emulator_settings.h"
 +#include "video_core/host_shaders/bb_color_grading_frag.h"
++#include "video_core/host_shaders/bb_color_grading_hw_frag.h"
 +#include "video_core/host_shaders/bb_composite_hdr_frag.h"
++#include "video_core/host_shaders/bb_composite_hdr_hw_frag.h"
 +#include "video_core/host_shaders/bb_copy_frag.h"
++#include "video_core/host_shaders/bb_copy_hw_frag.h"
 +#include "video_core/host_shaders/bb_display_copy_frag.h"
 +#include "video_core/host_shaders/bb_glow_source_frag.h"
++#include "video_core/host_shaders/bb_glow_source_hw_frag.h"
 +#include "video_core/renderer_vulkan/bb_tonemap_variants.h"
 +#include "video_core/renderer_vulkan/vk_hdr_channel.h"
 +
@@ -5565,9 +5621,27 @@ index 0000000..1b85704
 +std::mutex composite_mutex;
 +std::unordered_map<u64, CompositeShader>* composites = new std::unordered_map<u64, CompositeShader>;
 +
-+/// The variant's HDR shader, or why there is none.
++/// A game pixel shader input: its location, and whether the shader reads it per vertex
++/// (fs_in_attrN_p, the recompiler's manual interpolation) or as the GPU interpolates it
++/// (fs_in_attrN: Lantern's hardware interpolation pass, or no fragment-shader barycentrics).
++struct GameInput {
++    u32 location;
++    bool per_vertex;
++};
++
++std::optional<GameInput> FindInput(const SpvInterface& in, int attr) {
++    if (const auto location = in.Location(fmt::format("fs_in_attr{}_p", attr))) {
++        return GameInput{*location, true};
++    }
++    if (const auto location = in.Location(fmt::format("fs_in_attr{}", attr))) {
++        return GameInput{*location, false};
++    }
++    return std::nullopt;
++}
++
++/// The variant's HDR shader, or why there is none. `per_vertex` says which build of it.
 +std::optional<std::vector<u32>> BuildComposite(const TonemapVariant& v, std::span<const u32> game,
-+                                               std::string* why) {
++                                               std::string* why, bool* per_vertex) {
 +    const SpvInterface in = ReadInterface(game);
 +    // The constant buffer: the game shader's only buffer (several ssbo_N aliases share it).
 +    std::optional<u32> buffer_index, buffer_binding;
@@ -5606,24 +5680,33 @@ index 0000000..1b85704
 +    }
 +    const auto image = [&](int index) { return in.Binding(fmt::format("fs_img{}", index)); };
 +    const auto sampler = [&](int index) { return in.Binding(fmt::format("fs_samp{}", index)); };
-+    // Inputs: interpolated per vertex (barycentrics), as the HDR shader declares them.
-+    const auto input = [&](int attr) { return in.Location(fmt::format("fs_in_attr{}_p", attr)); };
-+    const auto scene_loc = input(v.attr_scene);
-+    const auto mult_loc = input(v.attr_mult);
-+    const auto bloom_loc = input(v.attr_bloom);
-+    const auto vig_loc = v.attr_vig >= 0 ? input(v.attr_vig) : scene_loc;
++    // Inputs: per vertex when the game's shader reads all of them so (the HDR shader then computes
++    // the game's values bit for bit); else the build that reads them as the GPU interpolates them,
++    // at the same locations (the game's vertex shader writes them the same either way).
++    const auto scene_in = FindInput(in, v.attr_scene);
++    const auto mult_in = FindInput(in, v.attr_mult);
++    const auto bloom_in = FindInput(in, v.attr_bloom);
++    const auto vig_in = v.attr_vig >= 0 ? FindInput(in, v.attr_vig) : scene_in;
 +    const auto bindings = {image(v.img_scene), image(v.img_mult), image(v.img_bloom),
 +                           sampler(v.img_scene), sampler(v.img_mult), sampler(v.img_bloom)};
 +    if (std::ranges::any_of(bindings, [](const auto& b) { return !b.has_value(); })) {
 +        *why = "image bindings not found";
 +        return std::nullopt;
 +    }
-+    if (!scene_loc || !mult_loc || !bloom_loc || !vig_loc) {
-+        *why = "inputs not interpolated per vertex";
++    if (!scene_in || !mult_in || !bloom_in || !vig_in) {
++        *why = "inputs not found";
 +        return std::nullopt;
 +    }
++    *per_vertex = scene_in->per_vertex && mult_in->per_vertex && bloom_in->per_vertex &&
++                  vig_in->per_vertex;
++    const auto scene_loc = std::optional<u32>{scene_in->location};
++    const auto mult_loc = std::optional<u32>{mult_in->location};
++    const auto bloom_loc = std::optional<u32>{bloom_in->location};
++    const auto vig_loc = std::optional<u32>{vig_in->location};
 +
-+    std::vector<u32> spv(std::begin(BB_COMPOSITE_HDR_FRAG), std::end(BB_COMPOSITE_HDR_FRAG));
++    std::vector<u32> spv = *per_vertex
++        ? std::vector<u32>(std::begin(BB_COMPOSITE_HDR_FRAG), std::end(BB_COMPOSITE_HDR_FRAG))
++        : std::vector<u32>(std::begin(BB_COMPOSITE_HDR_HW_FRAG), std::end(BB_COMPOSITE_HDR_HW_FRAG));
 +    const SpvInterface ours = ReadInterface(spv);
 +    const auto it = bindings.begin();
 +    const bool ok =
@@ -5679,7 +5762,8 @@ index 0000000..1b85704
 +        return; // additive variants output HDR for a later pass: nothing to do here
 +    }
 +    std::string why;
-+    auto built = BuildComposite(*v, spv, &why);
++    bool per_vertex = false;
++    auto built = BuildComposite(*v, spv, &why, &per_vertex);
 +    std::scoped_lock lock{composite_mutex};
 +    auto [it, fresh] = composites->try_emplace(pgm_hash);
 +    if (!built) {
@@ -5692,9 +5776,10 @@ index 0000000..1b85704
 +    }
 +    if (fresh) {
 +        it->second.spv = std::move(*built);
-+        LOG_INFO(Render_Vulkan, "HDR pass: composite variant {:08x} ready ({}{}, {})",
++        LOG_INFO(Render_Vulkan, "HDR pass: composite variant {:08x} ready ({}{}, {}, {})",
 +                 u32(pgm_hash), CurveNames[v->curve < 4 ? v->curve : 3],
-+                 v->luminance ? " on luminance" : "", "untonemapped");
++                 v->luminance ? " on luminance" : "", "untonemapped",
++                 per_vertex ? "inputs per vertex" : "inputs interpolated by the GPU");
 +    } else if (!it->second.conflicting && it->second.spv != *built) {
 +        it->second.conflicting = true;
 +        LOG_WARNING(Render_Vulkan,
@@ -5779,48 +5864,61 @@ index 0000000..1b85704
 +    if (!Native16()) {
 +        return {};
 +    }
++    // The game shader's input fs_in_attr0 (none for the display copy): per vertex, the build that
++    // reads it so; else the one that reads it as the GPU interpolates it (bb_inputs.glsl).
++    const SpvInterface in = ReadInterface(game);
++    const auto input = FindInput(in, 0);
++    const bool per_vertex = input && input->per_vertex;
++    const auto pick = [per_vertex](std::span<const u32> manual, std::span<const u32> hw) {
++        return per_vertex ? std::vector<u32>(manual.begin(), manual.end())
++                          : std::vector<u32>(hw.begin(), hw.end());
++    };
 +    std::vector<u32> spv;
-+    std::vector<const char*> bindings, locations;
++    std::vector<const char*> bindings;
++    bool reads_input = true;
 +    if (pgm_hash == 0x57f3b8c2) {
-+        spv.assign(std::begin(BB_GLOW_SOURCE_FRAG), std::end(BB_GLOW_SOURCE_FRAG));
++        spv = pick(BB_GLOW_SOURCE_FRAG, BB_GLOW_SOURCE_HW_FRAG);
 +        bindings = {"fs_img0", "fs_samp0"};
-+        locations = {"fs_in_attr0_p", "frag_color0"};
 +    } else if (pgm_hash == 0xf7229091) {
-+        spv.assign(std::begin(BB_COPY_FRAG), std::end(BB_COPY_FRAG));
++        spv = pick(BB_COPY_FRAG, BB_COPY_HW_FRAG);
 +        bindings = {"fs_img0", "fs_samp0"};
-+        locations = {"fs_in_attr0_p", "frag_color0"};
 +    } else if (pgm_hash == ColorGradingHash) {
-+        spv.assign(std::begin(BB_COLOR_GRADING_FRAG), std::end(BB_COLOR_GRADING_FRAG));
++        spv = pick(BB_COLOR_GRADING_FRAG, BB_COLOR_GRADING_HW_FRAG);
 +        bindings = {"fs_img0", "fs_img1", "fs_samp0", "fs_samp1"};
-+        locations = {"fs_in_attr0_p", "frag_color0"};
 +    } else if (pgm_hash == 0x38d65b32) {
 +        spv.assign(std::begin(BB_DISPLAY_COPY_FRAG), std::end(BB_DISPLAY_COPY_FRAG));
 +        bindings = {"fs_img0", "fs_img1", "fs_samp0"};
-+        locations = {"frag_color0"};
++        reads_input = false;
 +    } else {
 +        return {};
 +    }
-+    const SpvInterface in = ReadInterface(game);
 +    const SpvInterface ours = ReadInterface(spv);
 +    bool ok = true;
 +    for (const char* name : bindings) {
 +        const auto value = in.Binding(name);
 +        ok = ok && value && SetDecoration(spv, ours, name, SpvDecorationBinding, *value);
 +    }
-+    for (const char* name : locations) {
-+        const auto value = in.Location(name);
-+        ok = ok && value && SetDecoration(spv, ours, name, SpvDecorationLocation, *value);
++    if (const auto color = in.Location("frag_color0")) {
++        ok = ok && SetDecoration(spv, ours, "frag_color0", SpvDecorationLocation, *color);
++    } else {
++        ok = false;
++    }
++    if (reads_input) {
++        // Ours is called fs_in_attr0 in both builds.
++        ok = ok && input &&
++             SetDecoration(spv, ours, "fs_in_attr0", SpvDecorationLocation, input->location);
 +    }
 +    if (!ok) {
 +        LOG_WARNING(Render_Vulkan, "HDR 16-bit: shader {:08x} has another interface, kept as it is",
 +                    pgm_hash);
 +        return {};
 +    }
-+    LOG_INFO(Render_Vulkan, "HDR 16-bit: shader {:08x} replaced ({})", pgm_hash,
++    LOG_INFO(Render_Vulkan, "HDR 16-bit: shader {:08x} replaced ({}{})", pgm_hash,
 +             pgm_hash == 0x57f3b8c2       ? "glow source clamped"
 +             : pgm_hash == 0xf7229091     ? "copy (chain probe)"
 +             : pgm_hash == ColorGradingHash ? "color table kept above white"
-+                                            : "display copy above white");
++                                            : "display copy above white",
++             !reads_input ? "" : per_vertex ? ", input per vertex" : ", input interpolated by the GPU");
 +    return spv;
 +}
 +
@@ -5872,10 +5970,12 @@ index 0000000..1b85704
 +        add(BB_COPY_FRAG);
 +        add(BB_COLOR_GRADING_FRAG);
 +        add(BB_DISPLAY_COPY_FRAG);
-+        // How the game's shaders around them are compiled: 1, every input interpolated per vertex
-+        // in HDR16 (Lantern 0.9.37's hardware interpolation pass off; a cache made with it on
-+        // left the composite in SDR).
-+        add(std::array<u32, 1>{1u});
++        // Their builds for inputs the GPU interpolates (Lantern 0.9.37's hardware interpolation
++        // pass): which build a game shader gets depends on how it was compiled.
++        add(BB_COMPOSITE_HDR_HW_FRAG);
++        add(BB_GLOW_SOURCE_HW_FRAG);
++        add(BB_COPY_HW_FRAG);
++        add(BB_COLOR_GRADING_HW_FRAG);
 +        return fmt::format("{:08x}", u32(h ^ (h >> 32)));
 +    }();
 +    return tag;
@@ -6163,7 +6263,7 @@ index 7ebcc08..4b2cc81 100644
  
  class HdrNative {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index fa0f226..129fa2a 100644
+index fa0f226..0f59b96 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 @@ -11,6 +11,8 @@
@@ -6216,22 +6316,17 @@ index fa0f226..129fa2a 100644
              }() &&
              instance.StorageMinAlignment() > 4 && instance.UniformMinAlignment() <= 256 &&
              instance.GetPhysicalDevice().getProperties().limits.maxUniformBufferRange >= 65536,
-@@ -510,8 +525,12 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
+@@ -510,7 +525,8 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
      profile.flatbuf_storage = profile.uniform_constant_buffers && !switch_on("BB_UBO_FLATBUF");
      // bbport: pixel shader arithmetic the driver may fuse; BB_FS_CONTRACT=0 keeps it unfused.
      profile.fragment_exact_fp = !switch_on("BB_FS_CONTRACT");
 -    // bbport: manual interpolation only where it matters; BB_INTERP_HW=0 for every input.
--    profile.manual_interpolation_all = profile.needs_manual_interpolation && !switch_on("BB_INTERP_HW");
-+    // bbport: manual interpolation only where it matters; BB_INTERP_HW=0 for every input. HDR16
-+    // (mode 5) too: its replacements of the composite, the color grading and the copies read the
-+    // game shader's inputs per vertex (vk_hdr_channel.cpp), which the hardware interpolation pass
-+    // would take away (the composite then stays SDR: "inputs not interpolated per vertex").
-+    profile.manual_interpolation_all = profile.needs_manual_interpolation &&
-+                                       (!switch_on("BB_INTERP_HW") || HdrChannel::Native16());
++    // bbport: manual interpolation only where it matters; BB_INTERP_HW=0 for every input. HDR16's
++    // replacements have a build for either kind of input (vk_hdr_channel.cpp, bb_inputs.glsl).
+     profile.manual_interpolation_all = profile.needs_manual_interpolation && !switch_on("BB_INTERP_HW");
      if (profile.uniform_constant_buffers) {
          std::printf("Native shaders: constant buffers as uniform buffers (BB_NATIVE_SHADERS=0: "
-                     "legacy), %s, %s, stages: %s (BB_UBO_STAGES), user data in %s "
-@@ -723,6 +742,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
+@@ -723,6 +739,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
          color_buffer.data_format = col_buf.GetDataFmt();
          color_buffer.num_format = col_buf.GetNumberFmt();
          color_buffer.num_conversion = col_buf.GetNumberConversion();
@@ -6248,7 +6343,7 @@ index fa0f226..129fa2a 100644
          color_buffer.export_format = regs.color_export_format.GetFormat(cb);
          color_buffer.swizzle = col_buf.Swizzle();
  
-@@ -995,6 +1024,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
+@@ -995,6 +1021,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
      auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, runtime_info, ir_program, binding);
      DumpShader(spv, info.pgm_hash, info.hw_stage, perm_idx, "spv");
  

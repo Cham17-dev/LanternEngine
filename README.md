@@ -43,8 +43,8 @@ the launcher, or use *Reset all*.
 
 ## Tips
 
-- **NVIDIA only for now.** On AMD and Intel GPUs, HDR16 does not start its tone mapping and the
-  game stays in its SDR look (not tested on them; Native and Expanded are not affected).
+- **Tested on NVIDIA only.** AMD and Intel GPUs should work since 0.9.37 beta 2 but have not
+  been tested: if HDR16 stays in SDR there, please send the log (`logs/last_session.log`).
 - Keep the game's own **Brightness** option (in its in-game settings) at **5**. It still changes
   the whole image, shadows first.
 - **Peak Brightness** follows what Windows reports for your display (the launcher's "Peak
@@ -127,10 +127,11 @@ Lantern's `engine/`, applies the patches, builds the engine and launcher, checks
 - RenoDX `b6b32f47789ff9d0e640a0e0db6c9421b5397f34` (shader checks).
 
 HDR16 needs a GPU with 176 bytes of Vulkan push constants (checked at startup) and uses the
-legacy shader compiler (the engine turns native shaders off in this mode). Its composite reads
-the game shader's inputs per vertex (fragment-shader barycentrics), which the recompiler only
-emits on NVIDIA's driver; elsewhere the composite is not built ("inputs not interpolated per
-vertex" in the log).
+legacy shader compiler (the engine turns native shaders off in this mode). Its replacements of
+the game's composite, color table and copies are built twice: one reads the game shader's inputs
+per vertex (fragment-shader barycentrics, the recompiler's exact interpolation on NVIDIA), the
+other as the GPU interpolates them (Lantern 0.9.37's hardware interpolation, AMD, Intel). The
+engine picks one per game shader and says which in the log.
 
 ## Credits and licenses
 
