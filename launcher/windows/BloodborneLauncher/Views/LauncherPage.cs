@@ -125,6 +125,43 @@ namespace BloodborneLauncher.Views
             Child = grid;
         }
 
+        /// <summary>A picture in the icon's place (a trophy's own), <paramref name="size"/> pixels
+        /// square; grey when <paramref name="grey"/>.</summary>
+        public void SetPicture(string file, double size, bool grey)
+        {
+            if (Icon.Parent is not Grid grid || Picture(file, (int)(size * 2), grey) is not { } source) return;
+            var image = new System.Windows.Controls.Image
+            {
+                Source = source, Width = size, Height = size, Margin = Icon.Margin, VerticalAlignment = VerticalAlignment.Center,
+            };
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+            grid.Children.Add(image);
+            Icon.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>A picture file decoded at <paramref name="pixels"/> wide, frozen; null if it cannot be read.</summary>
+        public static ImageSource? Picture(string file, int pixels, bool grey = false)
+        {
+            try
+            {
+                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                bitmap.BeginInit();
+                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bitmap.DecodePixelWidth = pixels;
+                bitmap.UriSource = new Uri(file);
+                bitmap.EndInit();
+                bitmap.Freeze();
+                if (!grey) return bitmap;
+                var gray = new System.Windows.Media.Imaging.FormatConvertedBitmap(bitmap, PixelFormats.Gray8, null, 0);
+                gray.Freeze();
+                return gray;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
         /// <summary>A card in Classic; nothing in Modern, where the group's glass box shows through.</summary>
         private void PlainBackground()
         {
@@ -199,8 +236,10 @@ namespace BloodborneLauncher.Views
             Child = grid;
         }
 
-        /// <summary>"TAA (native anti-aliasing)" → "TAA": the full label is in the tooltip.</summary>
-        public static string Short(string label) => label.Split(" (")[0];
+        /// <summary>"TAA (native anti-aliasing)" → "TAA": the full label is in the tooltip. Full-width and
+        /// unspaced brackets count too, as Chinese and Korean write them.</summary>
+        public static string Short(string label) =>
+            label.IndexOfAny(new[] { '(', '（' }) is > 0 and var i ? label[..i].TrimEnd() : label;
 
         public void Select(int index, bool notify)
         {
@@ -291,7 +330,7 @@ namespace BloodborneLauncher.Views
     /// <summary>
     /// A settings page: groups of compact rows, each group one rounded box (Sectionize puts the
     /// rows of a group into it once the page is built). The helpers bind a control straight to a
-    /// settings.json or bbport.ini key and save on change.
+    /// settings.json or lantern.ini key and save on change.
     /// </summary>
     public abstract class LauncherPage : Page
     {
@@ -407,7 +446,7 @@ namespace BloodborneLauncher.Views
         /// </summary>
         protected Panel Advanced(string title = "Advanced", Panel? into = null)
         {
-            var section = new AdvancedSection(title);
+            var section = new AdvancedSection(title == "Advanced" ? L.T("Advanced") : title);
             (into ?? Body).Children.Add(section);
             return section.Rows;
         }
@@ -649,8 +688,18 @@ namespace BloodborneLauncher.Views
                 VerticalContentAlignment = VerticalAlignment.Center,
                 ClearButtonEnabled = false,
                 Margin = new Thickness(10, 0, 0, 0),
-                ToolTip = L.F($"Type a value from {min.ToString(format, culture)} to {max.ToString(format, culture)} and press Enter"),
             };
+            // The range, shown at once when a typed value was outside it (it is then kept at the
+            // nearest end, e.g. 0 for an opacity typed as -0.5) instead of changing silently.
+            var rangeTip = new System.Windows.Controls.ToolTip
+            {
+                Content = L.F($"Type a value from {min.ToString(format, culture)} to {max.ToString(format, culture)} and press Enter"),
+                PlacementTarget = value,
+                Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+            };
+            value.ToolTip = rangeTip;
+            var tipTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            tipTimer.Tick += (_, _) => { tipTimer.Stop(); rangeTip.IsOpen = false; };
             value.SetResourceReference(System.Windows.Controls.Control.FontFamilyProperty, "MonoFont");
             void Show() => value.Text = slider.Value.ToString(format, culture);
             void Commit()
@@ -661,6 +710,12 @@ namespace BloodborneLauncher.Views
                 {
                     Show(); // not a number: back to the current value
                     return;
+                }
+                if (typed < min || typed > max)
+                {
+                    rangeTip.IsOpen = true;
+                    tipTimer.Stop();
+                    tipTimer.Start();
                 }
                 typed = Math.Clamp(typed, min, max);
                 if (step > 0) typed = Math.Clamp(min + Math.Round((typed - min) / step) * step, min, max);

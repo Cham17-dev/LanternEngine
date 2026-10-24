@@ -97,7 +97,7 @@ namespace BloodborneLauncher.Views
             var dialog = new Microsoft.Win32.SaveFileDialog
             {
                 Title = L.T("Export the game output"),
-                FileName = $"bbport-{DateTime.Now:yyyyMMdd_HHmmss}.log",
+                FileName = $"lantern-{DateTime.Now:yyyyMMdd_HHmmss}.log",
                 Filter = L.T("Log files|*.log|Text files|*.txt|All files|*.*"),
             };
             if (dialog.ShowDialog() != true) return;

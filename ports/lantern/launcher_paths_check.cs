@@ -18,7 +18,7 @@ try
         Check(Paths.EngineDir == engine, "engine directory");
         Check(Paths.BinariesDir == Path.Combine(engine, "out"), "binary directory");
         Check(Paths.Python == Path.Combine(engine, "tools", "python", "python.exe"), "Python directory");
-        Check(Paths.IniPath == Path.Combine(package, "bbport.ini"), "settings stay with package");
+        Check(Paths.IniPath == Path.Combine(package, "lantern.ini"), "settings stay with package");
         File.Delete(Path.Combine(engine, "scripts", "run_windows.py"));
         Check(!Paths.IsPortDir(package), "reject missing preparation runtime");
     }

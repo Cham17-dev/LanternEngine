@@ -18,12 +18,32 @@ namespace BloodborneLauncher.Core
             new(L.T("Off"), "off"),
         };
 
-        /// <summary>frame_gen in bbport.ini: a generated frame between the game's own (the engine's
-        /// vk_frame_generation.h). Off by default.</summary>
+        /// <summary>frame_gen in lantern.ini: generated frames between the game's own (the engine's
+        /// vk_frame_generation.h; DLSS through NVIDIA Streamline, vk_streamline.h). Off by default.</summary>
         public static readonly Choice[] FrameGeneration =
         {
             new(L.T("Off"), "off"),
-            new("FSR 3.1 (2x)", "fsr3", "Needs an upscaler. Not in menus, movies or with HDR output"),
+            new("FSR 3.1 (2x)", "fsr3", L.T("Needs an upscaler. Not in menus, movies or with HDR output")),
+            new("DLSS (NVIDIA RTX 40/50)", "dlss",
+                L.T("NVIDIA's frame generation with Reflex: 2x on RTX 40, up to 6x on RTX 50. Needs an upscaler and Hardware-accelerated GPU scheduling. Applied when the game starts")),
+        };
+
+        /// <summary>frame_gen_frames: DLSS generated frames per real one (more than one: RTX 50).</summary>
+        public static readonly Choice[] FrameGenFrames =
+        {
+            new("2x", "1", L.T("One generated frame per real one (RTX 40 and 50)")),
+            new("3x", "2", L.T("RTX 50 only")),
+            new("4x", "3", L.T("RTX 50 only")),
+            new("5x", "4", L.T("RTX 50 only")),
+            new("6x", "5", L.T("RTX 50 only")),
+        };
+
+        /// <summary>reflex: NVIDIA Reflex low latency while DLSS Frame Generation is loaded.</summary>
+        public static readonly Choice[] Reflex =
+        {
+            new(L.T("On"), "on", L.T("Lower input lag. Always on while DLSS Frame Generation runs")),
+            new(L.T("On + Boost"), "boost", L.T("Also keeps the GPU clocks up: a little lower lag, more power")),
+            new(L.T("Off"), "off", L.T("Only while DLSS Frame Generation is off")),
         };
 
         public static readonly Choice[] Presets =
@@ -33,6 +53,7 @@ namespace BloodborneLauncher.Core
             new(L.T("Balanced (x1.7)"), "2"),
             new(L.T("Performance (x2)"), "3"),
             new(L.T("Ultra Performance (x3)"), "4"),
+            new(L.T("Custom (render scale below)"), "5"),
         };
 
         public static readonly Choice[] OutputResolutions =
@@ -57,7 +78,7 @@ namespace BloodborneLauncher.Core
             new("2560 × 1600 (16:10)", "2560x1600"),
             // Any other display: its own size, the camera and UI widened to fill it.
             new(L.T("Display (auto)"), "auto", L.T("Your display's own resolution, whatever its shape: the picture fills the screen")),
-            new("Custom", Custom, "Any width and height: set them below"),
+            new(L.T("Custom"), Custom, L.T("Any width and height: set them below")),
         };
 
         /// <summary>The Output resolution list's entry for a size it does not name.</summary>
@@ -102,8 +123,7 @@ namespace BloodborneLauncher.Core
 
         public static readonly Choice[] CameraTuning =
         {
-            new("Original (the game's camera)", "original", "As the game has it, at any frame rate"),
-            new("FPS++ retune", "fps++", "Kyo's 60 FPS++ camera: further back and slower to follow"),
+            new(L.T("Original (the game's camera)"), "original", L.T("As the game has it, at any frame rate")),
         };
 
         public static readonly Choice[] ModelLod =
@@ -127,17 +147,22 @@ namespace BloodborneLauncher.Core
         /// <summary>The DLSS model (BB_DLSS_PRESET): NVIDIA's render presets.</summary>
         public static readonly Choice[] DlssModels =
         {
-            new("Transformer (preset K)", "k", "The newer model: steadier thin and moving objects (a weapon on the back, railings)"),
-            new("CNN (preset E)", "e", "The older model: a little faster on RTX 20 and 30 cards, softer and more ghosting in motion"),
-            new("The DLL's default", "default", "Whatever the included DLSS version picks for each quality mode"),
+            new(L.T("Auto (per quality)"), "auto", L.T("NVIDIA's DLSS 4.5 pairing: K for DLAA, Quality and Balanced, M for Performance, L for Ultra Performance")),
+            new(L.T("Transformer (preset K)"), "k", L.T("The newer model: steadier thin and moving objects (a weapon on the back, railings)")),
+            new(L.T("Transformer 2 (preset M)"), "m", L.T("DLSS 4.5's model for Performance: sharper, a little heavier")),
+            new(L.T("Transformer 2 (preset L)"), "l", L.T("DLSS 4.5's model for Ultra Performance")),
+            new(L.T("Transformer (preset J)"), "j", L.T("Like K, slightly less ghosting and a little more flicker")),
+            new(L.T("CNN (preset E)"), "e", L.T("The older model: a little faster on RTX 20 and 30 cards, softer and more ghosting in motion")),
+            new(L.T("CNN (preset F)"), "f", L.T("The older model for Ultra Performance and DLAA")),
+            new(L.T("The DLL's default"), "default", L.T("Whatever the included DLSS version picks for each quality mode")),
         };
 
         /// <summary>What opens the port's in-game settings menu (BB_OVERLAY_KEYS).</summary>
         public static readonly Choice[] OverlayKeys =
         {
-            new("Insert or L3 + R3", "both", "The keyboard's Insert key, or both sticks pressed on a controller"),
-            new("Insert only", "insert", "Pressing both sticks in a fight no longer opens it"),
-            new(L.T("Off"), "off", "The menu never opens; settings stay in the launcher and the game's PC menus"),
+            new(L.T("Insert or L3 + R3"), "both", L.T("The keyboard's Insert key, or both sticks pressed on a controller")),
+            new(L.T("Insert only"), "insert", L.T("Pressing both sticks in a fight no longer opens it")),
+            new(L.T("Off"), "off", L.T("The menu never opens; settings stay in the launcher and the game's PC menus")),
         };
 
         /// <summary>The port's in-game settings menu (Insert / L3+R3).</summary>
@@ -202,7 +227,7 @@ namespace BloodborneLauncher.Core
         /// <summary>pad_icons: the game's controller icons as they are (PlayStation's) or as an Xbox controller's buttons; automatic follows the controller in use.</summary>
         public static readonly Choice[] DiscordStatus =
         {
-            new(L.T("Off"), "off"), new("Lantern Engine", "lantern"), new("Custom", "custom"),
+            new(L.T("Off"), "off"), new("Lantern Engine", "lantern"), new(L.T("Custom"), "custom"),
         };
 
         public static readonly Choice[] PadIcons =

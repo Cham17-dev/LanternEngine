@@ -76,7 +76,7 @@ namespace BloodborneLauncher.Core
                 s.Set("player_profile", "");
         }
 
-        private static string SafeName(string name) =>
+        internal static string SafeName(string name) =>
             new string(name.Where(c => char.IsLetterOrDigit(c) || c is ' ' or '-' or '_').ToArray()).Trim();
     }
 }

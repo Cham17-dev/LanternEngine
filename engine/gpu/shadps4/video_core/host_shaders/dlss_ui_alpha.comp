@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// bbport: DLSS Frame Generation's UI alpha (vk_streamline.cpp): 1 where the back buffer differs
+// from the frame without its UI (the game's HUD and menus, the engine's overlay), 0 elsewhere.
+// Both are the back buffer's format and size; where no UI is drawn they are bit-identical.
+#version 450
+#extension GL_EXT_samplerless_texture_functions : require
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0) uniform texture2D final_tex;
+layout(binding = 1) uniform texture2D hudless_tex;
+layout(binding = 2, r16f) uniform writeonly image2D ui_alpha;
+
+layout(push_constant) uniform Params {
+    float threshold;
+};
+
+void main() {
+    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pixel, imageSize(ui_alpha)))) {
+        return;
+    }
+    const vec3 final_color = texelFetch(final_tex, pixel, 0).rgb;
+    const vec3 hudless = texelFetch(hudless_tex, pixel, 0).rgb;
+    const vec3 diff = abs(final_color - hudless);
+    imageStore(ui_alpha, pixel, vec4(max(max(diff.r, diff.g), diff.b) > threshold ? 1.0 : 0.0));
+}

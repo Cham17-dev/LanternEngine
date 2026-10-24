@@ -58,6 +58,9 @@ namespace BloodborneLauncher.Core
         /// <summary>What to tell the player when the game may not fit, else null.</summary>
         public static string? Problem(IniFile ini)
         {
+#if AVALONIA
+            if (!OperatingSystem.IsWindows()) return ProblemLinux(ini);
+#endif
             var status = new MemoryStatus { Length = (uint)Marshal.SizeOf<MemoryStatus>() };
             if (!GlobalMemoryStatusEx(ref status)) return null;
             var (managed, maxPageFileMiB) = PageFile();
@@ -88,6 +91,30 @@ namespace BloodborneLauncher.Core
         /// <summary>Whether Windows manages the page file size, else the configured maximum in MiB
         /// (0: off). HKLM\...\Memory Management\PagingFiles: "?:\pagefile.sys" (automatic),
         /// "C:\pagefile.sys 0 0" (system managed), "C:\pagefile.sys 4096 8192" (fixed).</summary>
+#if AVALONIA
+        /// <summary>Linux: RAM free now (MemAvailable) plus free swap, against what the game needs. Linux
+        /// lends memory it doesn't have (overcommit), so this warns only of a real shortage.</summary>
+        private static string? ProblemLinux(IniFile ini)
+        {
+            try
+            {
+                var info = File.ReadAllLines("/proc/meminfo");
+                long Kb(string key) => info.FirstOrDefault(l => l.StartsWith(key + ":", StringComparison.Ordinal)) is { } line &&
+                                       long.TryParse(line.Split(':', 2)[1].Trim().Split(' ')[0], out var kb) ? kb : 0;
+                long free = (Kb("MemAvailable") + Kb("SwapFree")) >> 10, need = NeededMiB(ini);
+                if (free == 0 || free >= need) return null;
+                return L.F($"The game needs about {need / 1024.0:0.#} GB of memory (RAM plus swap). With the programs open now, ") +
+                       L.F($"about {free / 1024.0:0.#} GB is free, so the system can run out during play and the game then crashes.\n\n") +
+                       L.T("Close other programs (browsers, recorders), or add swap space. A lower upscaler preset or output resolution also needs less.");
+            }
+            catch
+            {
+                return null; // unknown: no warning
+            }
+        }
+
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+#endif
         private static (bool Managed, long MaxMiB) PageFile()
         {
             try

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# The Linux package's start program (engine/out/bb-start), as engine\out\bb-start.exe is on
+# Windows: the launcher runs it with --game-dir and its environment (BB_DATA_DIR, BB_CONFIG, the
+# settings as BB_* variables); lantern.sh runs it from a terminal. It runs the engine's run.sh,
+# which prepares the boot image, mods and patches and starts out/bb-probe.
+#
+#   bb-start [--game-dir DIR] [bb-probe options...]
+set -euo pipefail
+out=$(cd -- "$(dirname -- "$0")" && pwd)
+engine=$(dirname -- "$out")
+package=$(dirname -- "$engine")
+if [[ ${1:-} == --game-dir ]]; then
+    export BB_GAME_DIR=${2:?--game-dir needs a folder}
+    shift 2
+fi
+export BB_PREBUILT=1
+export BB_DATA_DIR=${BB_DATA_DIR:-$package}
+export BB_CONFIG=${BB_CONFIG:-$BB_DATA_DIR/lantern.ini}
+[[ -f $BB_CONFIG ]] || cp "$engine/lantern.default.ini" "$BB_CONFIG"
+# The shader and pipeline caches in user/cache, as bb-start.exe keeps them on Windows.
+export BB_GPU_USER_DIR=${BB_GPU_USER_DIR:-$BB_DATA_DIR/user}
+mkdir -p "$BB_GPU_USER_DIR"
+# The engine's programs and its generated files in engine/out, as on Windows.
+export BB_PROBE=${BB_PROBE:-$out/bb-probe}
+export BB_OUT_DIR=${BB_OUT_DIR:-$out}
+export BB_SAVE_LOG=${BB_SAVE_LOG:-1}
+command -v python3 >/dev/null || { echo 'The start scripts need Python 3 (python3).' >&2; exit 1; }
+exec bash "$engine/run.sh" "$@"

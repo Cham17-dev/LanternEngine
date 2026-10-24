@@ -9,15 +9,13 @@ namespace BloodborneLauncher.Views
     /// <summary>Upscaling and the game's own effects (patches applied at start).</summary>
     public sealed class GraphicsPage : LauncherPage
     {
-        private readonly TextBlock _upscalerHint, _dlssHint;
+        private readonly TextBlock _upscalerHint, _dlssHint, _frameGenHint;
         private TextBlock? _motionBlurHint;
-        private readonly SettingRow _presetCard, _sharpenCard, _sharpnessCard;
-        private readonly System.Windows.FrameworkElement _enginePreset;
-        private readonly Dictionary<string, ToggleSwitch> _features = new();
-        private bool _syncing;
+        private readonly SettingRow _presetCard, _renderScaleCard, _sharpenCard, _sharpnessCard, _mipBiasCard;
+        private readonly SettingRow _frameGenFramesCard, _frameGenDynamicCard, _reflexCard, _frameGenCapCard;
 
         public GraphicsPage() : base(L.T("Graphics"),
-            L.T("Stored in bbport.ini; the upscaler can also be changed in game (Insert or L3 + R3)."))
+            L.T("Stored in lantern.ini; the upscaler can also be changed in game (Insert or L3 + R3)."))
         {
             Add(Card(SymbolRegular.Gauge24, L.T("Best settings for this PC"), Hardware.Detect().Summary,
                 SmallButton(L.T("Recommend…"), SymbolRegular.Sparkle24, (_, _) => MainWindow.Instance!.OfferBestSettings(firstRun: false)), out _));
@@ -35,59 +33,54 @@ namespace BloodborneLauncher.Views
             IniCombo(SymbolRegular.ZoomIn24, L.T("Quality preset"), L.T("How far below the output resolution the game renders"),
                 Choices.Presets, "preset", changed: UpdateUpscaler);
             _presetCard = (SettingRow)Body.Children[^1];
+            // The Custom preset's ratio (render_scale), the engine's PresetScale: 1.0 renders at the
+            // output (DLAA with DLSS), 3.0 is Ultra Performance.
+            SliderRow(SymbolRegular.SlideSize24, L.T("Render scale (Custom preset)"),
+                L.T("Output size divided by this is the render size: 1.00 renders at the output, 1.30 a little below, 3.00 like Ultra Performance. FSR 4 and DLSS use the nearest preset's model"),
+                1.0, 3.0, 0.05, () => ParseDouble(Ini.Get("render_scale", "1.30"), 1.3), v => Ini.Set("render_scale", Fmt(v)), format: "x0.00", valueWidth: 56);
+            _renderScaleCard = (SettingRow)Body.Children[^1];
 
             IniToggle(SymbolRegular.Eyedropper24, L.T("Sharpening (RCAS)"), L.T("Works with every option above, TAA included: turn it up if the picture looks soft"), "sharpen");
             _sharpenCard = (SettingRow)Body.Children[^1];
             SliderRow(SymbolRegular.SlideSize24, L.T("Sharpening strength"), L.T("Up to 1: the upscaler's own sharpening. Above 1: an extra pass"), 0, 2, 0.05,
                 () => ParseDouble(Ini.Get("sharpness"), 0.5), v => Ini.Set("sharpness", Fmt(v)));
             _sharpnessCard = (SettingRow)Body.Children[^1];
-
-            IniCombo(SymbolRegular.FastForward24, L.T("Frame generation"),
-                L.T("Shows an extra frame between the game's own (2x smoother motion). Adds a little input lag. Off by default."),
-                Choices.FrameGeneration, "frame_gen");
-            IniToggle(SymbolRegular.Timer24, L.T("Frame generation: game at half refresh rate"),
-                L.T("Every generated frame reaches the screen evenly (60 + 60 at 120 Hz). Off: the game runs faster, but the screen skips some generated frames"), "frame_gen_cap");
-
-            SettingCombo(SymbolRegular.BrainCircuit24, L.T("DLSS model"),
-                L.T("Which NVIDIA model DLSS runs. Applied on the next launch"), Choices.DlssModels, "dlss_preset");
+            SliderRow(SymbolRegular.Image24, L.T("Texture mip bias"),
+                L.T("Added to the texture detail the upscaler asks for: below 0 sharper textures (more shimmer), above 0 softer. 0 is the upscaler's own"),
+                -2, 1, 0.05, () => ParseDouble(Ini.Get("mip_bias", "0"), 0), v => Ini.Set("mip_bias", Fmt(v)), format: "+0.00;-0.00;0.00", valueWidth: 56);
+            _mipBiasCard = (SettingRow)Body.Children[^1];
             IniToggle(SymbolRegular.ArrowMove24, L.T("Object motion vectors"), L.T("Less ghosting on characters; costs about 10% FPS"), "object_motion");
-            IniToggle(SymbolRegular.DataUsage24, L.T("Show FPS"), null, "show_fps");
-            // The FPS counter's look (live in game too: Insert or L3 + R3 › Other).
-            IniCombo(SymbolRegular.PositionToFront24, L.T("FPS counter position"), null, new Choice[]
-            {
-                new(L.T("Top right"), "0"), new(L.T("Top left"), "1"), new(L.T("Bottom right"), "2"), new(L.T("Bottom left"), "3"), new(L.T("Top centre"), "4"),
-            }, "fps_position");
-            IniSlider(SymbolRegular.TextFontSize24, L.T("FPS counter size"), 0.75, 2.0, "fps_scale");
-            IniCombo(SymbolRegular.Color24, L.T("FPS counter text colour"), L.T("Any colour in game: Insert or L3 + R3 › Other"), new Choice[]
-            {
-                new(L.T("White"), "#FFFFFF"), new(L.T("Yellow"), "#FFD54A"), new(L.T("Green"), "#7CFC8A"), new(L.T("Cyan"), "#6FE3FF"),
-                new(L.T("Red"), "#FF5A5A"), new(L.T("Orange"), "#FFA040"), new(L.T("Pink"), "#FF8AD8"), new(L.T("Black"), "#000000"),
-            }, "fps_text_color");
-            IniSlider(SymbolRegular.Eye24, L.T("FPS counter text opacity"), 0.1, 1.0, "fps_text_opacity", fallback: 1.0);
-            IniCombo(SymbolRegular.ColorBackground24, L.T("FPS counter background"), null, new Choice[]
-            {
-                new(L.T("Dark grey"), "#0F0F0F"), new(L.T("Black"), "#000000"), new(L.T("Dark red"), "#3A0A0A"), new(L.T("Dark blue"), "#0A1A3A"), new(L.T("White"), "#FFFFFF"),
-            }, "fps_bg_color");
-            IniSlider(SymbolRegular.Blur24, L.T("FPS counter background opacity"), 0.0, 1.0, "fps_bg_opacity", fallback: 0.5);
-            IniToggle(SymbolRegular.BorderAll24, L.T("FPS counter border"), null, "fps_border");
-            // What the counter shows (on unless turned off), folded under the switch.
-            var fpsParts = Advanced(L.T("What the FPS counter shows"));
-            foreach (var (icon, key, title) in new[]
-                     {
-                         (SymbolRegular.TopSpeed24, "show_fps_rate", L.T("Frame rate")),
-                         (SymbolRegular.Timer24, "show_fps_frame_time", L.T("Frame time")),
-                         (SymbolRegular.ResizeLarge24, "show_fps_upscaler", L.T("Upscaler")),
-                         (SymbolRegular.DeveloperBoard24, "show_fps_cpu", L.T("CPU usage")),
-                         (SymbolRegular.Gauge24, "show_fps_gpu", L.T("GPU usage")),
-                     })
-            {
-                // CPU and GPU use are off unless chosen (the engine's defaults, bbport_settings.h).
-                var fallback = key is "show_fps_cpu" or "show_fps_gpu" ? "0" : "1";
-                ToggleRow(icon, title, L.T("Shown in the FPS counter"), () => Ini.Get(key, fallback) == "1", v => Ini.Set(key, v ? "1" : "0"), fpsParts);
-                ((System.Windows.FrameworkElement)fpsParts.Children[^1]).Margin = new System.Windows.Thickness(24, 0, 0, 0);
-            }
 
-            Add(Card(SymbolRegular.DeveloperBoard24, "DLSS", "", null, out _dlssHint));
+            var dlssMore = Advanced(L.T("DLSS options"));
+            IniCombo(SymbolRegular.BrainCircuit24, L.T("DLSS model"),
+                L.T("Which NVIDIA model DLSS runs. Also in game (Insert or L3 + R3), where it changes at once"), Choices.DlssModels, "dlss_preset", dlssMore);
+            ToggleRow(SymbolRegular.BrightnessHigh24, L.T("DLSS auto exposure"),
+                L.T("DLSS works out each frame's exposure itself, for the game's finished frame too. Can calm ghosting in dark scenes"),
+                () => Ini.Get("dlss_auto_exposure", "0") == "1", v => Ini.Set("dlss_auto_exposure", v ? "1" : "0"), dlssMore);
+            ToggleRow(SymbolRegular.Image24, L.T("DLSS sharper textures"),
+                L.T("One more mip level of texture detail under DLSS, as NVIDIA's guide asks. Off: the render-to-output ratio only"),
+                () => Ini.Get("dlss_mip_bias", "1") != "0", v => Ini.Set("dlss_mip_bias", v ? "1" : "0"), dlssMore);
+            Add(Card(SymbolRegular.DeveloperBoard24, "DLSS", "", null, out _dlssHint), dlssMore);
+
+            Group(L.T("Frame generation"));
+            IniCombo(SymbolRegular.FastForward24, L.T("Frame generation"),
+                L.T("Extra frames between the game's own: smoother motion, a little more input lag. Needs an upscaler. Off by default"),
+                Choices.FrameGeneration, "frame_gen", changed: UpdateUpscaler);
+            _frameGenHint = (TextBlock)((SettingRow)Body.Children[^1]).Tag;
+            IniCombo(SymbolRegular.Layer24, L.T("DLSS generated frames"),
+                L.T("Frames shown per frame the game renders. More than 2x needs an RTX 50 GPU; the engine keeps to what the GPU allows"),
+                Choices.FrameGenFrames, "frame_gen_frames");
+            _frameGenFramesCard = (SettingRow)Body.Children[^1];
+            IniToggle(SymbolRegular.TopSpeed24, L.T("DLSS dynamic frame generation"),
+                L.T("RTX 50: the driver picks 2x, 3x or 4x moment by moment to reach your refresh rate, up to the generated frames above. Fewer generated frames when the game is fast: less lag, fewer artifacts. Also in game, with a target FPS"), "frame_gen_dynamic");
+            _frameGenDynamicCard = (SettingRow)Body.Children[^1];
+            IniCombo(SymbolRegular.Flash24, L.T("NVIDIA Reflex"),
+                L.T("Keeps the GPU's queue short for lower input lag. Always on while DLSS Frame Generation runs"),
+                Choices.Reflex, "reflex");
+            _reflexCard = (SettingRow)Body.Children[^1];
+            IniToggle(SymbolRegular.Timer24, L.T("Frame generation: even pacing (Uncapped)"),
+                L.T("With the Uncapped frame rate: the game at the refresh rate divided by the frames shown per game frame, so every generated frame reaches the screen. The fixed rates (30 to 144) are left as they are"), "frame_gen_cap");
+            _frameGenCapCard = (SettingRow)Body.Children[^1];
 
             // The engine's picture and camera controls (bbport_settings.cpp clamps the same ranges).
             Group(L.T("Picture"));
@@ -110,60 +103,6 @@ namespace BloodborneLauncher.Views
             IniSlider(SymbolRegular.ArrowMaximize24, L.T("Distance"), 0.5, 1.5, "camera_distance_scale");
             IniSlider(SymbolRegular.ArrowBidirectionalUpDown24, L.T("Height"), 0.5, 1.5, "camera_height_scale");
 
-            // Engine features from 0.9.4, each with a switch, as IFreemz's "Bloodborne - Experimental".
-            Group(L.T("Experimental"));
-            // Engine preset: New or Legacy (0.9.33) turns the newer features below on or off at
-            // once; a feature changed by hand shows Custom.
-            _enginePreset = ComboRow(SymbolRegular.Options24, L.T("Engine preset"),
-                L.T("New is the current engine. Legacy runs it the way 0.9.33 did: try it if the game crashes or draws something wrong"),
-                EnginePreset.Choices, () => EnginePreset.Current(S), v => EnginePreset.Apply(S, v), changed: SyncFeatures);
-            var exp = Advanced(L.T("Experimental engine features"));
-            SettingToggle(SymbolRegular.Code24, L.T("Legacy shader compiler"),
-                L.T("On by default: compiles the game's shaders the way 0.9.33 did. Off uses the native compiler, which reads constant data through the GPU's constant cache but is slower in dense scenes on some GPUs for now. Switching recompiles every shader once"),
-                "legacy_shaders", exp);
-            SettingToggle(SymbolRegular.Broom24, L.T("VRAM cleanup"),
-                L.T("Frees video memory held by textures the GPU drew, so long sessions don't fill up VRAM and slow down. Recommended: on"),
-                "exp_vram_cleanup", exp);
-            SettingToggle(SymbolRegular.Timer24, L.T("Precise frame pacing"),
-                L.T("A high-resolution timer and even spacing between frames: steadier frame times and less VRR flicker. Uses a little CPU. Off by default"),
-                "exp_frame_pacing", exp);
-            Feature(SymbolRegular.Storage24, L.T("Use more VRAM for textures"),
-                L.T("Keeps textures in video memory up to 80% of the card instead of about 40%, so they aren't thrown out and loaded again (the cause of most stutters on 8 GB cards)"),
-                "exp_vram_budget", exp);
-            SettingToggle(SymbolRegular.TopSpeed24, L.T("Graphics threads first"),
-                L.T("Runs the engine's graphics threads at a higher CPU priority than the game's other threads, so a frame isn't held up behind them. Off by default"),
-                "exp_thread_priority", exp);
-            SettingToggle(SymbolRegular.Sleep24, L.T("Shorter sleep spin"),
-                L.T("The game's many short sleeps busy-wait only as long as the timer needs (about 0.2–0.4 ms instead of 0.6 ms), leaving that CPU time to the graphics threads. Off by default"),
-                "exp_sleep_spin", exp);
-            SettingToggle(SymbolRegular.FlashFlow24, L.T("Background shader compiling"),
-                L.T("New shaders compile on helper threads instead of freezing the frame: much shorter hitches when you reach a new area. On by default"),
-                "exp_async_pipelines", exp);
-            SettingToggle(SymbolRegular.EyeOff24, L.T("Occlusion culling"),
-                L.T("Off by default. The game skips objects hidden behind walls: higher FPS in dense areas, but objects and floors can appear late or flicker"),
-                "exp_occlusion", exp);
-            Feature(SymbolRegular.FastForward24, L.T("Faster draw thread"),
-                L.T("Remembers texture and sampler lookups and hands the end of each frame to the draw thread: higher FPS in busy areas. New: turn it off if the game hangs or crashes"),
-                "exp_fast_draws", exp);
-            Feature(SymbolRegular.Shapes24, L.T("No shader freezes"),
-                L.T("While a new shader compiles, the objects that need it appear a moment later instead of the game freezing. New: turn it off if something stays missing"),
-                "exp_compile_skip", exp);
-            SettingToggle(SymbolRegular.ArrowForward24, L.T("Fast loading"),
-                L.T("Loading screens run at 30 FPS: fewer frames leave the CPU to the loading work itself. Not before cutscenes. New: off by default while it is tested"),
-                "exp_fast_loading", exp);
-            SettingToggle(SymbolRegular.Flash24, L.T("Fewer memory write checks"),
-                L.T("Memory the game rewrites before almost every use is no longer watched for changes, saving up to about 2 ms a frame in busy areas. New: off by default while it is tested"),
-                "exp_hot_pages", exp);
-            SettingToggle(SymbolRegular.ShieldCheckmark24, L.T("Effect trail crash fix"),
-                L.T("For crashes while drawing effect trails on newer Intel CPUs (Witch of Hemwick, for example): stops the crash, and that kind of trail is not drawn. Off by default"),
-                "exp_sfx_workaround", exp);
-            SettingToggle(SymbolRegular.Camera24, L.T("Camera easing for high FPS"),
-                L.T("With the FPS++ follow camera only: its eases converted for 60 FPS and above. Off by default"),
-                "exp_camera_easing", exp);
-            SettingToggle(SymbolRegular.Run24, L.T("Sharper motion (FSR 4)"),
-                L.T("Uses FSR 4's balanced model at Performance and Ultra Performance: fewer trails behind moving characters, a little more GPU time"),
-                "fsr4_balanced", exp);
-
             Group(L.T("Game effects"));
             Body.Children.Add(Text(L.T("Patches to the game, applied when it starts."), "Faint"));
             IniCombo(SymbolRegular.Cube24, L.T("Model detail"), null, Choices.ModelLod, "model_lod");
@@ -182,27 +121,14 @@ namespace BloodborneLauncher.Views
             double step = 0.05, double fallback = 1.0) =>
             SliderRow(icon, title, null, min, max, step, () => ParseDouble(Ini.Get(key, Fmt(fallback)), fallback), v => Ini.Set(key, Fmt(v)), into: into);
 
-        /// <summary>A switch the engine preset sets: changing it by hand shows the preset it now matches.</summary>
-        private void Feature(SymbolRegular icon, string title, string hint, string key, Panel into) =>
-            _features[key] = SettingToggle(icon, title, hint, key, into, changed: SyncPreset);
+        /// <summary>An RTX 40 or 50 card (desktop or laptop): the GPUs NVIDIA's frame generation runs on.</summary>
+        private static bool DlssFrameGenGpu() =>
+            Hardware.Detect() is { Rtx: true } hardware &&
+            System.Text.RegularExpressions.Regex.IsMatch(hardware.Gpu, @"RTX\s*(PRO\s*)?[45]0\d\d", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        /// <summary>The preset was picked: its switches show their new values.</summary>
-        private void SyncFeatures()
-        {
-            foreach (var (key, toggle) in _features)
-                toggle.IsChecked = S.Bool(key);
-            SyncPreset();
-        }
-
-        private void SyncPreset()
-        {
-            if (_syncing) return;
-            _syncing = true;
-            var index = Choices.IndexOf(EnginePreset.Choices, EnginePreset.Current(S));
-            if (_enginePreset is Segmented segmented) segmented.Select(index, notify: false);
-            else if (_enginePreset is ComboBox box) box.SelectedIndex = index;
-            _syncing = false;
-        }
+        /// <summary>NVIDIA Streamline's runtime beside the engine (tools/fetch_streamline.sh): DLSS Frame Generation.</summary>
+        private static bool StreamlineFound() =>
+            File.Exists(Path.Combine(Paths.BinariesDir, "sl.interposer.dll")) && File.Exists(Path.Combine(Paths.BinariesDir, "sl.dlss_g.dll"));
 
         private static SymbolRegular EffectIcon(string key) => key switch
         {
@@ -215,7 +141,7 @@ namespace BloodborneLauncher.Views
         public override void OnShown() => UpdateUpscaler();
 
         private static bool DlssFound() =>
-            File.Exists(Path.Combine(Paths.BinariesDir, "nvngx_dlss.dll")); // the engine has DLSS built in; NVIDIA's runtime sits beside it
+            Paths.DlssRuntime != null; // the engine has DLSS built in; NVIDIA's runtime sits beside it
 
         private void UpdateUpscaler()
         {
@@ -239,8 +165,28 @@ namespace BloodborneLauncher.Views
             };
             SetHint(_upscalerHint, hint);
             _presetCard.IsEnabled = value is not ("taa" or "off");
+            _renderScaleCard.Visibility = Ini.Get("preset", "0") == "5" ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            _renderScaleCard.IsEnabled = value is not ("taa" or "off");
             _sharpenCard.IsEnabled = value != "off";
             _sharpnessCard.IsEnabled = value != "off";
+            _mipBiasCard.IsEnabled = value != "off";
+
+            // Frame generation: DLSS's own rows only with DLSS chosen.
+            var frameGen = Ini.Get("frame_gen", "off");
+            _frameGenFramesCard.IsEnabled = frameGen == "dlss";
+            _frameGenDynamicCard.IsEnabled = frameGen == "dlss";
+            _reflexCard.IsEnabled = frameGen == "dlss";
+            _frameGenCapCard.IsEnabled = frameGen != "off";
+            SetHint(_frameGenHint, frameGen switch
+            {
+                "dlss" when !StreamlineFound() => L.T("NVIDIA Streamline (sl.interposer.dll, sl.dlss_g.dll) is missing from the engine folder: the game uses no frame generation"),
+                "dlss" when !DlssFrameGenGpu() => L.T("Needs an NVIDIA RTX 40 or 50 GPU with Hardware-accelerated GPU scheduling on; other GPUs: choose FSR 3.1"),
+                "dlss" => L.T("RTX 40: 2x; RTX 50: up to 6x. Loaded when the game starts; in game you can switch it off and on (Insert or L3 + R3)"),
+                "fsr3" => L.T("Any GPU. Not in menus, movies or with HDR output"),
+                _ => null,
+            });
+            if (frameGen != "off" && value == "off")
+                SetHint(_frameGenHint, L.T("Frame generation needs an upscaler (or TAA): choose one above"));
 
             // An upscaler takes the finished frame at outputs other than 1920x1080 and can smear the
             // game's motion blur; More > Engine can leave the blur out there (BB_UPSCALER_NO_BLUR).
@@ -250,10 +196,10 @@ namespace BloodborneLauncher.Views
                     ? L.T("With an upscaler at an output other than 1920x1080 the blur can smear. More > Engine > No motion blur smear with upscalers leaves it out there")
                     : null);
 
-            var ngx = Path.Combine(Paths.BinariesDir, "nvngx_dlss.dll");
-            SetHint(_dlssHint, DlssFound()
-                ? L.F($"NVIDIA DLSS {System.Diagnostics.FileVersionInfo.GetVersionInfo(ngx).FileVersion} is included (out\\nvngx_dlss.dll). Choose it as the upscaler above")
-                : L.T("out\\nvngx_dlss.dll is missing from the engine folder"));
+            var ngx = Paths.DlssRuntime;
+            SetHint(_dlssHint, ngx != null
+                ? L.F($"NVIDIA DLSS {Paths.DlssVersion(ngx)} is included ({Path.Combine("out", Path.GetFileName(ngx))}). Choose it as the upscaler above")
+                : L.F($"{Path.Combine("out", "nvngx_dlss.dll")} is missing from the engine folder"));
         }
 
         /// <summary>The fsr4vk provider the package ships (FSR 4.1.1 on any GPU, vk_fsr4vk.cpp).</summary>

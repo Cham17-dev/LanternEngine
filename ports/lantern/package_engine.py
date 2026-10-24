@@ -13,7 +13,9 @@ out.mkdir(exist_ok=True)
 clang_bin = Path(os.environ['BB_CLANG_BIN'])
 queue = []
 # bb-start.exe: the native start (boot image, mods, patches, then bb-probe), as Lantern 9.8 runs.
-for name in ['bb-probe.exe', 'bb-start.exe', 'bb-gpu-capabilities.exe', 'bb-engine-assets.exe']:
+# bb-shader-lab.exe: bb-start's shader catalog seeding and cache recompiles (start/main.cpp).
+for name in ['bb-probe.exe', 'bb-start.exe', 'bb-gpu-capabilities.exe', 'bb-engine-assets.exe',
+             'bb-shader-lab.exe']:
     src = engine / 'out' / name
     if not src.is_file():
         raise RuntimeError(f'Missing build output: {src}')
@@ -38,6 +40,11 @@ while queue:
             shutil.copy2(engine / 'out' / name, target)
             queue.append(target)
         # Windows system DLLs remain provided by Windows; never copy them from the runner.
+# The GPU cache's identity (engine/build.sh): a compiler change recompiles the players' caches.
+for name in ['gpu-cache.id', 'gpu-cache.legacy.id']:
+    if not (engine / 'out' / name).is_file():
+        raise RuntimeError(f'Missing build output: {engine / "out" / name}')
+    shutil.copy2(engine / 'out' / name, out / name)
 for src in launcher.iterdir():
     if src.is_file():
         shutil.copy2(src, stage / src.name)
@@ -45,8 +52,9 @@ for src in launcher.iterdir():
 shutil.copy2(Path(__file__).resolve().parents[2] / 'README.md', stage / 'README-HDR16.md')
 notices = Path(__file__).with_name('licenses')
 shutil.copytree(notices, stage / 'licenses', dirs_exist_ok=True)
-(stage / 'psychov30-example.ini').write_text(
-    # No hdr_peak / hdr_paper_white: the engine and launcher take them from the display's peak.
+(stage / 'hdr16-example.ini').write_text(
+    # No hdr_peak / hdr_paper_white: the peak comes from the display (hdr_peak_auto), the paper
+    # white is the engine's 203 nits.
     'hdr=1\nhdr_mode=psychov30\n'
     'hdr_tonemapper=5\nhdr_exposure=1\nhdr_grade_highlights=50\nhdr_shadows=50\n'
     'hdr_contrast=50\nhdr_saturation=50\nhdr_bloom=50\nhdr_scene_grading=100\n'

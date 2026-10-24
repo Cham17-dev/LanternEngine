@@ -1,0 +1,341 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        The WPF launcher's keyed styles (Themes/Styles.xaml and the main window's), as classes:
+        a page's text says Classes="GroupHeader" where WPF set Style="{DynamicResource GroupHeader}".
+        Colours come from Views/LauncherTheme.cs by the same keys as in WPF.
+    -->
+
+    <!-- ==================== Text ==================== -->
+    <Style Selector="TextBlock.GroupHeader">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        <Setter Property="Margin" Value="4,12,0,5" />
+    </Style>
+    <Style Selector="TextBlock.PageTitle">
+        <Setter Property="FontSize" Value="17" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.PageSubtitle">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Margin" Value="0,3,0,0" />
+        <Setter Property="MaxWidth" Value="520" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+    </Style>
+    <Style Selector="TextBlock.RowTitle">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TextBlock.Muted">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.Faint">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.StatValue">
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Margin" Value="0,4,0,0" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TextBlock.StatLabel">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+    </Style>
+
+    <!-- Read-only monospaced output (the game's log). -->
+    <Style Selector="TextBox.CodeBox">
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Background" Value="{DynamicResource PanelDeepBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="IsReadOnly" Value="True" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="AcceptsReturn" Value="True" />
+        <Setter Property="VerticalContentAlignment" Value="Top" />
+    </Style>
+    <Style Selector="TextBox.CodeBox:pointerover /template/ Border#PART_BorderElement, TextBox.CodeBox:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="{DynamicResource PanelDeepBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <!-- A binding chip on the Controls page. -->
+    <Style Selector="Border.Chip">
+        <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="8,3" />
+        <Setter Property="Margin" Value="0,2,6,2" />
+    </Style>
+
+    <!-- ==================== Controls ==================== -->
+    <!-- WPF-UI's switches have no On / Off text and take only their own width. -->
+    <Style Selector="ToggleSwitch">
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="OnContent" Value="{x:Null}" />
+        <Setter Property="OffContent" Value="{x:Null}" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ToggleSwitch /template/ ContentPresenter#PART_OnContentPresenter, ToggleSwitch /template/ ContentPresenter#PART_OffContentPresenter">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+
+    <Style Selector="Button, ComboBox, TextBox">
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="Button">
+        <Setter Property="Padding" Value="11,5" />
+    </Style>
+
+    <!-- A red button for stopping the game. -->
+    <Style Selector="Button.danger">
+        <Setter Property="Background" Value="#FFC42B1C" />
+        <Setter Property="BorderBrush" Value="#FFC42B1C" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#FFD83B2C" />
+        <Setter Property="BorderBrush" Value="#FFD83B2C" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.danger:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#FFA52416" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- A button that is only its icon until the pointer is on it. -->
+    <Style Selector="Button.subtle">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+    </Style>
+    <Style Selector="Button.subtle:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    </Style>
+    <Style Selector="Button.subtle:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <!-- A flat, borderless button whose content is the whole look (binding cells, chips' ×). -->
+    <Style Selector="Button.Bare">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+    </Style>
+    <Style Selector="Button.Bare:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    </Style>
+    <Style Selector="Button.Bare:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SidebarItemSelectedBrush}" />
+    </Style>
+
+    <!-- ==================== Title bar ==================== -->
+    <!-- macOS traffic lights: a dot whose glyph shows while the pointer is on the group. -->
+    <Style Selector="Button.TrafficLight">
+        <Setter Property="Width" Value="12" />
+        <Setter Property="Height" Value="12" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Cursor" Value="Arrow" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <Ellipse Fill="{TemplateBinding Background}" Stroke="#26000000" StrokeThickness="0.5" />
+                    <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="StackPanel.Lights:pointerover Button.TrafficLight Path.LightGlyph">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Button.TrafficLight:pressed">
+        <Setter Property="Opacity" Value="0.75" />
+    </Style>
+
+    <!-- Windows-style caption buttons. -->
+    <Style Selector="Button.Caption">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Cursor" Value="Arrow" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}">
+                    <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.Caption:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+    </Style>
+    <Style Selector="Button.Caption:pressed">
+        <Setter Property="Opacity" Value="0.7" />
+    </Style>
+    <Style Selector="Button.Caption.Close:pointerover">
+        <Setter Property="Background" Value="#FFE81123" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- Small buttons on the dark title bar (Update, Play, the activity log). -->
+    <Style Selector="Button.TitleIcon">
+        <Setter Property="Height" Value="22" />
+        <Setter Property="MinWidth" Value="26" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5" Padding="7,0">
+                    <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.TitleIcon:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+    </Style>
+    <Style Selector="Button.TitleIcon.Filled">
+        <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.TitleIcon.Filled:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+    </Style>
+
+    <!-- The settings search: a slim pill in the title bar. -->
+    <Style Selector="TextBox.TitleSearch">
+        <Setter Property="Height" Value="24" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Padding" Value="0,0,26,0" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Background" Value="{DynamicResource PillTrackBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+    </Style>
+    <Style Selector="TextBox.TitleSearch /template/ Border#PART_BorderElement">
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="TextBox.TitleSearch:pointerover /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+    </Style>
+    <Style Selector="TextBox.TitleSearch:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="{DynamicResource ControlFillColorInputActiveBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <!-- ==================== Navigation ==================== -->
+    <!-- A top tab: a segment of the tab strip, filled when chosen. -->
+    <Style Selector="RadioButton.Tab">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" CornerRadius="16" Padding="18,6" MinWidth="80">
+                    <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="RadioButton.Tab:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    </Style>
+    <Style Selector="RadioButton.Tab:checked">
+        <Setter Property="Background" Value="{DynamicResource SegmentSelectedBrush}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- Classic: a row of the source-list sidebar. -->
+    <Style Selector="RadioButton.SidebarItem">
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Margin" Value="8,1" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}" VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="RadioButton.SidebarItem:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    </Style>
+    <Style Selector="RadioButton.SidebarItem:checked">
+        <Setter Property="Background" Value="{DynamicResource SidebarItemSelectedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    </Style>
+    <!-- The sidebar in the Modern layout (Settings › Navigation: Sidebar): the tabs' look, the
+         chosen page filled as a chosen tab is. -->
+    <Style Selector="RadioButton.SidebarItem.Glass">
+        <Setter Property="Height" Value="30" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" CornerRadius="15" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}" VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="RadioButton.SidebarItem.Glass:checked">
+        <Setter Property="Background" Value="{DynamicResource SegmentSelectedBrush}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.SidebarHeader">
+        <Setter Property="FontSize" Value="9.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource SidebarHeaderBrush}" />
+        <Setter Property="Margin" Value="18,0,0,6" />
+    </Style>
+</Styles>

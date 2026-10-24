@@ -3,7 +3,7 @@ using System.IO;
 namespace BloodborneLauncher.Core
 {
     /// <summary>
-    /// bbport.ini: the port's own settings (upscaler, preset, controls, ...), also edited by the
+    /// lantern.ini: the port's own settings (upscaler, preset, controls, ...), also edited by the
     /// in-game menu. The edited keys are rewritten in place, missing ones
     /// appended, comments and unknown keys kept, and a key set to null is removed (a control
     /// binding back to its default).
@@ -18,12 +18,14 @@ namespace BloodborneLauncher.Core
             ("sharpness", "0.50"),
             ("object_motion", "1"),
             ("show_fps", "1"),
+            ("compile_note", "1"),
             ("output_res", "1920x1080"),
             ("model_lod", "0"),
             ("camera_tuning", "original"),
             ("live_resolution", "0"),
             ("frame_gen", "off"),
             ("frame_gen_cap", "1"),
+            ("dlss_preset", "k"),
             ("fps_position", "0"),
             ("fps_scale", "1.00"),
             ("fps_text_color", "#FFFFFF"),
@@ -95,7 +97,7 @@ namespace BloodborneLauncher.Core
             }
 
             if (_lines.Count == 0)
-                output.Add("# bbport settings (in-game menu: Insert / L3+R3)");
+                output.Add("# Lantern Engine settings (in-game menu: Insert / L3+R3)");
             foreach (var (key, value) in _values)
                 if (!written.Contains(key) && value != null)
                     output.Add($"{key}={value}");

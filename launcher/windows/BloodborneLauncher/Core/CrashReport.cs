@@ -23,11 +23,31 @@ namespace BloodborneLauncher.Core
             if (memory != null) why += " " + memory;
             // OptiScaler hooks the submissions and runs DLSS itself: a device lost with it loaded
             // says so (the engine runs a compatibility mode for it, Engine › OptiScaler compatibility).
-            if (tail.Any(l => l.Contains("DEVICE_LOST", StringComparison.Ordinal) ||
-                              l.Contains("device lost", StringComparison.OrdinalIgnoreCase)) &&
-                OptiScalerVersion() is { } opti)
-                why += " " + L.F($"OptiScaler {opti} was loaded: it hooks the game's GPU submissions and runs DLSS itself. Keep Engine › OptiScaler compatibility on; if the crash comes back, take OptiScaler's files out of engine\\out to rule it out.");
+            if (tail.Any(DeviceLost) && OptiScalerVersion() is { } opti)
+            {
+                // Its own frame generation on Vulkan runs through a D3D12 device it creates on the
+                // first upscaled frames (the engine prints FGOutput from OptiScaler.ini).
+                var fg = OptiScalerFrameGeneration();
+                why += " " + (fg != null
+                    ? L.F($"OptiScaler {opti} was loaded with its own frame generation on ({fg}); on Vulkan it runs through a D3D12 bridge that loses the GPU. Set Frame Generation to none in OptiScaler's menu (FGOutput=nofg in OptiScaler.ini) and use the launcher's frame generation instead.")
+                    : L.F($"OptiScaler {opti} was loaded: it hooks the game's GPU submissions and runs DLSS itself. Keep Engine › OptiScaler compatibility on; if the crash comes back, take OptiScaler's files out of engine\\out to rule it out."));
+            }
             return why;
+        }
+
+        /// <summary>A lost GPU in the log: the engine's report or Vulkan's ErrorDeviceLost (from a present).</summary>
+        private static bool DeviceLost(string line) =>
+            line.Contains("DEVICE_LOST", StringComparison.Ordinal) ||
+            line.Contains("device lost", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("ErrorDeviceLost", StringComparison.Ordinal);
+
+        /// <summary>OptiScaler's frame generation output from the engine's line
+        /// ("OptiScaler: its frame generation is on (FGOutput=dlssg in OptiScaler.ini): ..."); null when off.</summary>
+        private static string? OptiScalerFrameGeneration()
+        {
+            const string start = "OptiScaler: its frame generation is on (FGOutput=";
+            var line = Tail(GameRunner.SessionLog, int.MaxValue).FirstOrDefault(l => l.StartsWith(start, StringComparison.Ordinal));
+            return line?[start.Length..].Split(' ')[0];
         }
 
         /// <summary>OptiScaler's version from its own start line ("OptiScaler v0.9.5-pre4 (8dac650) ... loaded")
@@ -77,7 +97,7 @@ namespace BloodborneLauncher.Core
                 return L.T("The graphics card ran out of video memory. A lower output resolution or upscaler preset (Graphics), ") +
                        L.T("fewer texture or model mods, and closing other programs (browsers, recorders) leave it more room; ") +
                        L.T("keep \"Use more VRAM for textures\" off on cards with 4-6 GB.");
-            if (Has("DEVICE_LOST") || Has("device lost"))
+            if (tail.Any(DeviceLost))
                 return L.T("The graphics driver stopped responding: the GPU hung or lost the game's memory.");
             // The engine's own message: "GPU [Debug] <Critical> file:line Function: text", maybe
             // followed by a detail line ("data_fmt = 7") before the STOP line.

@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// bbport: frame generation's composition (vk_frame_generation.h). The generated frame was
+// interpolated from frames without the UI; the UI is taken from the real frame where it is drawn:
+// where the final frame differs from its HUD-less copy. The test looks at the 3x3 neighbourhood
+// so the soft edges and glow around text and gauges come whole from one frame.
+#version 450
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2D real_tex;      // the final frame, with the UI
+layout(binding = 1) uniform sampler2D hudless_tex;   // the same frame before the UI
+layout(binding = 2) uniform sampler2D generated_tex; // interpolated between HUD-less frames
+layout(binding = 3, rgba16f) uniform writeonly image2D out_img;
+layout(push_constant) uniform Params {
+    float threshold; // a difference above this is UI
+};
+
+float Difference(ivec2 pixel, ivec2 size) {
+    const ivec2 p = clamp(pixel, ivec2(0), size - 1);
+    const vec3 d = abs(texelFetch(real_tex, p, 0).rgb - texelFetch(hudless_tex, p, 0).rgb);
+    return max(d.r, max(d.g, d.b));
+}
+
+void main() {
+    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 size = imageSize(out_img);
+    if (any(greaterThanEqual(pixel, size))) {
+        return;
+    }
+    float ui = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            ui = max(ui, Difference(pixel + ivec2(x, y), size));
+        }
+    }
+    const vec3 real = texelFetch(real_tex, pixel, 0).rgb;
+    const vec3 generated = texelFetch(generated_tex, pixel, 0).rgb;
+    const float weight = smoothstep(threshold, threshold * 3.0, ui);
+    imageStore(out_img, pixel, vec4(mix(generated, real, weight), 1.0));
+}

@@ -14,6 +14,15 @@ namespace BloodborneLauncher.Core
         private Process? _process;
         private StreamWriter? _log;
 
+        /// <summary>Linux: asks a process to end (SIGTERM) through kill(1), present on every distribution.</summary>
+        private static bool Terminate(int pid)
+        {
+            using var kill = Process.Start(new ProcessStartInfo("kill", $"-TERM {pid}") { UseShellExecute = false, CreateNoWindow = true });
+            if (kill == null) return false;
+            kill.WaitForExit(2000);
+            return kill.HasExited && kill.ExitCode == 0;
+        }
+
         /// <summary>Everything the last session printed: logs\last_session.log in the engine folder.</summary>
         public static string SessionLog => Path.Combine(Paths.IsPortDir(Paths.PortDir) ? Paths.PortDir : Paths.ConfigDir, "logs", "last_session.log");
 
@@ -60,6 +69,8 @@ namespace BloodborneLauncher.Core
             }
             else
             {
+                // Linux (the Avalonia launcher): the package's out/bb-start, a script that runs the engine's
+                // run.sh with --game-dir and this same environment (engine/packaging/linux).
                 if (!Paths.IsPortDir(Paths.PortDir))
                     return "The engine folder is not set. Choose it in Settings › Lantern Engine.";
                 if (!Writable(Path.Combine(Paths.EngineDir, "out")))
@@ -187,6 +198,14 @@ namespace BloodborneLauncher.Core
                 var asked = false;
                 foreach (var probe in probes)
                 {
+                    // Linux has no window close message for a process: SIGTERM, which SDL turns into
+                    // the same quit (cache saved, "Exit: clean shutdown"). Killed at once, the log
+                    // just stopped and the cache of that session was lost.
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        try { asked |= Terminate(probe.Id); } catch { /* no kill(1) */ }
+                        continue;
+                    }
                     try { asked |= probe.CloseMainWindow(); } catch { /* no window */ }
                 }
                 try { asked |= process.CloseMainWindow(); } catch { /* no window */ }

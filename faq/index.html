@@ -1,0 +1,1167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lantern Engine Help</title>
+<meta name="description" content="Lantern Engine help: getting started, graphics settings, fixing common problems, what players asked, and the beta guide.">
+<link rel="icon" href="data:image/webp;base64,UklGRmwFAABXRUJQVlA4IGAFAACwFwCdASpAAEAAPm0skUWkIqGYCwZ8QAbEsgBXJ6FEPkRWVtAxboTn+T3dHOx/6H1h7zl+x3sk9MvZxbRjTt8/wdIiPbn+v4aZdFcjxycFB47f2Ty4ei1oz+t/YL3R1u12eS0jOaM4EyR/vWqgHb9idilZBTId/LxUf4+QZbToFIxrzG/vRTuaYH7mmzD2CzFo8+BkP1QPylEMWzYXcIWd4IQGs22euinIyKd36BnAOxOTjio4p+u/JiUv+20J8ncLxsLq90AA/v+6NtZ4+G0/sAd4Kjq6bBP0f1rpUje7FLOZPVm8QalgZ0yNQxXVCsV8tKVGqOQft4jkJM9/XY67mBzCUWeZrZb+ywBgFB/WBk9iB8M+iadTsQsQ5C/q7C6Ll2eLf4OCxHTbUiEHRv5jKKCPAYzLiwZjaSkIRpmShisaEI/ahlC2fOMKZeaJvg1OfL60FzMIGPc3oNWbwH7n7lylXvCUvvBFcX7jploVt9rZDAz8JKH/6JnsAO5PzY2PsW2OfrWp344YI9NpZDwl/s1ENBJqJCmlfMUPq/kuUbc00M8NLx90wk0rTiGaG7d4bjKyv7eWRdDtcDdn2rR+tU9Tf6fCc7fsAndu2UQiWAffdL4Jka86dzsIkXGTJ4T+y+MvrfUD51uNxVB4rmqtinwPthGFLtnP3/vRTmH7nM4cAEN4Ely8ainMqkddGnlXWBarpvRQ2szIlgtESOiNNqHqVBnNy0ZjmCV3AMnSFqVmpUJcjF+Zg4q3T/9Wx7hPY+yLV/0wPRBvbWU/KZ4gjwY8ZY/7Nx3VvDGBRsxO1WOtSvSfManKOuIjGXKgBZ+NWxd/g5xbIjFO3iPV7lna8Jinmarm4/MpDa4Y8787fnKk7DS8AxopFV9QdYyryE9H33/fym6fW6F99BWtmhWdifQv0lidi2YlUXYcJ9y/fNyjxyQLY+pHv0rQQI4mkNGu5/paIbCbDAQULIfI0zYvPlT9OamG7MQlojVq0FpdUpV93FlfymE+6W/af9eZXtipK/E7nmjZjZmDrNue+ct23vIbbE4hZD4/pfT4VKRz4jVxz1oNKrcn8rdAOqVUs7q1GR2LfBjQW2MFxYa9xkCDLFBXfEDbufEhWFZzP+dpnHa3RTuufqUmJI5uqCpYgAyWKmYmr1unSdSRyQpDB++3nKnQV8AL89KVOGT/clZsuyXDlm1LoGP8ivT6pfPXOAPC4X459SDBlSDFL9uqIJDrGwYtgvJq7lkF6fTbKtIA5NAiAn/21P3KJr5wQ7kbOP0xq5+mah8NQP3DtOIt6/grCejafLv2K9PBfpLCqi9Hp9Od303lMuwpDuOWUVM9XZ4FTERBltKFtxAzNRLbuL9as5QL8gRl8qD3t63qS6Vjf4XCtWju6rXw5/7kfZs/Czf1ca1UDQfrg6dRWrLsHh3uwC5GaTV/ce2lnoAoBS5+sRSYQU64igky9x0LqRjueJZnIPTLS7/6IG5RpY//dYczKkGvsR9Exe0edtssLwaZBnnmfxM+1k3zxlKF+ELfLgsVxcDHJJAAQbD5t/4epx/TyCEk5Onv8JfzqNciAbv4HReexPxVnR5Ox0GLiqfW+Ud++dsgIwJUhRryJ1gDiwsPqpRS9BMOgzH4OedAoRwhA18boV9IHF+ozVe8M1N/UJs8oQT/9fOnXwidK0HZwaUoh8MnBKk2Q+w1u8u/8EolGi2q9bVtYPC2ZUeEQ/rYPuK0IiUi7NkN98M5+JZaBJ5qsjQ49OOHpTCBkLDyxEzASz0VHszF38ETi+5jd29V6Pqg73/QFtB73x24YcEB8ea2oJSGk5yXRcyfJfqPULiAAA==">
+<style>
+  :root {
+    --bg: #18181b;
+    --panel: #1d1d20;
+    --surface: #222226;
+    --surface-2: #2b2b2e;
+    --line: #34343a;
+    --text: #e6e6e8;
+    --muted: #b6b6bb;
+    --faint: #8c8c93;
+    --lantern: #d99a2b;
+    --lantern-soft: rgba(217, 154, 43, 0.12);
+    --blood: #c41e3a;
+    --blood-soft: rgba(196, 30, 58, 0.12);
+    --beta: #8fb8e8;
+    --beta-soft: rgba(143, 184, 232, 0.12);
+    --side: 288px;
+    --serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+    --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --mono: Consolas, "Cascadia Mono", "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 var(--sans);
+  }
+  a { color: var(--lantern); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  [hidden] { display: none !important; }
+
+  /* Scrollbars in the theme's colours (Firefox, then Chrome, Edge and Safari). */
+  html, .side { scrollbar-width: thin; scrollbar-color: #4a3a22 var(--bg); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb {
+    background: #4a3a22;
+    border: 2px solid var(--bg);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--lantern); }
+  ::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
+  ::-webkit-scrollbar-corner { background: var(--bg); }
+  .side::-webkit-scrollbar-track, .side::-webkit-scrollbar-corner { background: var(--panel); }
+  .side::-webkit-scrollbar-thumb { border-color: var(--panel); }
+
+  .legal {
+    margin: 20px 0 0;
+    padding: 12px 14px;
+    border: 1px solid rgba(217, 154, 43, 0.3);
+    border-radius: 10px;
+    background: var(--lantern-soft);
+    font-size: 14.5px;
+  }
+  .legal b { color: #f0c46e; }
+
+  /* The side menu: pinned to the left edge, full height. */
+  .side {
+    position: fixed; top: 0; bottom: 0; left: 0;
+    width: var(--side);
+    display: flex; flex-direction: column; gap: 16px;
+    padding: 28px 22px 24px;
+    overflow-y: auto;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+  }
+  .side-brand { display: flex; align-items: center; gap: 12px; color: var(--text); }
+  .side-brand:hover { text-decoration: none; }
+  .side-brand .logo {
+    width: 56px; height: 56px;
+    border-radius: 10px;
+    border: 1px solid rgba(217, 154, 43, 0.35);
+    box-shadow: 0 0 24px rgba(217, 154, 43, 0.2);
+  }
+  .side-brand b { display: block; font: 600 21px/1.15 var(--serif); }
+  .side-brand small {
+    display: block;
+    margin-top: 3px;
+    color: var(--lantern);
+    font: 600 11px/1 var(--sans);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .tabs {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg);
+  }
+  .tabs button {
+    padding: 7px 8px;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    color: var(--muted);
+    font: 600 13.5px var(--sans);
+    cursor: pointer;
+  }
+  .tabs button:hover { color: var(--text); }
+  .tabs button.active { background: var(--lantern-soft); color: var(--lantern); }
+  .tabs button.active[data-view="beta"] { background: var(--beta-soft); color: var(--beta); }
+  .search {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font: 14px var(--sans);
+  }
+  .search:focus { outline: none; border-color: var(--lantern); }
+  .side-title {
+    margin: 4px 0 -8px;
+    color: var(--faint);
+    font: 600 11px/1 var(--sans);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .side-nav { display: flex; flex-direction: column; gap: 2px; }
+  .side-nav a {
+    display: block;
+    padding: 8px 12px;
+    border-radius: 7px;
+    color: var(--muted);
+    font-size: 14.5px;
+  }
+  .side-nav a:hover { color: var(--text); background: var(--surface); text-decoration: none; }
+  .side-nav a.active { color: var(--lantern); background: var(--lantern-soft); }
+  .side-nav[data-view="beta"] a.active { color: var(--beta); background: var(--beta-soft); }
+  .side-links {
+    margin-top: auto;
+    display: flex; flex-direction: column; gap: 6px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+  }
+  .side-links a { color: var(--muted); }
+  .side-links a:hover { color: var(--lantern); }
+
+  /* The content, beside the menu. The lantern glow spans the whole area, so it has no edges. */
+  main {
+    min-height: 100vh;
+    margin-left: var(--side);
+    padding: 0 56px 64px;
+    background: radial-gradient(ellipse 900px 380px at 30% -60px, rgba(217, 154, 43, 0.10), transparent 70%) no-repeat;
+  }
+  main.beta { background-image: radial-gradient(ellipse 900px 380px at 30% -60px, rgba(143, 184, 232, 0.10), transparent 70%); }
+  .content { max-width: 960px; }
+
+  header.top {
+    padding: 56px 0 30px;
+    border-bottom: 1px solid var(--line);
+  }
+  .hero-logo { display: none; }
+  .eyebrow {
+    margin: 0 0 6px;
+    color: var(--lantern);
+    font: 600 13px/1 var(--sans);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .beta .eyebrow, .beta h2 { color: var(--beta); }
+  h1 {
+    margin: 0;
+    font: 600 46px/1.1 var(--serif);
+    letter-spacing: 0.02em;
+  }
+  .tagline { margin: 12px 0 0; max-width: 660px; color: var(--muted); }
+  .links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+  .button {
+    display: inline-block;
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 14px;
+  }
+  .button.primary { border-color: var(--lantern); background: var(--lantern-soft); }
+  .button:hover { border-color: var(--lantern); text-decoration: none; }
+
+  section { padding-top: 40px; scroll-margin-top: 8px; }
+  h2 {
+    margin: 0 0 6px;
+    font: 600 30px/1.2 var(--serif);
+    color: var(--lantern);
+  }
+  .lead { margin: 0 0 16px; color: var(--muted); }
+  h3 { margin: 22px 0 8px; font-size: 17px; }
+
+  details {
+    margin: 8px 0;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  details[open] { border-color: #4a4a50; }
+  summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 12px 16px;
+    font-weight: 600;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before {
+    content: "+";
+    display: inline-block;
+    width: 18px;
+    color: var(--lantern);
+  }
+  .beta summary::before { color: var(--beta); }
+  details[open] > summary::before { content: "–"; }
+  .answer { padding: 0 16px 14px 34px; }
+  .answer p { margin: 0 0 10px; }
+  .answer ul, .answer ol { margin: 0 0 10px; padding-left: 20px; }
+  .answer li { margin: 3px 0; }
+  .path {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: var(--surface-2);
+    color: #f0d9a8;
+    white-space: nowrap;
+  }
+  code {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: var(--surface-2);
+  }
+  .note {
+    margin: 12px 0;
+    padding: 12px 14px;
+    border-left: 3px solid var(--beta);
+    border-radius: 0 8px 8px 0;
+    background: var(--beta-soft);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 12px;
+    font-size: 14.5px;
+  }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .table-wrap { overflow-x: auto; }
+  blockquote {
+    margin: 0 0 8px;
+    padding: 0 0 0 12px;
+    border-left: 2px solid var(--line);
+    color: var(--muted);
+    font-style: italic;
+  }
+  .tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 7px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    vertical-align: 2px;
+    white-space: nowrap;
+  }
+  .tag.fixed { background: rgba(63, 168, 107, 0.15); color: #7fd3a1; }
+  .tag.open { background: var(--blood-soft); color: #f08a9b; }
+  .tag.tip { background: var(--lantern-soft); color: #f0c46e; }
+  .tag.beta { background: var(--beta-soft); color: var(--beta); }
+  .empty { display: none; color: var(--muted); padding: 24px 0 0; }
+  footer {
+    display: flex; align-items: center; gap: 14px;
+    margin-top: 56px; padding-top: 18px;
+    border-top: 1px solid var(--line);
+    color: var(--faint); font-size: 13px;
+  }
+  footer img { flex: none; width: 48px; height: 48px; border-radius: 8px; opacity: 0.85; }
+
+  /* Wide screens: the content a little way from the menu, not lost in the middle. */
+  @media (min-width: 1400px) {
+    .content { margin-left: clamp(0px, calc((100% - 960px) * 0.25), 180px); }
+  }
+  /* Tablets and phones: the menu is a sticky bar at the top, scrolling sideways. */
+  @media (max-width: 960px) {
+    main { margin-left: 0; padding: 0 20px 56px; }
+    header.top { padding: 28px 0 24px; }
+    .hero-logo {
+      display: block;
+      width: 88px; height: 88px;
+      margin-bottom: 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(217, 154, 43, 0.35);
+      box-shadow: 0 0 32px rgba(217, 154, 43, 0.2);
+    }
+    h1 { font-size: 36px; }
+    .side {
+      position: sticky; bottom: auto;
+      z-index: 3;
+      width: auto;
+      gap: 8px;
+      padding: 10px 20px;
+      overflow: visible;
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .side-brand, .side-title, .side-links { display: none; }
+    .side-nav { flex-direction: row; overflow-x: auto; scrollbar-width: none; }
+    .side-nav::-webkit-scrollbar { display: none; }
+    .side-nav a { white-space: nowrap; padding: 6px 10px; }
+    section { scroll-margin-top: 150px; }
+  }
+  @media (max-width: 600px) {
+    main { padding: 0 16px 48px; }
+    .side { padding: 10px 16px; }
+    h2 { font-size: 25px; }
+    .answer { padding-left: 16px; }
+    .path { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+<aside class="side">
+  <a class="side-brand" href="#" data-goto="help">
+    <img class="logo" id="logo" src="data:image/webp;base64,UklGRn4mAABXRUJQVlA4IHImAAAwrACdASoAAQABPmEqkUakIiGhJ3J8yIAMCU1yqzg+ja3Kp458CHzu63sjzSepfPZ6c/6/6j/909Lvp984Hmkf9v1ldFR60v999Ub9yuuS/vWPuy2m0nkn2z+5/M/m69meaP87/OH8L8xebXgI/mX9k/3v5f8mI0B8Fnfn/dfmN/ePVg/0/UH9H/znsBfzn+pf8PmMvSvYH/qP+b9Wr/U/9/oW+tv/R7h380/t3/L/wnCp/twh/1liM/g2LAbxAbG3+8rZpni/S91ND/cadlPJbnIKs0MGDtbCmH5zBUt0NNOcQt4Tpn4CEnZm7W+WFvWtJ+gw5av2VIvbLvSL8UbnBUtWYUJM+73NKps38/+8GQOhshduCkmDhOeWi9ZrpObdk6eJcG71oRaTiOcE+3r97giqJeSoS6cNSLTFWRw72/j4Xmv5CyxctgNEIrQMXipddRmfhcsOwN5MZKGny6ylQkY27Y3fU6KO8H/yXbljYZJRFkNjj4457yaQmlhpiTvhCk3pNwfoIriBlkKAo7Trqwxm52sPt8+8iy3015WEpOJuXZm/N1rv039HdOOykb/snSKJy1VvCYG6jMnwrRFtmhsJl2xBckHbaOzjTStOuEKaZMAmScRO9bpQpWZNeeYRIDGe53Bvi4IsATNTP1FqS+WtRRz4mPyJpaFTI3/Hydjc8QgASQ4N/WuQi3YpnWtnRiCm/2t9Vhi4VlfDLkPma74PPiFXsUfrXux6lTdlheSISh7kTk0ZEXyMHPmuT9/4l3qqwcpd2uq9EPEGEfk++e8QW7E2uBoJCF0na4K+HNivipBWlX2nHGrlOA9qicxnfGtflW/7HNOmTHcL/6nEA2qY7bxUZ8SM1kWVjYlSkHSis3em+ybh0+FFICEOrYc5DmhhC1WMVQsMNnoNwu6AqXQeeMxabl6YRYsio+oNLJLRt/nuqr4WdOA4F8NpPLCHdjClhE9rDmAIkRtcFPd+UKAZ8ymoU6NZsexLDLO+ltuqVx9K8zuE1KbxE/p9GVmaPbV4SNL95s1jd8ibTr+kKEETodiV5bEbMdl2rSPXZeIVQ//rrEZd6v7wV4/iZV2QBlrVkkAG9t4ZxlnnqkqLCzRSe4ksha8WkvW2MhyppiDa1rhIEzJk1Xq4LlnIdMuJ8gskGT+hweygU2uLDQeeqx+jf3J5TcM6qyelWwgu3Wkv4xrrQatnIucIBB6fGnxKeqZdta2hmhubSgSsYxS5ivom8N3lm2vbfdS10f0d7RB+5ctmoSwb78F3Dk4uQ9KXKKcUGosTNmwKjKnviQEFUZbmKmADP79fwQ3DTvpabuDewLkqKqPQNvMUZdkHcryXvF2RiQxot3pp8XhRxN0643cr3cIykUifHBUiNKTYbhkmiamd65AUSl4EtoUt3GimBSx8gd4a3ohZZoiz5xJ169y99PVsH+ktEPRdeBGKf/XS0JKGupSNCS8qOgNOh2LVNcXRQ0HSjWaKNIwssznhaQNdgfTxvp1Gxfnuof4qgljQ00HyEDa22O2M2hQ2c3kYGZYqdczVFF9sFDt2IqD7qCmFz2uNoLBUqtAhIC1XgOy9zi7R5uTwOKnp0/uSda/02/gn3UsRv3n/szBFM1x3Ad/e4LPgSAy0sOZCtT+asnhJWYVXJL3PojOr+vWmmrIV7/Mm13kIf55cHhSbSObr+FlmlqlyxgV5JSAOR5CdLIGvrK0l7VwzwaJ3JjTjpWTOxbF/o6999k7b45KdAOByJ84ljhtRGHmxRyEwwIzttONQ1FwPPAKjTqgskJSlLnqpaEoQ1WFiHSTDjuMNfOa8xv7AlWGhs2KAY/ZR9NdADgWHDoiDE/+seAAA/vzO56jYez6AqvWdU8Z4xv68FEUrSnc5WgTUC7AurWqi0nxk2j0HLJynx/UKZP2tpP1LxpUpTBVGEyx0D3z5r4XDj8nAi8xSgCeh1eVCX9Ueh+xTHqoZdBZ+8B90dVtyXIKuhOHAUVyGweOfp9MZpEa0kD3AsHFz/Vq6ybnu0af8kj281b2DP5dFISYzzS8AZX8Pedolj0tRKjSAbHmKHT0yTDbfeAiCREjf9SmmmayjsEbJ0tXjSs9fgRSC6vPqpM7+ucAOCvkfXsaTo8CjGo7aLv25DQ/0knBy1XDairftN4IC9MsMD2H2sXa/6QFs8+giDCHwraO2NIHI13/H7k6U6981LMluo+3rvFrSMggcESmH4BaIhfPtmSPxyZgPA9l6o4JqzWFfzyXSVf6emPhAYCK30RfWt3z7nNSnQ29yiqlor7blXraa+aEdGG5UjfC79IKPjuBVLuUuFtU0tB/G42Q9P9IN+YyhcmvsiI01MBt0fhBzDiKDCr1G/2fETJl/Wzq5TgX1G3RT8nHR9WWSgXuZb86x9oSkZ1N05FcDeVFLDmBXoSAW60/DA+LSoAE0z0nyIF7L+dt5qHmohyw7ysazU/4Grn7jFu7P8nBYiaY05YjSvKLsc0V/MCgv307phEjeAdBuuqFYkx2rwNiRSl4vfvQIbGI+0ntsoBjfLM1muu8Sst+3VrsmuSr9k/DbpjN6SIlYCWspFNFWUBeWIDHWPvjLyQjYE4X+Z8Hv0F/nrDVzRu15WOeexLsWJlXp2N4Kw0Vroo//dNyTlZnZoGz7t9CKK67qhYiKtFr7wCBM8uhNyz5+q9sL9GZtURsNUxv211e1SMCQTfKP2NpsoP90P+0+ZSa3trFwU/XsMVLK+sGrV8giMECuieXRVgXEnFF0acBObve7wZAfsJYJQcPIp+uEJG2Jkg+QQbdhdSbF+VBaYYQdsZSHa5g1rVrGKiWx7xUb7zsC3RnZn895LB4sCRVSbsnDzqfwL/iPhoDYLqUd0A0vQFjFTJ3hfucJ8mtdojM/qlhf8euQ5QjyJOnKPSS+jS7ZKtB4kVjCfQdr8hg/As3D4jZzDq1c32YBZGjnliEah6fvk5vDR7hzs3NphlAUaJg5Lt/3gFl5zcujSICUJJVPlaHRYyBFpJqstzWNIYncGRzHzek1nQFkilkLP2VBUvfrGYfmJRLBnNi0y+Rmj8YXDaalY8K15c23AsLURtWfANK+82MFWq5pbT6PFHyKMSJ+bGapM2oude1UmdgcGPnqDBaZwdQmF6ZngNEcbbVHTzGTvwb7PY/5SPtJ17NStyCgPyQDaugL88k7GHv6BiSCi1ysgE9rAy0zuuwY4sUSR72S3QIvotU6U8gmMyRxXWReC5whAf/nAFIlAS3rwKHqVFsbYsTz1Lfc1CO6ne/jovcIVYaz/iP3U3xZN2JYo7cF+XVQVuwq/Hgr3BT5Y9IK6k8qhnRPx9q98DLuAfmphdqVbiFfvHBRvXKtlt1GXY4uwNQWTL3fRfvIf7/0/PjO9kvbhPmZFkV9q/qCUCdOnvOVFn2XTzYG9ZGxSISaiufMwajwOSwAoSCq6stotv2FhghXtDlezSF5RjYfrJGswFLTc4dkRT8qBq5USSy+Aj+j2GH/TWSW6QWokVqHwL+QvxYoWWZG4i5Av+S/oXKWNKLSiQIAKFWt0+f2SSvead8JlWAyqnKftWsoVU6KT5MDsZo9FOLr9LUh0+x1TwgdKDxVIZEZ7pUTGzTn8XaI5HwwxRygJ/7dBNcbEYf+EOOdGT82v6Firn7oved5iqsOx4eaD1jg27bnh6EcpRbFAAcvtsE4bRBHrcj9bKaNePpmUZc93PTFBfsnoCZFiB/4FXtM+IqMrDkUNBsJrE/RPkH7wzU65YceuZxSit1aP33vADtpbQWsQ2r6Fc+AvK/8C5tXH8yqJt5uAjWwMxBUiO3XN16W0Z2Lqdvqj2HgUy18qT5hqCgTsTZaM40lMtJ/N0hC489qOBKRqUE4s6HeGjWs7pbCSgidMD5FjTAa/Yx+nR+MLwMRys+WtIYSDPbUQa1aSoqtCnFXzC4Z6aoapRlRii+/lUVR+r+NpLmoSIkIfgyxz+F0Vd4JWh9Ws8+/0F6hmVxLe+u/7F8556e6olOiPss5wpEbjoF2f7Go2Q0NlGNnNEcOFpL4Jg7q3KpMqMtMsv2i9OJPtfSBiJB2U34PcJvCwThRIsYwzflTy1GgDZdjeefnqZxgKUICc0MNJJ9s82OrTy54zamp0qh2mgYBIZp1jOqvdnC0IsVxVzNDoUmk0Cb06ktQyPyF3nkVz9HCJ5krdBYvHxtePfdRQ5BW6jG+IiHuSjBTHOf8na+evJou0ZcjqC+ayZv5QkUVf0mV/0muYrcKtEYRuwKqhotHZmFEaCRIwf/WmZofB1nJvZeGvaoWhM6Rb7g9FUXtAPUdIKQOLmz5aomxJufOIcj8a1QkQSdveMq7SoYZv+qpEkkftTTU2q+AzgWEY6By7GAsB1zSnWSOut2mfnp6eyjqiKCf/yCSNOrQV6bZi0VBUgHKAM+OTDB3zLxiNDWVGaD9J+e6lXyAc/V2v4pROJvUpIuy5HPwEY0hMHJ8/g2Wt149gL/y2FNLe7Slm3eJi53/cM43FxV0ObaBUk6navMOavySRvFJdwxdl+/UK/pnADSLuKavY8rZRvtUVZwPNAI/VuOyFDjsyh5N8m0WnKEu2XLqa+dB9JtjgRIi/jYi6cLHNoihVS6C2qK0oZ0M/DbbR6MPfVaIs0v8HrsGCXuN7APBpl5E13Gz/jbSFWVgZGQDsLwUF5/da9N++0Hwmr5zgXz7EyM83jesa78VtLeglLk5tC3i469/pXDI3cgz2PU8g17rnWa/IA8C3xWV0Ek8IvAr5gOT7gg3at1fq6BDX0WdluOn00Kh0Tl8PN6bMhXpWvhNE2PfJ3cNItOcH5TZvfK543Wt0A6QLhUjfok305uHReP+z9x6Lfj9IrOjk70w+yeAyMDqQlrz+PDAhvmIvJnZech//62vwIJIlxiLErR6DfsWvXZ1zRHXJ6JRge0Py/SI7jXE/dtVnzfQjW7Jt2Jnk6/USO3934WsuXqOK4UcFY37u702fzBHj5CkJrkXtukUcGasILRLdjpYtQmp30N6HedCnndZTYecq7q1/JzE6jpEiOD6kzOJuqgNMKlw+RmdOMO28k7s6Ac6YqJ5IWSV8YB2RjfWTA307sxJuRBSGAz0k4aK7UF0VY0iSWETuoyZjNrIKyPv3ewJz3qUzr1IhoX/w5g8xksFPVEN9Ky0CR9UB75WOfdERyTM+PZO3CiBW6wT9Cg64kMtHXp7IbPF9PiWciY3Gj/rmYViS/OWA2xP4s6GDE3+Qolovtzv+1YCoLCWUVT98LE0OJ5NmuJw0c5pMo51o5crrqTN0xIGZFunrH6g/ku4kU6Wwn8qIySqdIwIp0t71E4E63vOzjJ5KyO1rCjXwE/1JzlCXlrQh9Ek5UMSvDU8N8bogZH8hB+wyKdQsvFQJTlxlFOu12nydWgVxW6FEx7RMV0MA+WCLFe+aMJNeCBauvf7t9ppthrWMwS43GzW3P68Sw+foTAzeVHlxwAASr3G2qcAV5ea8iPU/ru/0yGlGaV77BTb+I2NRhsYtHpNTGL0SGr1i1P97S4RxifN6DNSxV0Kq18qyMLVQ0lQt0gPAojXaAFGIYKkj5MUWimeoTUZrTVtFCACz6idoAkycjhGNSDt7ebgjcQ3EDiBQkkMtMB1atXQiWk6EbjG8P+ZA3BTj6FMS1pLaVfdwwwZFYMcOA2QaNVJUAzYmHVyTkI/BlnMspQUYR+AcXghvVkGgxC/DxsH2D/MYsv6cPYcmySsZUTS0fHb1UFLeEh8aS0DMwnSN03OGZEoM5mtR5gondthG9v/WMDBpS5B5rs6KXDoumZYmqTssA08E6vPMJUIDrUCvBhH5IxG+l1P9iraFAKd4Y9bFO/VGtm/cJnbbWkXRjMgAUV51jjCvd31srkn74yas9yOPTpo6YxbTRQ/rtz4PvFajQbiL3EP6ZiW3HSF2Y2KHSWh8L237UHTrd/13A9rHH/DJe/Y09QoQpZ3txsdEtnB9gK6aAKPrWxDIGbJvkhhs0SauVTSbwDcpN5wCQ3GkGUzVR9ZsLWfOG8K0X4gS82829MBIi1ygtFwprVskad/lI1B0wK2tfPgV2YYbYGsyAXeVrHYjr4weApMM4IJkfStQazyr8r/Jt135zvOVFBfW9WdM2cH6OOVPKGefP1DKVMCDeYiOXD8U0YrxIyFF+HroBErd1VknpFS9uDU/sMAofIbM+xKgpYfsaXyuJsQq61i4w4s3JFaRolsZkhH0C1xr9P29QS5DuCyL38fRrkfHcyUi0+ihaRbDGhLWau4CLWzf/hF2g+7ip600i467RRGuck3Ej64d/xZ4S2z24kyVNdUkpGx5C98rosvvw2CxchhLLE5KuNbMXuwMbJqa8onX9p++vzz0QnnBebL7fGF3A1slvYJXni+GR/eClQPNmnBz3pxmLfgscVGc0UULxHTXirLNsw4GNTZ9OTUw8aNI6BYJWueBJh+UcfgnQ9nM1VXBDKW+W2FnwCjZ03SVNird2rcNSbvet3LKP+3SBdP7sTjksD9SEUEw/YC5OFhJACMN0jts9F50rO/YlmfPVyYqVNB9QY7fjDOYJB/uypb9/HbmDHA3LR+jrq05fzytm7gsO5dpDHYr033fAAqmt+OQESmeIAQGO6VTrq49DOQuM2XxL7VxP15wxJB+6X6ht8lcxdEEAhTIsakUDn5sDlhxXIYc+mVxSg8zbZ/1ZbVgiNXYodJ2XGwuGNVsLqq3Z+qo2hP4X1Xad+JK3Gq7kcNIv2K+XvYFCIAzP/yKCJ4uvapFpxqirOnv87Umh3k5kWjfEB4i7q3iYwekXZ+x4VIG8suZIYhhmfAuYaJhjhRF71IQrtdVyE5QGj7a8WWkQZ5Ow6gm8sVgkvu1fuHSJU5n9MtkClBwsz2u36GZs7hqv9JeqzfkM2sAiLut5IlX17I29z2aGv4K6FT3O+MzCiWLxDuKMyK5XzTyilRelQTqgV5yQMtuistUTgs3cyKGFvKxCZCrINH2rW88DsiCn8ZLaBzG2wTcwnnorY0Q+TCBTjIN++KDdVF9VTzF03saqveqRy03ICtGUYE/htLZyKfn8gRqGlTQ6Auwd3nYuMk1VmLw0CLcFUrEdaRT3qlDxpkU0uXnq1+urRiatS1dZysdEeb+qW3rZdPXq7sgi2DNftRdSs3CdG+UNp8NvjaZvUx2TkLzxzm+Orv+42PgW9YLxSJEwAssCW4sce4TwAsmcSf4eCfT4ouDClnE7bZz15mmuFXfVhyfnYrYj/R6TDvFJ/Vi2T0ZpVO9rxPOwpXQYE65Pj+T2MNV2THkf6jzrXUJDXBDqFHOXPJzbKN/AodTt686IaaQnCIihmOfmt1bsMJuehyp2GpsHsOfi6djd2LD4hGf2WqL353lEs62U9hYa3yecjtMqWflcqvlEl7eaHKg4IWLUTVNbmPeXfF71mUJbUc8qr17Z/MNSR3CpDdS4lbuixgGBsaw82J+Kr9jRKrezPfIHcFcUrhGedm9D4LLUyZP4d7jX0s03R4zjLqXKHRAONGJ77+0IGHWldAoRZxTVyeLp8/iWZyXNAWXoKhjWZGMEcETaKshGq5Tfw0OZIgL0sR+k5Scc9eIk6RuS9s9l2l0rDOckVTQvNyYswqzjQnvILwilJIpdYBy+NEWfgQ6hGbcjfgyjPMJjcPIeVjFSmiVN6nsbYPk63P2qHUVjTpbvlfdt6C86tfP0Sl1Ffimg9aa5TYhB1nY3PxwgFI5F7Hx0HIPO5w/oLPaVf1I+hL0rUrf7KmUljvNPGUWJADV6j4wTMoB460EcF1AnbWGyRQc/NsBvfkswLPOgN3WSPYMwSi2eAMi/oJOvmnLjij7tAKdQq8IzvewEV24MmOg7lsBKqDqpCom+s3uwZmTBnTCMTvIgy5S1nkV+twd2XwAvNWF8n4EQMOpLltUYdlQmCozG7QYdXW5uyt7GRFjmUl2PxOGWh0l81wLVjLkb4K56Y5n9AY48ynIYs/rnPHcoYTlRAbbgdB5h17tnjmg/+bZXU93b9ntq4Lr3uMYt/rM7unS46eIWoS8L5g85asEah2PHxbqRm5FE1UUCMiixfxLN/z9SlHyaxyCiywCNKK+SUbh7LtgR6pSzdZspa/dEB8PzruIyc3MLUTb/w+D5199OZqs9Ir3FfIHKKhfW7rf3rhQS+RzoT6xtb4oUQM1zpPTZMjjUTuQO9OkGi5j15mu7tz22uNOg870kJDTWHnstdPpqTFWiVq0AmZjQzpMQPQVZimYCyCsprJs2sMknRKlwQfD+5flbjXreErfNTO7BfKMWqAXpGZLMb65Tm6OMI/5f7irBLOLCqZwRDsFWOcqcdpHV9Tywk3SEU91/B64CCgdcOIkhS/btP38M8P3iVR2ehRQr0cx+aJI0vru9uiwDhQD0t6qTga6wOQj+WzQeuX0bSUnWADPH0wSpmo/BX4N1adLTSpwryD296lLbbJ77JbM5u5i+4WOElvu6yypQkuK4iP1svhXuqfLOv3TBl76UHWx4fGQm8KFJohGtamI+v9RsEM7ouuZbMvC2SIExx2ta0IF10JzD00sePfnVFL1+tWhQqMwLDy5tIJj3GtUi4HT6a3+7woamoP2lyUfcET6YRrzj5sdqeV4HPyby97rDqUVFfNL/OuMD0/oqHzMm5pSbsts67mCzVEJ2d1ZS6hpZzbY7o6v92Ap3TRvZWsggqK3KJ4EdNLvsXvvc2wVBp/zB1QDqf1XY7rTpDySLspnUvVy0ixU/AWzHibkgfp7VaRtbk7kvtqvEB1G7b0rKnbhxbBcTOVxSniCWJgaTEMsGUkEYsOMgv9uFl1IvkVpkcLqVQnsjYkyB81Vq9gda1ACJMhPI2WaVjOAWrG3Ikq53FKgz34w5ZOKzznSocpoBRHzcQfSk06kHS9FWjtK6Duhi37xlGahGA+bR8w51xkIE2q5L5Ip1tN7mcmDtB2XumeyDagCyCjNFVQmSuM83rGEZF3BlFBFomEWm00dpU09Bz8bvy/5L1GM2mgumgmcCVxwWz/I48hPsnfMdis2HifdVaUK6pt+PSBKuGU9QRLMJKuFeko0dU8xAnOs1S6ZTjzQz34rBH4+K+Qi63RLx8vLYn0lg/abmevC3qp78+mxNLRbkyJE5xW8bHwWOSbG2O3yGBFpCvTY2kSxivMAwTzg1PoJ7WiMyACCtw/sLnPVHDq+CSRdOsp8Lxggw2OVpsLInk9IPhr7NlEV2dV2SkBCi2Yz2MGtazTBzMi4DBmTlX6RJGx+BJrhyozNrVynrIx4/q7tmJ5fcaqaGZdY7QZ+e9wQ6Y93KaEnHy0YqRgx470t2DhqIgCN3EUWvGX2OzECIwPr2tN4DIAAcLJuRYHBn5edJltOmaThNb40pDSANGJFl7cX19vSCsNCgPVP8ZqLirCEQdmN4VZNTNm7DfKy7yu7TZsWxsZkmcUMKwhl4dFjurHSgxmwaE5Ql71HoZiMhKia/+MtuztdPhIANTnAGXTMKz356Yw34nLQmun77Qkkbt8FXeLCs9z+KoagnJaLSwajlUCsbK6fFMdfKZ4lUvtpFBi14qoLxEKR2onKYD3xiN+vk0earmughHG93dyp/jAwWNajgukBQF6yHVkJCGqKda/Pc30Lezj9901uZpeC5ukhZddDHxBlh8HDJgsPLbDjI4ZMUh2psqR12FQrWez8ZhwuX1s7UT8tRfvaj7yCwie9xWQYY6OttVYhOvAyobsZU2mwXjWmKOWLnF1OEGbH1vjbv1RLK6YFa2kmvteEX2NsADAlm2fCCYrDHi4gw/EDeUHG6X0HHGmAtOfVKMjKaTv/cXErVsXv1FLSufgBQXxlaXsbI2CmxyPV+JAyOzUIv5A9iPxu4wLmR+5KklSkB5YVk31n8ieQp40kZcAhNwERuiog+LBBenwpAyznBx8Zmx5ykvrrSMxvdPaxBDFAMzxvgtNP0sUaatn8JfC4v7QQsAQINgRImzixOTHv4LdhogoHhMcY+qUvyLxjrI0CMfiysAFlJDjo+OdGQjdI5JLAKIIygJ1Zie5cEAetEcHu/is/Owp/ZTTLgFwzPR5Cs9l5nBwnQS7TrkFq2uQWfmABZZuodwKISgo4fIFnmDckB6i82PoA6nFUpVOnEIGiIf5ijxtpa6tJ/AaS31w79PexDb+I6bt7XQNXDX/nP3ttEr34VHiAgTn/yvb0V1vFAZVAnnoP0mCb5RHSSz7lbGzLzBzaF02XrM7dJLpiDV7wHqSW0ljS82ebFt67wqKzGz95K0CSbtXTeWY+tsmwMUtpusj77/G7GFb/6snvV/hnLCrqe74ZadLp6dp80SzkwGDYxjo1Zds0Z5Zjg24lPbflQPqA46bx+L7DtnOjFSGAVQcuA4odN+4H/2GOGWt2FQSLEEeJofUHLV+06eEPdLlXFJylsVYtRWHvJIQPWX9SdAkilRskqYvMxVOqXNHzHKcJBVqXN4nx2JQ0aKyKIQ6tygKKt11gtfrwq2OqI+FK3lnIgq1gLTw/+XKov2KAydITHdm2dhJ+uL9P/R7zj+1LlfKNjr88xE+/aE6aQV4+XDo0bAdAz8DLvNescfITDgmpxywhg7roQLkVVZafGi5tTGNpP8Lv7mo7T13cMccwCKi+ad4oK6wfBPFNRna+4aXF9fj/sh9DkFvrAFD7xA4owLAybVOC34wswgi7r6pmzrMt/USgfHJq43jnzHL6nBz/V3vRTaVZQzAYpe+izOAghovIM4t8P/0ckaTWm8rorNfHmtUpeMsM9lfdsYhnBxkB7071GBuj0f7nfmlriiCezchPZrlol630dxCAVoPANRCmvQRfuKoyH9Zm8tizn7uIdNnNtoPv9z8DMIle7IvaclR1l/Gc+lLo9awcL7KAp2BEH5CJ+er9DeM5MIUIAe6OyDRQg/Nrg2q6/NY/gSJxtCmK0MQFnGXB9jGWn8kLJT79Klap2XM6Ftctzlhywgo6ZxvyqaBkyn6UtIqkrzXodIzuuijES9Id+/5cKd0arSNgd/L/wni4EZs3G6hy5j3L8DtIQMaMwH/DlfpvSogJyuP68VCFfMxrHYv2//jpqCGc+qC/3MG5w/O0qaGNLZ3CStcOZxYTMAueghP6NCvLAeDLB9IcNPYpbVGTJZ1qJvbtsCB6CP+fx8vJRf0VtOP+xeEv3em+qP+vy7XIo2yM2ppb9Oo9NajwKe9Bqqr+tf0asb8cYXeXxcggPQcZ2AGvltRZNp5nq8K/HDKFENzavZcK+nfLOuDkG6bLT3pezcclGVfzmc3tMfO+VyCcWfRMci3s7yE1e9QyktxiL4fGDv/DFKnL7a1c6ghbrNqZMutoLVOHvtlyqMsdv4UVsRNiPV4aqhjjvsOEJKyDuf9JtLZibtTdgwJo/2v/78hhdw72GzKdTD/tJ3+N/aOhcHErn/a2VgXre+J3/S8CNzU0PciIj/VxtH2+36SWpFT71INN1InHvg9zy4PQ6ZwitTkrSHm8JLspkeKaQfypDKDEnE6aKZ4IFk6Qb3MzpjiH79Dt3PzKjKofJyFRKSWr1Fg15qkVFq///wRwlO/3nUY5TPj+UW7uvHOOEIdTJ6R2ojhaKadJDx0xKK/fzNiyl+PJUgZt+evbr0uEPVbfkWN+uBkJJj+1TnhLq2wPu9uHr9Rel0MAOfh5WYpYPvcCpFBogS6R9Vd/xYNMs/rPk6f4sPfIaaZSxIGV4lGR3HSSxk5NVYHUXZ9UyrEfYy37WrumWEDfE/T+HfmlUn5Zyuom52Z74Pj6Ogj9fR9wS75NZIKdWZJsP9z3M3Q9Pyi0x3q36iT7X7PTy1gwKl+OYHCTIfESKkp1PjjxPvofS8vo74ZwvGnr8OVMZBva2e43VVQ/gi0L7Nn9Zu8Uq12AeMBLz99TFgTBT0fSrBtlsu+6Ch2dP97CVq2oF5strUuzN06uDmbF0sujOAyF8edwwc7E+nKKp+I/jcOvIHp9WIKON/WJaPFofYL8XeDEv/Rwei+diebeDF3xQL+Y5EKTBk+p3BwnzKsiv5GPP3UIZ5Nx3tUs48/0Kyfc8HL6O7qBnTmKk/vEggidjjVXkebzgIOs7VRmRYqOxco4ZGctnmkn9jxKIjFXEXGz0SWfarpHZ53r+jCp0oiYfpgHiaPLBdTuSQYRei3RqI89gVKyo9js+pVyqsdA0eSrY5GTCR8QBWAbY1Jr+yNzSo8jua6+nr/EyqXJeHx+7MwhwFK/pWYiv1ZwdhiZrCoUncKEcLGubHCLh9IBtj69Sovc5jHQfngjTxuiHImQi0f2bEvH/k8qdL2uQiJKQ0H1vP+TStDp7Dr8+/xH56tvq2X229qOCAH8i6JpvB5Q1voy16w5dVc+7gZb2/l5220Y37JHluhfYRboLevhfG/dppz0jZX+Y+c53z89mZJLtRis+fO+DysqLgmyhaq2gu8P/6hAMtROX+Qg6dOmgIaw9q5fDxvGqNHvLC510LKeSGcLWtM9NJQ+aiaqD/wQgB++g2okcLefmgGfkQWiuH8cYUX1MybEEGqTWnpgk13UCRPXk4dwIXfwvzHXxFI1v6G2hp6/ZY5tqxq1Iqz6/WaZAcC6kHgI4oG3L89Dfdu4h8gDbR5wFsL+cEC+r4xVWdwpEsUh3/UD/9o6L+9GDbSH2QeZ0/iuLPkjAD7yy2BliheObfwXdeffb7Zly8ytmd/8z8DaWdVWPNzV6nfbDktLydJL9QbF0FQzqbqHKW7biDz/nZFYyf/r8eLfRYTj+U0NmUdn2Pi24KTuoS5+KTJ/Jq3iPjYEe9aSMyszUrgg+WUZzL9+mZ8fnJ68iDBlyfAAApe85b1CPFEpQ2dDyTHkQAhJ8Si40S4ZjyJ39V1vq/H6x+YFAPfFwb/tPXV7cXexyJJ8RtNgu4SWosfl1KyQefS5vOkbatRp/zGk2SVjBGiFKlJw4iJGV0EeT/d1clz1q4CvEQX/tcynq2pMZ6INIglfdNVgc461Otm32kxhQ/46zZxUSU0cXsmr9hTZaLZSDKgiOfPEdft86+bvwS1OmN5cePvdyut8xpy++tQpW4aLivuuD2xZxqMdKeoPtFzLInDceRh6g59r+k9tYDPYtT8ZWDmvn3HWILLcsIpJLAmeDlrOilQEujf9sfKc0jCfn6OaAAAAA==" alt="Lantern Engine" width="56" height="56">
+    <span><b>Lantern Engine</b><small>Help &amp; FAQ</small></span>
+  </a>
+  <div class="tabs" role="tablist" aria-label="Pages">
+    <button type="button" role="tab" data-view="help" class="active">Help &amp; FAQ</button>
+    <button type="button" role="tab" data-view="beta">Beta guide</button>
+  </div>
+  <input class="search" id="search" type="search" placeholder="Search: crash, mods, FPS…" aria-label="Search the questions on this page">
+  <p class="side-title">On this page</p>
+  <nav class="side-nav" data-view="help" aria-label="Help sections">
+    <a href="#report">Before you post</a>
+    <a href="#start">Getting started</a>
+    <a href="#graphics">Graphics guide</a>
+    <a href="#questions">Common questions</a>
+    <a href="#fix">Fixing problems</a>
+    <a href="#players">What players asked</a>
+    <a href="#known">Known issues</a>
+  </nav>
+  <nav class="side-nav" data-view="beta" aria-label="Beta sections" hidden>
+    <a href="#beta">What the beta is</a>
+    <a href="#beta-join">Join or leave</a>
+    <a href="#beta-current">Current beta</a>
+    <a href="#beta-report">Reporting beta problems</a>
+  </nav>
+  <div class="side-links">
+    <a href="https://discord.gg/d3Uv3Cfr5x">Discord</a>
+    <a href="https://github.com/Awakenchan/LanternEngine/releases">Downloads</a>
+    <a href="#report">Report a problem</a>
+  </div>
+</aside>
+
+<main>
+<div class="content">
+
+<!-- ======================= HELP & FAQ ======================= -->
+<div class="view" data-view="help">
+  <header class="top">
+    <img class="hero-logo" alt="" width="88" height="88">
+    <p class="eyebrow">Lantern Engine</p>
+    <h1>Help &amp; FAQ</h1>
+    <p class="tagline">Answers to what players ask most, how to fix the common problems, and how to report a new one. Things marked <span class="tag beta">beta</span> are in the current beta only, see the <a href="#beta">Beta guide</a>.</p>
+    <div class="links">
+      <a class="button primary" href="https://discord.gg/d3Uv3Cfr5x">Discord</a>
+      <a class="button" href="https://github.com/Awakenchan/LanternEngine/releases">Downloads</a>
+      <a class="button" href="#report">Report a problem</a>
+    </div>
+    <p class="legal"><b>You need your own legal copy of Bloodborne.</b> Lantern Engine contains no game files, and nobody here shares or links to them. Dump the game from your own PS4 and your own disc or purchase (see <a href="#legal">Is this legal?</a>). Don't ask for game files in the Discord: the bot mutes it (see <a href="#discord-words">which words</a>).</p>
+  </header>
+  <p class="empty">Nothing matches that. Try another word, or ask in the Discord.</p>
+
+  <section id="report">
+    <h2>Before you post a problem</h2>
+    <p class="lead">Send the log. Without it nobody can tell what went wrong.</p>
+
+    <details open>
+      <summary>The game crashed: copy the crash report</summary>
+      <div class="answer">
+        <p>When the game crashes, the launcher shows <b>The game crashed</b> with a short reason. Press <span class="path">Copy report</span> and paste it into your post. It has your version, GPU, driver, settings and the end of the log.</p>
+        <p><span class="path">Use safe mode</span> starts the next run with mods and the experimental engine options off. If the game works in safe mode, one of those caused it.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I copy or export my log?</summary>
+      <div class="answer">
+        <p>In the launcher: <span class="path">More › Log</span>, then <span class="path">Copy</span> or <span class="path">Export…</span>. Do it right after the problem happens, before you start the game again.</p>
+        <p>The log of the last session is also saved as <code>logs\last_session.log</code> in the Lantern Engine folder.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>What else to put in a report</summary>
+      <div class="answer">
+        <ul>
+          <li>The log or crash report (above).</li>
+          <li>What you were doing: where in the game, what you pressed, how long it ran.</li>
+          <li>For anything visual (flicker, missing or stretched textures): a short video or a screenshot.</li>
+          <li>Whether it also happens with mods off.</li>
+        </ul>
+        <p>Post it in the <b>#issues</b> forum on the <a href="https://discord.gg/d3Uv3Cfr5x">Discord</a>, one thread per problem.</p>
+      </div>
+    </details>
+
+    <details id="discord-words">
+      <summary>Why was my Discord message deleted, or why was I muted?</summary>
+      <div class="answer">
+        <p>The Discord's bot deletes messages with these words and <b>mutes the sender for 60 minutes</b>, because they are how people ask for pirated game files:</p>
+        <ul>
+          <li>Anywhere in a message, even inside another word: <code>eboot</code> <code>eboot.bin</code></li>
+          <li>As a word on its own: <code>dump</code> <code>download</code> <code>game files</code> <code>how to download files</code> <code>rom</code> <code>boot</code></li>
+        </ul>
+        <ul>
+          <li>Say "game folder" or "my copy of the game" instead.</li>
+          <li>"Download" counts too, even for the launcher: say "get it from the releases page".</li>
+          <li>Send logs as a file, not pasted lines: <span class="path">More › Log › Export…</span>, or <span class="path">Copy report</span> after a crash (Discord turns a long paste into a file). Log lines contain some of these words.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <section id="start">
+    <h2>Getting started</h2>
+    <p class="lead">Lantern Engine runs your own copy of Bloodborne on a Windows or Linux PC.</p>
+
+    <details id="legal">
+      <summary>Is this legal?</summary>
+      <div class="answer">
+        <p>Lantern Engine is free, open-source software (GPL). It contains no game files: no Bloodborne data, no PS4 system files, nothing from Sony or FromSoftware. It is not affiliated with either of them.</p>
+        <p>To play, you need <b>your own legal copy</b> of Bloodborne, dumped from <b>your own PS4</b> with your own disc or digital purchase, plus the 1.09 update. Downloading the game from the internet instead of dumping your own copy is piracy, and this project does not support it: nobody here shares or links to game files. Don't ask for them in the Discord.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>What do I need?</summary>
+      <div class="answer">
+        <ul>
+          <li>Your own legal copy of <b>Bloodborne CUSA03173</b> with the <b>1.09</b> update, dumped and decrypted from your own PS4 (the folder with <code>eboot.bin</code> and <code>sce_module</code>). No game files come with Lantern Engine.</li>
+          <li>Windows 10 or 11, or Linux (Ubuntu 24.04 or newer, Arch, Fedora, SteamOS, Bazzite and similar).</li>
+          <li>A Vulkan graphics card with a current driver. Players run it on NVIDIA GTX 10 series and newer, and AMD RX 400 series and newer.</li>
+          <li>The game takes about 6 GB of memory (RAM plus page file), about 10 GB above 1080p. 16 GB of RAM is comfortable.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I install it and play?</summary>
+      <div class="answer">
+        <ol>
+          <li>Download the latest package from <a href="https://github.com/Awakenchan/LanternEngine/releases">Releases</a> and unpack it somewhere you can write to (not <code>Program Files</code>, not a OneDrive folder).</li>
+          <li>Open <b>Lantern Engine.exe</b> (on Linux: <b>Lantern Engine</b>).</li>
+          <li>On the Play page, choose the game folder.</li>
+          <li>Accept <b>Settings for this PC</b> when the launcher offers them. You can get them again later from <span class="path">Graphics › Best settings for this PC › Recommend…</span></li>
+          <li>Press <b>Play</b>.</li>
+        </ol>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I update?</summary>
+      <div class="answer">
+        <p>The launcher updates itself and the engine: <span class="path">Settings › Updates</span>. Your settings, saves, mods and logs are kept. To get test builds early, see the <a href="#beta-join">Beta guide</a>.</p>
+        <p>If the Play page shows <b>Engine update available</b>, press <span class="path">Update engine</span>. Playing on an old engine means the crash fixes since then are missing.</p>
+        <p>On Linux the launcher updates itself too <span class="tag beta">beta</span>. Older Linux packages are updated by downloading the new one.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Does it work on Linux?</summary>
+      <div class="answer">
+        <p>Yes. Download the <code>linux-x64.tar.gz</code> package, unpack it, and open <b>Lantern Engine</b>, or run <code>./lantern.sh /path/to/CUSA03173</code> from a terminal. It runs natively on Wayland and X11.</p>
+        <p>DLSS Super Resolution works on Linux on RTX cards with NVIDIA's driver <span class="tag beta">beta</span>. DLSS Frame Generation is Windows only.</p>
+      </div>
+    </details>
+  </section>
+
+  <section id="graphics">
+    <h2>Graphics settings guide</h2>
+    <p class="lead">Not sure what to pick? Start with <span class="path">Graphics › Best settings for this PC › Recommend…</span> and change things from there.</p>
+
+    <details open>
+      <summary>Which upscaler should I use?</summary>
+      <div class="answer">
+        <p><span class="path">Graphics › Upscaler</span>. The upscaler renders the game below your screen's resolution and rebuilds a sharp image, which gives you more FPS.</p>
+        <div class="table-wrap">
+        <table>
+          <tr><th>Your graphics card</th><th>Best choice</th></tr>
+          <tr><td>NVIDIA RTX (20 series and newer)</td><td><b>DLSS</b></td></tr>
+          <tr><td>AMD RX 9000 series</td><td><b>FSR 4</b></td></tr>
+          <tr><td>Other GPUs with the needed Vulkan features</td><td><b>FSR 4.1.1</b> (experimental; the launcher says if your GPU can run it)</td></tr>
+          <tr><td>Any other card</td><td><b>FSR 3</b></td></tr>
+          <tr><td>Fast card, sharpest image without upscaling</td><td><b>DLSS</b> or <b>FSR</b> with the <b>Native AA</b> preset, or <b>TAA</b></td></tr>
+        </table>
+        </div>
+      </div>
+    </details>
+
+    <details>
+      <summary>Quality preset: Native AA, Quality, Balanced, Performance…</summary>
+      <div class="answer">
+        <p><span class="path">Graphics › Quality preset</span> sets how far below your screen the game renders:</p>
+        <ul>
+          <li><b>Native AA</b>: no upscaling, only anti-aliasing (with DLSS this is DLAA). Best image, lowest FPS.</li>
+          <li><b>Quality (x1.5)</b> and <b>Balanced (x1.7)</b>: a good mix for most PCs.</li>
+          <li><b>Performance (x2)</b> and <b>Ultra Performance (x3)</b>: for slower cards, or 4K screens.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Output resolution</summary>
+      <div class="answer">
+        <p><span class="path">Display › Output resolution</span> is the size of the finished picture, usually your screen's. The upscaler renders below it and fills it in. On cards with 3–4 GB of video memory, 1080p is the safe choice.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Frame rate: 30, 60, 90, 120, 144 or Uncapped?</summary>
+      <div class="answer">
+        <p><span class="path">Display › Frame rate</span>. 30, 60, 90, 120 and 144 are the game's own frame-rate patches. Pick the one your PC holds steadily that is not above your monitor's refresh rate.</p>
+        <ul>
+          <li><b>Uncapped</b> has no fixed rate, but it never goes above your monitor's refresh rate: on a 60 Hz monitor it stops at 60. To go past it anyway, add <code>BB_CAP_TO_REFRESH=0</code> in <span class="path">Settings › Extra variables</span>.</li>
+          <li>Uncapped can freeze at the end of a boss intro (Vicar Amelia's). 120 and 144 use another patch and don't.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Presentation mode (VSync)</summary>
+      <div class="answer">
+        <p>On the <b>Display</b> page, <b>Presentation mode</b>:</p>
+        <ul>
+          <li><b>Mailbox</b> (default): low latency without tearing.</li>
+          <li><b>FIFO (VSync)</b>: classic vertical sync. On a <b>60 Hz monitor at 60 FPS</b> it can be smoother than Mailbox, which drops a frame now and then.</li>
+          <li><b>FIFO Relaxed</b>: VSync that tears instead of stuttering when a frame is late.</li>
+          <li><b>Immediate</b>: lowest latency, may tear.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Frame generation and NVIDIA Reflex</summary>
+      <div class="answer">
+        <p><span class="path">Graphics › Frame generation</span> adds generated frames between the game's own. It needs an upscaler (or TAA) on.</p>
+        <ul>
+          <li><b>DLSS</b> frame generation: NVIDIA RTX 40 and 50 series, with Hardware-accelerated GPU scheduling on in Windows. RTX 50 can generate several frames, and <b>dynamic</b> frame generation picks how many for your refresh rate <span class="tag beta">beta</span>.</li>
+          <li><b>FSR 3.1</b> frame generation: any GPU. Not in menus, movies or with HDR output.</li>
+          <li><b>NVIDIA Reflex</b> lowers input lag, and also keeps NVIDIA cards at their boost clocks.</li>
+        </ul>
+        <p>Frame generation feels best when the game already runs at 50–60 FPS or more.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>HDR</summary>
+      <div class="answer">
+        <p><span class="path">Display › HDR output</span>. Windows HDR has to be on (Windows Settings › Display › Use HDR). Turning it on or off applies after restarting the game.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>In-game menu (Insert or L3 + R3)</summary>
+      <div class="answer">
+        <p>Press <b>Insert</b> on the keyboard, or <b>L3 + R3</b> on a controller, to change graphics settings while you play: upscaler, sharpening, the FPS counter and more. Most changes apply at once.</p>
+      </div>
+    </details>
+  </section>
+
+  <section id="questions">
+    <h2>Common questions</h2>
+
+    <details>
+      <summary>Why does the game stutter when I enter a new area?</summary>
+      <div class="answer">
+        <p>The first time the game shows something new, the engine builds its shaders, which can cause a short hitch. It only happens once: shaders are saved and built at the start the next time.</p>
+        <ul>
+          <li>After an engine update the first start takes longer: it rebuilds the saved shaders before the game starts, so you don't get them as stutters in play.</li>
+          <li>A small <b>Building shaders</b> note shows in the corner while it happens <span class="tag beta">beta</span>. A stutter <i>with</i> the note is shader building; one <i>without</i> it is loading.</li>
+          <li>You can share shaders: <span class="path">Settings › Shader catalog › Export catalog</span>, and a friend with the same kind of graphics card adds it with <span class="path">Add catalog</span>.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Should I clear the shader cache?</summary>
+      <div class="answer">
+        <p>Usually not. A new engine version recompiles it by itself. Clear it (<span class="path">Settings › Shader cache › Clear</span>) only if something draws wrong in every save, such as missing skin or hair. The next start compiles everything again and stutters for a while.</p>
+      </div>
+    </details>
+
+    <details id="share-catalog">
+      <summary>How do I share my shader catalog?</summary>
+      <div class="answer">
+        <p>Your shaders go into the next release, so players with the same kind of graphics card stutter less the first time they visit an area.</p>
+        <ol>
+          <li>Play for a while first: the more areas you have visited, the more your catalog holds.</li>
+          <li>In the launcher: <span class="path">Settings › Shader catalog › Export catalog</span>, and save the .zip.</li>
+          <li>Send the .zip as a DM to <b>awakenkn</b> on <a href="https://discord.gg/d3Uv3Cfr5x">Discord</a>, and say which graphics card you have (for example "RTX 4070" or "RX 7800 XT").</li>
+        </ol>
+        <p>Catalogs from AMD and Intel cards help the most: Intel cards don't have one yet.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I play with a friend (co-op)?</summary>
+      <div class="answer">
+        <ol>
+          <li>Both players: in the game's <b>Settings › Network</b>, set the same <b>Password Matching</b>, and <b>Matching Regions</b> to <b>Worldwide</b>.</li>
+          <li>The host rings a <b>Beckoning Bell</b>, the helper rings a <b>Small Resonant Bell</b>. Both can be bought in the Insight shop.</li>
+          <li>Wait for the bells to resonate. It can take a while.</li>
+        </ol>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I play online (The Hunter's Dream)?</summary>
+      <div class="answer">
+        <ol>
+          <li>In the launcher open the <b>Online</b> page. If you have no account yet, press <b>Open website</b> and sign up on The Hunter's Dream.</li>
+          <li>Connect your Hunter's Dream account on the Online page.</li>
+          <li>Start the game and choose <b>Play Online</b>. A welcome message appears when you are connected.</li>
+        </ol>
+        <p>Server problems go to The Hunter's Dream's own Discord.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Does Seamless Co-op work?</summary>
+      <div class="answer"><p>Not yet.</p></div>
+    </details>
+
+    <details>
+      <summary>How do I install mods?</summary>
+      <div class="answer">
+        <p>Unpack each mod into its own folder inside <code>mods</code>, so that it holds <code>dvdroot_ps4</code>:</p>
+        <p><code>mods\Mod name\dvdroot_ps4\chr\…</code></p>
+        <p>Then turn it on and set the load order in <span class="path">More › Mods</span>. The lowest mod in the list wins when two mods change the same file. ZIP or 7z archives have to be unpacked first. Mods that replace <code>eboot.bin</code>, DLL injectors and script plugins don't work.</p>
+        <p>Mods also work on exFAT and FAT32 drives <span class="tag beta">beta</span>.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I change keys?</summary>
+      <div class="answer">
+        <p>In <b>Controls</b>, click an action and press the new key or mouse button.</p>
+        <p>The <b>+</b> next to an action adds another key or a combination like <b>Shift+E</b> or <b>Ctrl+Mouse4</b>, up to five per action <span class="tag beta">beta</span>. A combination wins over its plain key.</p>
+        <p>Mouse sensitivity goes down to <b>-10</b> for high-DPI mice, each step below 0 is 20% slower <span class="tag beta">beta</span>.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>The Debug Menu won't start</summary>
+      <div class="answer">
+        <p>The debug menu needs the font files <code>DbgFont14h.ccm</code> and <code>DbgFont14h.tpf</code> in <code>dvdroot_ps4\font</code>, either in your game folder or in an enabled mod (<span class="path">More › Mods</span>). The fonts are on <a href="https://www.nexusmods.com/bloodborne/mods/253">Nexus Mods</a>.</p>
+        <p>They have to be the packed files. A <code>DbgFont14h-tpf-dcx</code> folder (unpacked with WitchyBND) does not work: repack it. Don't copy them into an <code>out\mod-game-…</code> folder. The engine makes that folder new at every start.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Trophies</summary>
+      <div class="answer">
+        <p>The <b>Trophies</b> page lists them. You can use your own trophy sound and set its volume. Trophy pictures, and sounds in MP3 or MP4/M4A as well as WAV, are in the beta <span class="tag beta">beta</span>.</p>
+      </div>
+    </details>
+  </section>
+
+  <section id="fix">
+    <h2>Fixing problems</h2>
+    <p class="lead">First steps for almost anything: update the launcher and engine, update your GPU driver, and try once with mods off (or <span class="path">Use safe mode</span> after a crash).</p>
+
+    <details>
+      <summary>The game opens, shows a black screen and closes</summary>
+      <div class="answer">
+        <ul>
+          <li>Check that the engine is current: the Play page shows <b>Engine update available</b> when it isn't.</li>
+          <li>Update the graphics driver.</li>
+          <li>An antivirus can block the engine's files. Allow the Lantern Engine folder in it.</li>
+          <li>Don't install into <code>Program Files</code> or a OneDrive folder.</li>
+          <li>If it started after a beta update, check the <a href="#beta-current">Beta guide</a>: it may be a known beta problem, and you can go back to the version before.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>"The graphics driver stopped responding" (0x17)</summary>
+      <div class="answer">
+        <p>The GPU hung or lost the game's memory.</p>
+        <ol>
+          <li>Update to the newest version and update the NVIDIA or AMD driver.</li>
+          <li>If it keeps happening, try once with <code>BB_GUEST_IN_PLACE=0</code> in <span class="path">Settings › Extra variables</span>, and say in your report whether it helped.</li>
+        </ol>
+      </div>
+    </details>
+
+    <details>
+      <summary>"Out of video memory", or crashes on a 3–4 GB graphics card</summary>
+      <div class="answer">
+        <ul>
+          <li>Lower <span class="path">Display › Output resolution</span> to 1080p or less, and use a lower <b>Quality preset</b> (Performance).</li>
+          <li>Use fewer texture or model mods: HD texture packs need much more video memory.</li>
+          <li>Close browsers and recorders while playing.</li>
+          <li>Keep <span class="path">More › Engine › Use more VRAM for textures</span> off on cards with 4–6 GB.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>"Windows could not give the game its memory" at the start</summary>
+      <div class="answer">
+        <p>The game needs about 6 GB of RAM plus page file (about 10 GB above 1080p).</p>
+        <ul>
+          <li>A game left running in the background holds it: end <code>bb-probe.exe</code> in Task Manager (Details), or restart the PC.</li>
+          <li>Set the page file to <b>System managed size</b>: Windows Settings › System › About › Advanced system settings › Performance Settings › Advanced › Virtual memory › Change.</li>
+          <li>Or choose a lower output resolution or upscaler preset.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>The game crashes while loading (missing or damaged game files)</summary>
+      <div class="answer">
+        <p>If the crash report mentions missing files or <b>FileTransferTask</b>, the game folder is incomplete or damaged. Turn mods off first. If it still crashes, dump or extract the game again (base game plus the 1.09 update), and keep it out of OneDrive.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Flickering, stretched or missing textures</summary>
+      <div class="answer">
+        <ul>
+          <li>Update to the newest version. The <a href="#beta-current">current beta</a> fixes shaders reading the wrong buffers, which caused stretched geometry and flicker, especially on older AMD cards (RX 400/500) and on NVIDIA.</li>
+          <li>If it happens in every save (missing skin or hair), clear the shader cache once: <span class="path">Settings › Shader cache › Clear</span>.</li>
+          <li>Try with mods off, and with frame generation off.</li>
+          <li>Still there? Post a short video and your log.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Small stutters at 60 FPS on a 60 Hz monitor</summary>
+      <div class="answer">
+        <p>Set <b>Presentation mode</b> to <b>FIFO (VSync)</b> on the Display page. At 60 FPS on a 60 Hz screen, Mailbox can drop a frame every so often, and that feels like a micro-stutter. Stutters the first time you see an area are shader building, see <a href="#questions">Why does the game stutter</a>.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>The game is stuck at 30 FPS</summary>
+      <div class="answer">
+        <p>The game runs slower while its window is in the background, to save power. Click into the game window. If it stays slow after you switch back, that is fixed in the <a href="#beta-current">current beta</a>.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>"Cannot create save file"</summary>
+      <div class="answer">
+        <p>The saves folder can't be written. Move Lantern Engine out of OneDrive and other synced folders, and out of <code>Program Files</code>. If Windows' <b>Controlled folder access</b> is on, allow the Lantern Engine programs in it.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Mods don't load ("cannot link … dvdroot_ps4")</summary>
+      <div class="answer">
+        <p>This happens on exFAT and FAT32 drives: move the game and Lantern Engine to an NTFS drive, or use the <a href="#beta-current">current beta</a>, which reads mod files in place there. Also check that each mod's folder holds <code>dvdroot_ps4</code> (see <a href="#questions">How do I install mods?</a>). The start's log says how many game files each mod replaced.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Linux: the window closes at the start on Wayland</summary>
+      <div class="answer">
+        <p>If the log says <i>Wayland display connection closed by server</i>, the compositor ended the connection, a driver and compositor mismatch (NVIDIA 615 drivers on KDE Plasma did this; 580 runs clean). Try another driver version, or start with <code>SDL_VIDEODRIVER=x11 ./lantern.sh</code> to run through XWayland.</p>
+      </div>
+    </details>
+  </section>
+
+  <section id="players">
+    <h2>What players asked</h2>
+    <p class="lead">Recent questions and reports from the Discord, with the answer.</p>
+
+    <details>
+      <summary>"Is there a guide for graphics settings?"</summary>
+      <div class="answer">
+        <p>Yes, see the <a href="#graphics">graphics settings guide</a>. The quickest start is <span class="path">Graphics › Best settings for this PC › Recommend…</span></p>
+      </div>
+    </details>
+
+    <details>
+      <summary>"After I downloaded the newest beta, I cannot launch the game"<span class="tag fixed">fixed in the beta</span></summary>
+      <div class="answer">
+        <blockquote>It opens, black screen, closes. (RX 9070 XT)</blockquote>
+        <p>An engine bug that hit AMD cards at every start of 0.9.37 beta 6. Fixed in the <a href="#beta-current">current beta</a>.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>"Game crash after 10 min, sometimes 1h later"<span class="tag fixed">likely fixed in the beta</span></summary>
+      <div class="answer">
+        <blockquote>The graphics driver stopped responding. (RTX 2070, RTX 3070 Ti, GTX 1660 Super)</blockquote>
+        <p>The <a href="#beta-current">current beta</a> fixes the likely cause. See also <a href="#fix">"The graphics driver stopped responding"</a>, and tell us if it still happens.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>"Uncapped seems locked at 60"</summary>
+      <div class="answer">
+        <p>Uncapped stops at your monitor's refresh rate on purpose (60 on a 60 Hz monitor). Add <code>BB_CAP_TO_REFRESH=0</code> in <span class="path">Settings › Extra variables</span> to go past it, or pick FIFO (VSync) for smoother 60.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>"Very small micro stutters when rolling or running"</summary>
+      <div class="answer">
+        <p>Mostly shaders built the first time something shows; they are built at the start from then on. At 60 FPS on a 60 Hz screen, try <b>FIFO (VSync)</b>.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>"Sensitivity slider doesn't accept negative values"<span class="tag fixed">fixed in the beta</span></summary>
+      <div class="answer"><p>Mouse sensitivity goes from -10 to 20 in the <a href="#beta-current">current beta</a>.</p></div>
+    </details>
+
+    <details>
+      <summary>"Can I bind more than one key, or Shift+key?"<span class="tag fixed">added in the beta</span></summary>
+      <div class="answer"><p>Yes: the <b>+</b> next to an action in Controls adds up to five keys, mouse buttons or combinations.</p></div>
+    </details>
+
+    <details>
+      <summary>"Debug Menu won't start even with the patch"</summary>
+      <div class="answer"><p>See <a href="#questions">The Debug Menu won't start</a>: the fonts have to be the packed files in <code>dvdroot_ps4\font</code> of the game folder or an enabled mod.</p></div>
+    </details>
+
+    <details>
+      <summary>"It uses the D-pad when I press WASD after a menu"<span class="tag open">looking into it</span></summary>
+      <div class="answer"><p>Tell us which menu or message pop-up it was, and send the log right after it happens.</p></div>
+    </details>
+
+    <details>
+      <summary>"Flickering and missing textures with the BB PC Remaster mod"<span class="tag tip">try the beta</span></summary>
+      <div class="answer"><p>Try the <a href="#beta-current">current beta</a> first: it fixes a shader bug behind flicker on NVIDIA. If it stays, try with frame generation off and post a short video.</p></div>
+    </details>
+  </section>
+
+  <section id="known">
+    <h2>Known issues</h2>
+    <p class="lead">Reported and not fixed yet. A log or video of any of these helps.</p>
+    <details open>
+      <summary>Being worked on</summary>
+      <div class="answer">
+        <ul>
+          <li>Falling snow missing in Cainhurst.</li>
+          <li>Grey flicker on textures in underground areas (GTX 1660 Ti).</li>
+          <li>Flashing on GTX 1070 Ti, and a blue image after fast travel.</li>
+          <li>A graphical glitch when fighting the slimes at the end of the DLC.</li>
+          <li>Flicker at the title screen on ultrawide monitors.</li>
+          <li>Crashes on graphics cards with 3 GB of video memory.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+</div>
+
+<!-- ======================= BETA GUIDE ======================= -->
+<div class="view beta" data-view="beta" hidden>
+  <header class="top">
+    <img class="hero-logo" alt="" width="88" height="88">
+    <p class="eyebrow">Lantern Engine</p>
+    <h1>Beta guide</h1>
+    <p class="tagline">Betas get the newest fixes and features first. How to get them, what the current one changes, and how to report what it breaks.</p>
+  </header>
+  <p class="empty">Nothing matches that. Try another word, or ask in the Discord.</p>
+
+  <section id="beta">
+    <h2>What the beta is</h2>
+    <details open>
+      <summary>Should I use the beta?</summary>
+      <div class="answer">
+        <p>Betas are test builds that come before a stable release. They have the newest fixes and features, and sometimes new bugs. Use one if a problem you have is fixed in it, or if you want to help test. Stay on stable if you just want to play.</p>
+        <p>Your settings, saves, mods and logs are kept when you switch between beta and stable.</p>
+      </div>
+    </details>
+  </section>
+
+  <section id="beta-join">
+    <h2>Join or leave the beta</h2>
+    <details open>
+      <summary>Get the beta</summary>
+      <div class="answer">
+        <ol>
+          <li>In the launcher: <span class="path">Settings › Updates</span>.</li>
+          <li>Set <b>Update channel</b> to <b>beta</b>.</li>
+          <li>Press <span class="path">Check now</span> and install the update.</li>
+        </ol>
+        <p>On Linux, the launcher updates itself from 0.9.37 beta 7 on. Before that, download the Linux package from <a href="https://github.com/Awakenchan/LanternEngine/releases">Releases</a> and unpack it over your folder.</p>
+      </div>
+    </details>
+    <details>
+      <summary>Go back to stable, or to the version before</summary>
+      <div class="answer">
+        <p>Set <b>Update channel</b> back to <b>stable</b> to get stable updates again. To install a particular version right away (for example the beta before, when a new one breaks your game): <span class="path">Settings › Updates › Version</span>, pick it, and press <span class="path">Install</span>.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- The newest beta's release notes replace this section when the page loads (the script at the
+       end, from GitHub's releases); what is written here shows without them (no JavaScript, offline,
+       GitHub's hourly limit). -->
+  <section id="beta-current">
+    <h2>Current beta: 0.9.37 beta 8</h2>
+    <p class="lead">What it changes since beta 7.</p>
+    <div id="beta-notes">
+    <details open>
+      <summary>Fixed</summary>
+      <div class="answer">
+        <ul>
+          <li><b>Ebrietas: the game crashing in her second phase</b> ("The graphics driver stopped responding"). Her effects fill a memory area the game keeps for graphics data; it is now 288 MiB instead of the game's 160.</li>
+          <li><b>Crash reports in the log were cut off</b> when the GPU crashed: they now finish and show more of what led to the crash.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Changed</summary>
+      <div class="answer">
+        <ul>
+          <li>Beta builds write frame statistics into the log (<span class="path">Settings › Frame statistics in the log</span>), so a crash log carries what is needed to find the cause.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Not tested yet</summary>
+      <div class="answer">
+        <ul>
+          <li>The Ebrietas fight itself has not been run by the developer with this beta.</li>
+          <li>Not started on AMD, Intel or an older NVIDIA card. Linux: built and its tests run, not played on a real Linux PC.</li>
+        </ul>
+      </div>
+    </details>
+    </div>
+    <p class="lead"><a href="https://github.com/Awakenchan/LanternEngine/releases">All releases and their notes</a></p>
+  </section>
+
+  <section id="beta-report">
+    <h2>Reporting beta problems</h2>
+    <details open>
+      <summary>What helps</summary>
+      <div class="answer">
+        <ul>
+          <li>The crash report or log (see <a href="#report">Before you post</a>). Both start with your version, so we know which beta it was.</li>
+          <li>Whether it also happened on the version before. If not, say so: it means the new beta caused it.</li>
+          <li>Post in <b>#issues</b> on the <a href="https://discord.gg/d3Uv3Cfr5x">Discord</a>.</li>
+        </ul>
+        <div class="note">If a beta breaks your game, go back to the version before (<a href="#beta-join">Join or leave the beta</a>) and keep playing; your saves are kept.</div>
+      </div>
+    </details>
+  </section>
+</div>
+
+<footer>
+  <img src="data:image/webp;base64,UklGRnAGAABXRUJQVlA4IGQGAABQHwCdASpgAGAAPm0wk0akIyGhK5dreIANiWcAy8X4O5OeQ04CBhtaHzuRP4peIs205b/ZeKntsuRBoAfm3/afkB8KmgH6n9gj9cF02KTYBdh/TlCpdZDrFYbQgbTpXyG7Myy1pjGNv/f2vLPlKOhRAHuXXRmPcb32tJ/yYrNpKwWMO5qnRVbnJ2EdZHY7TjOVcVTRcqi91Bl/Lf1EDmgRx17w6K43ytwMNsRQYFns8CDb55AgOapcghkQuutdN4x0zlBupb5cm9JlTzD17JqSGvlDYph+wVFonBlrdsFDPSEg8wQVfXRgdELaCBT0ohNb0WBBs1OrpMmsfG0k5BBLFCUAAP7+PtHxc1Z6b137wEg1K6wAb2pz1y28OOag6+dKK/N+l+Jm0rNDrhkp8j9gT5m29VZryIpNqppFcvvN8YI1MtEHoUC9XBYcqgYavpGjuN6M+tuNpq0N1rZgOw8UWbn7n2+CA9pcn7vRu+bPO/KLN1eF8uhiAx8aH0PF7OdEInEzZh9/cTRDfkajr24YWkHXDW9nLS5NXXESznQ+QB3cgh7hcfPOmWIz9aJCpq9hAF+8xgPtB/RsFp/NSffqwh9esEp+06HMfxdbh49ej8/vhvSuIAVTv/ox+3IV/UcnVT/viUKFuqwJl4HMlLcOFt2toFKqHpqWdlw6746kwMP/Akz3jkGaA9NijbiEBvoPxESfxDM6LzYEL0B83U8h6SwCIR15v5ge4TROl3yoWJ9YA/T8pCoJMLq1Pn8pswwCscMpqtCqngZVIrnrXPvsQfLejtXTM53ZwP5ToBo72V9mZUn75qqU2aFuU7ZfDc1GqKbetBVTyofbKN0gWgzcN196HXysSOdP8n37r5Ju2RC3ghpA9+1cwZHKiEqCdH2nJvsH2p93lsL4GNkHBqqKQvzu+/viK3THcclOrU8zoojC2qaR0hk8mZSGsrJ3sogiMZc6ZA9L8N8FG7s0oLUVMXlALsVYZdv/Q/VhIrTQ2U0tngzGMH2h8Xgbp9eHin/4r0YYEtltovihO0rJDfHsNNzQ2x4WwutRGwRyCSokI+mJpS/s+CqGhzIZCyDQfV2w7n+EvCZB7Kc47boSBhlChr2r6pxUVUb5eflDMk6rRyJ3/RZ1sUan20TUkM2ZMh8NFUJdD8gEACe/22Sqj/0RcxtMBFPMteHnOwIvQ8CzFQ3fzBccGkHl28AYFHzuzNEpBeihbPoHQ1rjx7z2palW1XSpD8Gx7hNEGr1u9i8WsWGOTNmGreUSH8VzSa6KPkzcZNO4G4CFeXBa/jHeCf2WscZJ8B+5pzTwUCzkOkklGuKCYvMtebDFk2BRVChr4HtAfgrb7q+P7Hh0fNNysITLlapCBQGaYRK/0iUW2L9yDVge1c+JrzqyULq4e/GS/78jNVfHFSeN8DKiGyVrS8hhkxWnTsOBZyVnWXvDF+2BFT/UmtQV7eFa2nELAMd1lAbf2HcGcj6hH0Bb1m656gV28QDfwnMqa1xB1KCaXYEb7eFqMsFQUd07ZQA/w/8Ju1//IMioKB8Zm0pW8Vj8U62Gzo5KZ8GUbQGUeZ+WP/kr3z0pZZJFjyFYEvmbGg/iz6Mjgc2y4vziYcIL3lzfgSoUvpEPdS7j6BNWnz13gvtjhoFGeBXgpbKJ9LNrgbgv5qa2F3hXK6TdY+0+Z9S+CVc9YrT65W0+JJhLmKVHM3VoycodTmmzmfT/XghJaYDaAN0B44aTHQQk9NLLuSMoVRQtvcgep+uOKLVoY7yWBcWq9cfkH3m7zp6/dGtstsZ3x0+SBqH9Y92UeWNdIL48kvvq7gfv/NBjqH72U3gs/htF3gAAvSl1Qnkmx0tauU8VIJQYl23s6/30dUPmrJJkJjosEr2w8ZxeA37tqwGjTIeAodaphJZd2HOOrqp3WoCnA+0FEVB7a55Liut46H/aB9xljpTQ8Q5ecI1bYoJ/mG/yewhP0cbVZM+2o3wpqt+c1Gl/NZCy59xpPSf/HYPfPefhuhEZ1b/2//+mLioU22I3nyKAUHNpxyr5YE1V2QqQt0r5wUrlpVEI/Pj5dLdfp4oeQvotwAfbSPUeuRHKNRJJCbmQadhMglSmAPuioR6Vc9JTIeT++qL+f+YNzpCd9BX4g3vc+SxlUYRu1bOh13R0aUmtIfe9Jq5fYxHOO4W4jwYSFhAA" alt="" width="48" height="48">
+  <span>Lantern Engine is free, open-source software, not affiliated with Sony Interactive Entertainment or FromSoftware. It contains no game files: you need your own legal copy of Bloodborne. Bloodborne is a trademark of Sony Interactive Entertainment.</span>
+</footer>
+</div>
+</main>
+
+<script>
+(function () {
+  var main = document.querySelector('main');
+  var search = document.getElementById('search');
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs button'));
+  var views = Array.prototype.slice.call(document.querySelectorAll('.view'));
+  var navs = Array.prototype.slice.call(document.querySelectorAll('.side-nav'));
+  var current = 'help';
+
+  Array.prototype.forEach.call(document.querySelectorAll('.hero-logo'), function (img) {
+    img.src = document.getElementById('logo').src;
+  });
+
+  function viewOf(element) {
+    var view = element && element.closest ? element.closest('.view') : null;
+    return view ? view.getAttribute('data-view') : null;
+  }
+
+  // Shows one page (Help & FAQ or Beta guide) and its menu.
+  function show(name) {
+    if (name === current) return;
+    current = name;
+    views.forEach(function (v) { v.hidden = v.getAttribute('data-view') !== name; });
+    navs.forEach(function (n) { n.hidden = n.getAttribute('data-view') !== name; });
+    tabs.forEach(function (t) { t.classList.toggle('active', t.getAttribute('data-view') === name); });
+    main.classList.toggle('beta', name === 'beta');
+    if (search.value) { search.value = ''; filter(); }
+    mark();
+  }
+
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      var name = t.getAttribute('data-view');
+      show(name);
+      history.replaceState(null, '', name === 'beta' ? '#beta' : location.href.split('#')[0]);
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  });
+  document.querySelector('.side-brand').addEventListener('click', function (e) {
+    e.preventDefault();
+    show('help');
+    history.replaceState(null, '', location.href.split('#')[0]);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  });
+
+  // A link to a section of the other page switches to it first.
+  function follow(hash, smooth) {
+    var target = hash && hash.length > 1 ? document.getElementById(hash.slice(1)) : null;
+    if (!target) return false;
+    show(viewOf(target) || 'help');
+    target.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
+    return true;
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
+    if (!a || a.classList.contains('side-brand')) return;
+    var hash = a.getAttribute('href');
+    if (follow(hash, true)) {
+      e.preventDefault();
+      history.replaceState(null, '', hash);
+    }
+  });
+  window.addEventListener('hashchange', function () { follow(location.hash, true); });
+
+  // Search: in the page shown, the questions with every word typed; empty sections hidden.
+  function filter() {
+    var view = views.filter(function (v) { return !v.hidden; })[0];
+    var words = search.value.toLowerCase().split(/\s+/).filter(Boolean);
+    var shown = 0;
+    Array.prototype.forEach.call(view.querySelectorAll('details'), function (d) {
+      if (d.dataset.open === undefined) d.dataset.open = d.open ? '1' : '';
+      var match = words.every(function (w) { return d.textContent.toLowerCase().indexOf(w) !== -1; });
+      d.style.display = match ? '' : 'none';
+      d.open = words.length ? match : d.dataset.open === '1';
+      if (match) shown++;
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('section'), function (s) {
+      s.style.display = s.querySelector('details:not([style*="none"])') ? '' : 'none';
+    });
+    view.querySelector('.empty').style.display = shown ? 'none' : 'block';
+    mark();
+  }
+  search.addEventListener('input', filter);
+
+  // The side menu marks the section at the top of the window.
+  var last = null;
+  function mark() {
+    var nav = navs.filter(function (n) { return !n.hidden; })[0];
+    var links = Array.prototype.slice.call(nav.querySelectorAll('a'));
+    var sections = links.map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); });
+    var at = 0;
+    sections.forEach(function (s, i) {
+      if (s && s.style.display !== 'none' && s.getBoundingClientRect().top <= 160) at = i;
+    });
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) {
+      for (var i = sections.length - 1; i >= 0; i--) {
+        if (sections[i] && sections[i].style.display !== 'none') { at = i; break; }
+      }
+    }
+    links.forEach(function (a, i) { a.classList.toggle('active', i === at); });
+    // Phones: the bar scrolls sideways to keep the marked section in view.
+    var key = current + at;
+    if (key !== last && nav.scrollWidth > nav.clientWidth) {
+      nav.scrollTo({ left: Math.max(0, links[at].offsetLeft - nav.offsetLeft - 12) });
+    }
+    last = key;
+  }
+  window.addEventListener('scroll', mark, { passive: true });
+  window.addEventListener('resize', mark);
+
+  if (!follow(location.hash, false)) mark();
+})();
+
+// Current beta: the newest release on GitHub, so this page follows every release by itself. Its
+// notes are Markdown: "### Fixed" headings, "- " bullets, **bold**, `code` and links. Anything
+// that fails leaves the section written above.
+(function () {
+  var section = document.getElementById('beta-current');
+  var notes = document.getElementById('beta-notes');
+  if (!section || !notes || !window.fetch) return;
+
+  function escape(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function inline(text) {
+    return escape(text)
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>')
+      .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2">$2</a>');
+  }
+  function version(release) {
+    return (release.name || release.tag_name || '').replace(/^v/, '');
+  }
+  // The notes as the section's blocks: what comes before the first heading as lead paragraphs,
+  // then one block per heading, the first two open.
+  function render(body) {
+    var lead = [], blocks = [], block = null;
+    body.replace(/\r/g, '').split('\n').forEach(function (line) {
+      var heading = line.match(/^#{2,4}\s+(.*)/);
+      var item = line.match(/^\s*[-*]\s+(.*)/);
+      if (heading) {
+        block = { title: heading[1], items: [], text: [] };
+        blocks.push(block);
+      } else if (item) {
+        (block ? block.items : lead).push(item[1]);
+      } else if (line.trim()) {
+        if (block && block.items.length) block.items[block.items.length - 1] += ' ' + line.trim();
+        else (block ? block.text : lead).push(line.trim());
+      }
+    });
+    var html = lead.map(function (p) { return '<p class="lead">' + inline(p) + '</p>'; }).join('');
+    blocks.forEach(function (b, i) {
+      html += '<details' + (i < 2 ? ' open' : '') + '><summary>' + inline(b.title) + '</summary><div class="answer">' +
+        b.text.map(function (p) { return '<p>' + inline(p) + '</p>'; }).join('') +
+        (b.items.length ? '<ul>' + b.items.map(function (li) { return '<li>' + inline(li) + '</li>'; }).join('') + '</ul>' : '') +
+        '</div></details>';
+    });
+    return blocks.length ? html : '';
+  }
+
+  fetch('https://api.github.com/repos/Awakenchan/LanternEngine/releases?per_page=10', {
+    headers: { Accept: 'application/vnd.github+json' }
+  }).then(function (response) {
+    return response.ok ? response.json() : null;
+  }).then(function (releases) {
+    if (!releases || !releases.length) return;
+    releases = releases.filter(function (r) { return !r.draft; });
+    var newest = releases[0];
+    var title = section.querySelector('h2');
+    var lead = section.querySelector('h2 + .lead');
+    if (newest && !newest.prerelease) {
+      // A stable release came after the last beta: it has everything the beta had.
+      title.textContent = 'No beta right now';
+      lead.innerHTML = 'The newest version is the stable <a href="' + escape(newest.html_url) + '">' +
+        escape(version(newest)) + '</a>; on the beta channel the launcher installs it too.';
+      notes.innerHTML = '';
+      return;
+    }
+    var html = newest && newest.body ? render(newest.body) : '';
+    if (!html) return;
+    title.textContent = 'Current beta: ' + version(newest);
+    var before = releases[1];
+    lead.innerHTML = before ? 'What it changes since ' + escape(version(before)) +
+      ' (<a href="' + escape(newest.html_url) + '">release notes</a>).' : '';
+    notes.innerHTML = html;
+  }).catch(function () {});
+})();
+</script>
+</body>
+</html>

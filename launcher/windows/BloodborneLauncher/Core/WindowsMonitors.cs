@@ -15,6 +15,9 @@ namespace BloodborneLauncher.Core
 
         public static List<Monitor> All()
         {
+#if AVALONIA
+            if (!OperatingSystem.IsWindows()) return Screens();
+#endif
             var result = new List<Monitor>();
             var previousDpi = SetThreadDpiAwarenessContext(new IntPtr(-4));
             try
@@ -40,6 +43,32 @@ namespace BloodborneLauncher.Core
             return result.OrderBy(m => int.TryParse(m.Number, out var n) ? n : int.MaxValue).ToList();
         }
 
+#if AVALONIA
+        /// <summary>Linux: the screens as the launcher's window sees them (X11 / XWayland outputs), by name.</summary>
+        private static List<Monitor> Screens()
+        {
+            var result = new List<Monitor>();
+            try
+            {
+                var screens = (Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+                    ?.MainWindow?.Screens;
+                var index = 0;
+                foreach (var screen in screens?.All ?? Array.Empty<Avalonia.Platform.Screen>())
+                {
+                    index++;
+                    var name = string.IsNullOrWhiteSpace(screen.DisplayName) ? $"Display {index}" : screen.DisplayName!;
+                    var b = screen.Bounds;
+                    result.Add(new(name, name, b.X, b.Y, b.Width, b.Height, screen.IsPrimary));
+                }
+            }
+            catch
+            {
+                // No screens to read: Default only.
+            }
+            return result;
+        }
+
+#endif
         public static Monitor? Resolve(string device, IReadOnlyList<Monitor> monitors) =>
             monitors.FirstOrDefault(m => string.Equals(m.Device, device, StringComparison.OrdinalIgnoreCase))
             ?? monitors.FirstOrDefault(m => m.Primary) ?? monitors.FirstOrDefault();

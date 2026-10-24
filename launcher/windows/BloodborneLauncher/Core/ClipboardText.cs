@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Threading;
+#if !AVALONIA
 using System.Windows;
+#endif
 
 namespace BloodborneLauncher.Core
 {
@@ -13,6 +15,14 @@ namespace BloodborneLauncher.Core
     {
         public static bool Set(string text)
         {
+#if AVALONIA
+            // Avalonia's clipboard belongs to a window and is asynchronous: the copy is started.
+            var lifetime = Avalonia.Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+            if (lifetime?.MainWindow?.Clipboard is not { } clipboard) return false;
+            _ = clipboard.SetTextAsync(text);
+            return true;
+#else
             for (int attempt = 0; attempt < 10; attempt++)
             {
                 try
@@ -27,12 +37,15 @@ namespace BloodborneLauncher.Core
                 }
             }
             return Holds(text);
+#endif
         }
+#if !AVALONIA
 
         private static bool Holds(string text)
         {
             try { return Clipboard.ContainsText() && Clipboard.GetText() == text; }
             catch (ExternalException) { return false; }
         }
+#endif
     }
 }

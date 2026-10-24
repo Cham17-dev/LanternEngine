@@ -12,33 +12,53 @@ static void Require(bool condition, string message)
 }
 
 // No App/Workspace instance, settings.Load/Save, game process or network access.
-Require(!Localization.IsChinese && Localization.T("Settings") == "Settings", "English must be the default");
+Require(Localization.Language == "en" && Localization.T("Settings") == "Settings", "English must be the default");
 Localization.Initialize("unknown");
-Require(Localization.T("Settings") == "Settings", "Unknown languages must fall back to English");
+Require(Localization.Language == "en" && Localization.T("Settings") == "Settings", "Unknown languages must fall back to English");
 var language = args.FirstOrDefault() ?? "en";
+Require(Localization.Languages.Any(l => l.Code == language), "Not a launcher language: " + language);
 Localization.Initialize(language);
-var chinese = language == "zh-CN";
-Require(Localization.T("Settings") == (chinese ? "设置" : "Settings"), "Language selection failed");
+var selected = Localization.Catalog(language);
+Require(Localization.Language == language, "Language selection failed");
+Require(Localization.T("Settings") == (selected?.GetValueOrDefault("Settings") ?? "Settings"), "Language selection failed");
 Require(Localization.T("untranslated fallback") == "untranslated fallback", "Missing-key fallback failed");
 
+// Every language file, whichever language this run selected: the list and the embedded files agree,
+// each parses, holds only strings zh-CN (the reference for the code's strings) has, and keeps their
+// placeholders and file-dialog patterns.
 var assembly = typeof(Localization).Assembly;
-using var resource = assembly.GetManifestResourceStream("BloodborneLauncher.Localization.zh-CN.json")!;
-var catalog = JsonSerializer.Deserialize<Dictionary<string, string>>(resource)!;
-static string[] Slots(string text) => Regex.Matches(text, @"(?<!\{)\{\d+(?:,[^}:]+)?(?::[^}]+)?\}(?!\})")
+const string prefix = "BloodborneLauncher.Localization.";
+var embedded = assembly.GetManifestResourceNames().Where(n => n.StartsWith(prefix) && n.EndsWith(".json"))
+    .Select(n => n[prefix.Length..^".json".Length]).Order(StringComparer.Ordinal).ToArray();
+var listed = Localization.Languages.Select(l => l.Code).Where(c => c != "en").Order(StringComparer.Ordinal).ToArray();
+Require(embedded.SequenceEqual(listed), $"Language list ({string.Join(", ", listed)}) and embedded files ({string.Join(", ", embedded)}) differ");
+Require(Localization.Languages.Select(l => l.Code).Distinct().Count() == Localization.Languages.Count, "Duplicate language code");
+var reference = Localization.Catalog("zh-CN")!;
+// Format slots ({0}, {0:HH:mm:ss}) and the named tokens the code replaces itself ({version}).
+static string[] Slots(string text) => Regex.Matches(text, @"(?<!\{)\{(?:\d+(?:,[^}:]+)?(?::[^}]+)?|[A-Za-z_]\w*)\}(?!\})")
     .Select(m => m.Value).Order(StringComparer.Ordinal).ToArray();
-foreach (var (english, translation) in catalog)
+var coverage = new List<string>();
+foreach (var code in listed)
 {
-    Require(Slots(english).SequenceEqual(Slots(translation)), "Changed format placeholders: " + english);
-    Require(!string.IsNullOrWhiteSpace(translation), "Empty translation: " + english);
-    if (english.Contains('|'))
+    IReadOnlyDictionary<string, string> catalog;
+    try { catalog = Localization.Catalog(code)!; }
+    catch (JsonException e) { throw new InvalidOperationException($"{code}.json does not parse: {e.Message}"); }
+    foreach (var (english, translation) in catalog)
     {
-        // File-dialog filters must retain their patterns, regardless of their display names.
-        var original = english.Split('|');
-        var localized = translation.Split('|');
-        Require(original.Length == localized.Length, "Changed filter structure: " + english);
-        for (var i = 1; i < original.Length; i += 2)
-            Require(original[i] == localized[i], "Changed filter pattern: " + english);
+        Require(reference.ContainsKey(english), $"{code}: string not in zh-CN (renamed or removed from the code?): {english}");
+        Require(Slots(english).SequenceEqual(Slots(translation)), $"{code}: changed format placeholders: {english}");
+        Require(!string.IsNullOrWhiteSpace(translation), $"{code}: empty translation: {english}");
+        if (english.Contains('|'))
+        {
+            // File-dialog filters must retain their patterns, regardless of their display names.
+            var original = english.Split('|');
+            var localized = translation.Split('|');
+            Require(original.Length == localized.Length, $"{code}: changed filter structure: {english}");
+            for (var i = 1; i < original.Length; i += 2)
+                Require(original[i] == localized[i], $"{code}: changed filter pattern: {english}");
+        }
     }
+    coverage.Add($"{code} {catalog.Count}/{reference.Count}");
 }
 CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
 var value = 12.5;
@@ -57,4 +77,9 @@ foreach (var profile in ControlProfiles.BuiltIns)
     Require(roundtrip.Bindings.OrderBy(x => x.Key).SequenceEqual(profile.Bindings.OrderBy(x => x.Key)), "Bindings changed on round-trip");
 }
 Require(PlayerProfiles.Main == "Main", "Saved main-profile identifier changed");
-Console.WriteLine($"PASS {language}: {catalog.Count} translations, placeholders, filters, language codes and input/profile round-trips; no game started.");
+// Segmented labels drop their bracketed detail however a language writes the brackets.
+Require(BloodborneLauncher.Views.Segmented.Short("Quality (x1.5)") == "Quality" &&
+        BloodborneLauncher.Views.Segmented.Short("品質（x1.5）") == "品質" &&
+        BloodborneLauncher.Views.Segmented.Short("울트라 성능(x3)") == "울트라 성능" &&
+        BloodborneLauncher.Views.Segmented.Short("Off") == "Off", "Segmented labels keep their bracketed detail");
+Console.WriteLine($"PASS {language}: translations ({string.Join(", ", coverage)}), placeholders, filters, language codes and input/profile round-trips; no game started.");

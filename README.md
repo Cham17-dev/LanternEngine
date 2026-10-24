@@ -30,33 +30,37 @@ Lantern's own README and credits are in [README-Lantern.md](README-Lantern.md).
    launcher's Display page. The HDR source is **HDR16** by default.
 4. Your saves stay in your old installation: select your existing user folder in the launcher's
    profile settings, or copy the saves with the game closed (keep a backup). Do not copy an old
-   engine, executables or a complete `bbport.ini` into this package.
+   engine, executables or a complete settings file into this package.
 
 The launcher updates itself from this fork's releases. Its settings are in
-`%APPDATA%\bbport-launcher-psychov30`; the game's settings are in `bbport.ini`, next to
-`Lantern Engine.exe`.
+`%APPDATA%\bbport-launcher-psychov30`; the game's settings are in `lantern.ini`, next to
+`Lantern Engine.exe` (Lantern 0.9.37 renamed it: a `bbport.ini` from an earlier version is
+copied to it once).
 
-**Updating from an earlier version:** your `bbport.ini` keeps the tone mapper saved in it
+**Updating from an earlier version:** your settings keep the tone mapper saved in them
 (PsychoV-30 before 0.9.36 beta 2). To get the new default, pick Vanilla+ in the in-game menu or
 the launcher, or use *Reset all*.
 
 ## Tips
 
-- **NVIDIA only for now.** On AMD and Intel GPUs, HDR16 does not start its tone mapping and the
-  game stays in its SDR look (not tested on them; Native and Expanded are not affected).
+- **Tested on NVIDIA only.** AMD and Intel GPUs should work since 0.9.37 beta 2 but have not
+  been tested: if HDR16 stays in SDR there, please send the log (`logs/last_session.log`).
 - Keep the game's own **Brightness** option (in its in-game settings) at **5**. It still changes
   the whole image, shadows first.
-- **Peak Brightness** follows what Windows reports for your display. Set it by hand if Windows
-  reports nothing or a wrong value.
+- **Peak Brightness** follows what Windows reports for your display (the launcher's "Peak
+  brightness from the display"). Moving the slider sets it by hand; its reset button goes back
+  to the display's.
 - Changing the HDR source (HDR16, Native, Expanded) needs a game restart; everything in the
   HDR16 menu applies live.
-- Frame generation (FSR 3.1) turns itself off while HDR output is on: this is a Lantern
-  limitation.
+- Frame generation in HDR16: **DLSS** frame generation works (NVIDIA RTX 40/50). FSR 3.1 frame
+  generation turns itself off in HDR16: it interpolates 8-bit frames, and HDR16's are 16-bit.
+- HDR16 uses Lantern's native shader compiler, its shader catalog and the same shader cache as
+  the other modes: switching the HDR source does not rebuild the shaders.
 
 ## Settings
 
 The in-game menu opens with **Insert** (or L3+R3). Every setting applies live and is saved in
-`bbport.ini`. Each preset keeps its own settings, except Preset and Settings Mode themselves.
+`lantern.ini`. Each preset keeps its own settings, except Preset and Settings Mode themselves.
 
 | Setting | Values (default) | What it does |
 |---|---|---|
@@ -67,7 +71,7 @@ The in-game menu opens with **Insert** (or L3+R3). Every setting applies live an
 | Target gamut | BT.2020, BT.709 (BT.2020) | PsychoV-30 only: the color volume it fits the picture into. |
 | Gamut Compression *(Intermediate)* | 0 to 1 (1) | PsychoV-30 only: how far colors outside the target gamut are brought into it. |
 | Compression *(Intermediate)* | 0 to 2, 0 = auto (1) | PsychoV-30 only: how fast lights reach the peak (higher is brighter and harder). |
-| Peak Brightness | 400 to 4000 nits (your display's) | The brightest your display can show; 1000 if Windows reports none. |
+| Peak Brightness | 400 to 4000 nits (your display's) | The brightest your display can show: the display's while not set by hand, 1000 if Windows reports none. |
 | Game Brightness | 80 to 500 nits (203) | The brightness of the game's white (the launcher's Paper white). |
 | UI Brightness | 48 to 500 nits (203) | The HUD and menus' white, whatever Game Brightness. |
 | **Color Grading** | | |
@@ -113,21 +117,26 @@ left as the game draws them: the HDR settings above replace them.
 
 ## Build from source
 
-This fork carries a reproducible patch over Lantern 0.9.36, not a copy of its engine:
-`ports/lantern/psychov30-engine.patch` (engine) and `psychov30-launcher.patch` (launcher). The
-GitHub workflow rebuilds Lantern's baseline from its pinned sources, applies the patches, builds
-the engine and launcher, checks the HDR shaders (against RenoDX's own code for the color bridge)
-and assembles the package with the official 0.9.36 runtime files. Pinned inputs:
+This fork carries reproducible patches over Lantern 0.9.37: `ports/lantern/psychov30-engine.patch`
+on Lantern's `engine/` (the engine's full source since 0.9.37) and `psychov30-launcher.patch` on
+its launcher (this fork's `launcher/` already holds it). The GitHub workflow copies the pinned
+Lantern's `engine/`, applies the patches, builds the engine and launcher, checks the HDR shaders
+(against RenoDX's own code for the color bridge) and assembles the package with the official
+0.9.37 runtime files (DLLs, models, shader catalogs). Pinned inputs:
 
-- LanternEngine `16d7b51a6da36bc60e1fd7c5bbd5b0fd52ddf2fd` (0.9.36).
-- DarkIzuku/bloodborne_pc `8ecba9a4abdd54747e31d7fee54982e422b5f8e2` (`v0.4.0-darkizuku-preview.1`).
+- LanternEngine `d901fbd2ea4bea114b37c26a2a9278d1e97f7b46` (0.9.37).
 - RenoDX `b6b32f47789ff9d0e640a0e0db6c9421b5397f34` (shader checks).
 
-HDR16 needs a GPU with 176 bytes of Vulkan push constants (checked at startup) and uses the
-legacy shader compiler (the engine turns native shaders off in this mode). Its composite reads
-the game shader's inputs per vertex (fragment-shader barycentrics), which the recompiler only
-emits on NVIDIA's driver; elsewhere the composite is not built ("inputs not interpolated per
-vertex" in the log).
+HDR16 needs a GPU with 176 bytes of Vulkan push constants (checked at startup). Its
+replacements of the game's composite, color table and copies are built for each way the game
+shader can be compiled: inputs read per vertex (fragment-shader barycentrics, the recompiler's
+exact interpolation on NVIDIA) or as the GPU interpolates them (Lantern 0.9.37's hardware
+interpolation, AMD, Intel), and for the composite the constant buffer as a storage buffer
+(legacy compiler) or a uniform buffer (native compiler). The engine picks one per game shader and
+says which in the log. The shader cache holds the game's own shaders; HDR16 swaps its
+replacements in when they load, so all modes, Lantern's shader catalog and its cache recompiles
+(`bb-shader-lab.exe`) share it. With `BB_UBO_DWORDS=0` or `BB_UBO_EXACT=1`, HDR16 keeps the
+legacy compiler.
 
 ## Credits and licenses
 

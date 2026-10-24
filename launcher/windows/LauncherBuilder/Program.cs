@@ -204,7 +204,7 @@ internal static class Program
     {
         Step($"Building {exeName}");
         RequireDotnet();
-        var output = Path.Combine(Path.GetTempPath(), "bbport-launcher-publish", project);
+        var output = Path.Combine(Path.GetTempPath(), "lantern-engine-publish", project);
         if (Directory.Exists(output))
             Directory.Delete(output, recursive: true);
 
