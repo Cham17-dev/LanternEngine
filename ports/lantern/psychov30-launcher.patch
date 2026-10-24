@@ -298,7 +298,7 @@ index 9221006..f5ec50c 100644
          public static readonly string ConfigFile = Path.Combine(ConfigDir, "settings.json");
  
 diff --git a/launcher/windows/BloodborneLauncher/Core/Updater.cs b/launcher/windows/BloodborneLauncher/Core/Updater.cs
-index 060768c..af9a0df 100644
+index 060768c..79dda8c 100644
 --- a/launcher/windows/BloodborneLauncher/Core/Updater.cs
 +++ b/launcher/windows/BloodborneLauncher/Core/Updater.cs
 @@ -1,4 +1,4 @@
@@ -321,6 +321,61 @@ index 060768c..af9a0df 100644
  
          public const string ExeName = "Lantern Engine.exe";
          /// <summary>The launcher's name before 0.9.34 beta 8 (now a forwarder to ExeName).</summary>
+@@ -63,8 +63,8 @@ namespace BloodborneLauncher.Core
+             var informational = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                 .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "";
+             var stamped = TryVersion(informational, out _, out var beta) ? beta : 0;
+-            var own = new Version(v.Major, v.Minor, Math.Max(0, v.Build));
+-            if (own == new Version(1, 0, 0) && (informational == "" || informational.StartsWith("1.0.0", StringComparison.Ordinal)))
++            var own = Normalize(v);
++            if (own == new Version(1, 0, 0, 0) && (informational == "" || informational.StartsWith("1.0.0", StringComparison.Ordinal)))
+             {
+                 try
+                 {
+@@ -94,8 +94,17 @@ namespace BloodborneLauncher.Core
+         };
+ 
+         public static string Label(Version version, int beta) =>
+-            beta <= 0 ? $"v{version}"
+-            : beta % 100 == 0 ? $"v{version} beta {beta / 100}" : $"v{version} beta {beta / 100}.{beta % 100}";
++            beta <= 0 ? $"v{Shown(version)}"
++            : beta % 100 == 0 ? $"v{Shown(version)} beta {beta / 100}"
++            : $"v{Shown(version)} beta {beta / 100}.{beta % 100}";
++
++        /// <summary>"0.9.37", or "0.9.37.1" for an HDR16 fix of a Lantern version.</summary>
++        private static string Shown(Version version) => version.ToString(version.Revision > 0 ? 4 : 3);
++
++        /// <summary>Four numbers, none missing: "0.9.37" is 0.9.37.0, older than the fix 0.9.37.1
++        /// (.NET orders a missing number before 0).</summary>
++        private static Version Normalize(Version v) =>
++            new(v.Major, v.Minor, Math.Max(0, v.Build), Math.Max(0, v.Revision));
+ 
+         /// <summary>Orders builds: by version, and a version's betas before its stable release.</summary>
+         public static int Compare(Version a, int betaA, Version b, int betaB)
+@@ -229,7 +238,9 @@ namespace BloodborneLauncher.Core
+                     : default);
+         }
+ 
+-        /// <summary>Reads "v0.9.7", "0.9.7-beta.2" or "0.9.7-beta2+abc123"; <paramref name="beta"/> is 0 for a stable build.</summary>
++        /// <summary>Reads "v0.9.7", "0.9.7-beta.2" or "0.9.7-beta2+abc123", and an HDR16 fix of a Lantern
++        /// version, "0.9.37.1" or "0.9.37.1-beta.1" (after 0.9.37, before 0.9.38); <paramref name="beta"/>
++        /// is 0 for a stable build.</summary>
+         public static bool TryVersion(string tag, out Version version, out int beta)
+         {
+             var text = tag.Trim().TrimStart('v', 'V');
+@@ -250,10 +261,10 @@ namespace BloodborneLauncher.Core
+             if (cut > 0) text = text[..cut];
+             if (Version.TryParse(text.Contains('.') ? text : text + ".0", out var v))
+             {
+-                version = new Version(v.Major, v.Minor, Math.Max(0, v.Build));
++                version = Normalize(v);
+                 return true;
+             }
+-            version = new Version(0, 0, 0);
++            version = new Version(0, 0, 0, 0);
+             return false;
+         }
+ 
 diff --git a/launcher/windows/BloodborneLauncher/MainWindow.xaml b/launcher/windows/BloodborneLauncher/MainWindow.xaml
 index 26f31a3..5156b14 100644
 --- a/launcher/windows/BloodborneLauncher/MainWindow.xaml
