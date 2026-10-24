@@ -7,9 +7,38 @@ namespace BloodborneLauncher
 {
     public partial class App : Application
     {
-        private static readonly string CrashLog = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "bbport-launcher", "crash.log");
+        private static readonly string CrashLog = Path.Combine(Core.Paths.ConfigDir, "crash.log");
+
+        /// <summary>When this launcher runs outside a package and the settings name one with its own
+        /// launcher, that launcher is started with the same arguments (once: BB_LAUNCHER_HANDOVER).
+        /// A build from the source checkout keeps running itself.</summary>
+        private static bool HandOverToPackage(string[] args)
+        {
+            try
+            {
+                if (Environment.GetEnvironmentVariable("BB_LAUNCHER_HANDOVER") == "1" ||
+                    Core.Paths.DetectPortDir() != null || Core.Paths.SourceRoot != null ||
+                    Environment.ProcessPath is not { } self || !File.Exists(Core.Paths.ConfigFile))
+                    return false;
+                using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Core.Paths.ConfigFile));
+                if (!doc.RootElement.TryGetProperty("port_dir", out var value) || value.ValueKind != System.Text.Json.JsonValueKind.String)
+                    return false;
+                var package = Core.Paths.Expand(value.GetString() ?? "");
+                var launcher = Path.Combine(package, Core.Updater.ExeName);
+                if (!Core.Paths.IsPortDir(package) || !File.Exists(launcher) ||
+                    string.Equals(Path.GetFullPath(launcher), Path.GetFullPath(self), StringComparison.OrdinalIgnoreCase))
+                    return false;
+                var start = new System.Diagnostics.ProcessStartInfo(launcher) { UseShellExecute = false, WorkingDirectory = package };
+                foreach (var arg in args) start.ArgumentList.Add(arg);
+                start.Environment["BB_LAUNCHER_HANDOVER"] = "1";
+                System.Diagnostics.Process.Start(start)?.Dispose();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false; // runs itself, as before
+            }
+        }
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -34,6 +63,14 @@ namespace BloodborneLauncher
                 return;
             }
 
+            // A copy outside the package (dragged to the desktop) is never updated and drifted from
+            // the package's own launcher (other pages, settings missing): it starts that one.
+            if (HandOverToPackage(e.Args))
+            {
+                Shutdown();
+                return;
+            }
+
             // An update to the engine\ layout: the old top-level engine folders go first.
             if (Core.Paths.DetectPortDir() is { } package)
             {
@@ -52,7 +89,7 @@ namespace BloodborneLauncher
         {
             try
             {
-                var ini = Path.Combine(package, "bbport.ini");
+                var ini = Path.Combine(package, "lantern.ini");
                 if (!File.Exists(ini)) return;
                 var lines = File.ReadAllLines(ini);
                 var lockOn = Array.FindIndex(lines, l => l.Trim() == "bind.lock_on=Mouse3");

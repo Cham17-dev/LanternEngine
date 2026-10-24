@@ -1,0 +1,197 @@
+using Avalonia;
+using Avalonia.Controls;
+using BloodborneLauncher.Core;
+
+namespace BloodborneLauncher.Views
+{
+    public sealed class OnlinePage : LauncherPage
+    {
+        private readonly ToggleSwitch _online;
+        private readonly StackPanel _results = new();
+        private readonly AppButton _test;
+
+        public OnlinePage() : base(L.T("Online"),
+            L.T("1. Turn on Play online. 2. Connect your Hunter's Dream account below (with Discord, or without it). ") +
+            L.T("3. In the game, choose online at the title screen: The Hunter's Dream's welcome message means you are online. ") +
+            L.T("Everyone needs game version 1.09."))
+        {
+            foreach (var key in new[] { "online_host", "online_port", "online_webapi", "online_game_api", "online_thd_account" })
+                if (Ini.Get(key).Length > 0) Ini.Set(key, "");
+            Ini.Set("online_pool", S.HuntersDreamToken.Length > 0 && S.Str("hd_name").Length > 0 ? "huntersdream" : "");
+
+            if (HuntersDream.OnlinePaused)
+                Body.Children.Add(Text(L.T("Online play is paused in this version. The game starts offline whatever is set here; ") +
+                                       L.T("your settings are kept for when it returns."), "Faint"));
+
+            Group(L.T("Play"));
+            _online = ToggleRow(SymbolRegular.Globe24, L.T("Play online"), L.T("Off: the game stays offline"),
+                () => Ini.Get("online_enabled") == "1", v => Ini.Set("online_enabled", v ? "1" : "0"));
+
+            Group(L.T("Server"));
+            ComboRow(SymbolRegular.Server24, L.T("Server"), L.T("Messages, bloodstains, ghosts, co-op and invasions"),
+                Choices.OnlineServers, () => "huntersdream", _ => { });
+            Add(Card(SymbolRegular.Globe24, L.T("The Hunter's Dream"), L.T("Players online, the map and your hunter's profile"),
+                SmallButton(L.T("Open website"), SymbolRegular.Open24, (_, _) => Ui.OpenLink(LauncherSettings.OnlineCommunity)),
+                out _));
+
+            Group(L.T("The Hunter's Dream account"));
+            _hdButton = SmallButton(L.T("Connect"), SymbolRegular.Person24, async (_, _) => await LinkAsync());
+            Add(Card(SymbolRegular.PersonAccounts24, L.T("Hunter's Dream account"), null, _hdButton, out _hdHint));
+            ShowLink();
+
+            Group(L.T("Connection"));
+            IniText(SymbolRegular.Router24, L.T("Local P2P port"), L.T("Empty: 3658, the PS4's"), "3658", "online_p2p_port", 120);
+            ComboRow(SymbolRegular.Timer24, L.T("Summon sign timeout"), L.T("How long a sign you touched waits for its host before giving up"),
+                Choices.SignTimeout, () => Ini.Get("online_sign_timeout", "30"), v => Ini.Set("online_sign_timeout", v));
+            _test = SmallButton(L.T("Test"), SymbolRegular.PlayCircle24, async (_, _) => await TestAsync());
+            Add(Card(SymbolRegular.Pulse24, L.T("Test the connection"), L.T("Checks The Hunter's Dream: game server, co-op sessions and the relay summons use"), _test, out _));
+            Body.Children.Add(_results);
+        }
+
+        private readonly AppButton _hdButton;
+        private readonly TextBlock _hdHint;
+        private CancellationTokenSource? _linking;
+
+        private void ShowLink()
+        {
+            var name = S.Str("hd_name");
+            var linked = name.Length > 0 && S.HuntersDreamToken.Length > 0;
+            var refused = linked ? S.HuntersDreamRefused : "";
+            SetHint(_hdHint, !linked ? L.T("Not connected. Connect with Discord, or create an account here without it")
+                : refused.Length > 0 ? L.F($"The Hunter's Dream refused the sign-in as {name} ({refused}). Sign in again: until then nobody can summon or invite you")
+                : L.F($"Connected as {name}"));
+            _hdHint.SetResourceReference(TextBlock.ForegroundProperty, refused.Length > 0 ? "WarningTextBrush" : "TextFillColorTertiaryBrush");
+            if (_linking is null) _hdButton.Text = !linked ? L.T("Connect") : refused.Length > 0 ? L.T("Sign in again") : L.T("Disconnect");
+        }
+
+        private async Task AccountWithoutDiscordAsync(bool recover)
+        {
+            var fields = recover
+                ? new[] { new Prompt.Field(L.T("Account name")), new Prompt.Field(L.T("Recovery code")) }
+                : new[] { new Prompt.Field(L.T("Account name"), "", L.T("Your online name (letters, digits, - and _)")) };
+            var answer = Prompt.Ask(recover ? L.T("Recover the account") : L.T("Create an account"),
+                recover ? L.T("The name and the recovery code you wrote down. Other PCs signed in to this account are signed out.")
+                        : L.T("An account held by this PC. You get a recovery code: write it down, it is the only way back in on another PC or after signing out."),
+                fields);
+            if (answer is null || answer[0].Trim().Length == 0) return;
+            try
+            {
+                var (name, token, code) = recover
+                    ? await HuntersDream.RecoverAsync(answer[0].Trim(), answer[1].Trim(), CancellationToken.None)
+                    : await HuntersDream.CreateAccountAsync(answer[0].Trim(), CancellationToken.None);
+                S.HuntersDreamToken = token;
+                S.Set("hd_name", name);
+                Ini.Set("online_pool", "huntersdream");
+                Ws.SaveNow();
+                Ws.Log(L.F($"The Hunter's Dream: signed in as {name}"), LogLevel.Good);
+                if (code.Length > 0)
+                {
+                    ClipboardText.Set(code);
+                    Prompt.Tell(L.T("Your recovery code"), L.F($"Signed in as {name}.\n\nRecovery code (copied to the clipboard):\n\n{code}\n\n") +
+                        L.T("Write it down now: it is shown only once, and it is the only way back into this account."));
+                }
+            }
+            catch (Exception e)
+            {
+                Prompt.Tell(recover ? L.T("Recovering failed") : L.T("Creating the account failed"), e.Message);
+            }
+            finally
+            {
+                ShowLink();
+            }
+        }
+
+        private async Task LinkAsync()
+        {
+            if (_linking is { } running)
+            {
+                running.Cancel();
+                return;
+            }
+            if (S.HuntersDreamToken is { Length: > 0 } token && S.HuntersDreamRefused.Length == 0)
+            {
+                await HuntersDream.LogoutAsync(token);
+                S.HuntersDreamToken = "";
+                S.Set("hd_name", "");
+                Ini.Set("online_pool", "");
+                Ws.SaveNow();
+                Ws.Log(L.T("The Hunter's Dream: disconnected"), LogLevel.Info);
+                ShowLink();
+                return;
+            }
+            var how = Prompt.Choose(L.T("The Hunter's Dream account"),
+                L.T("Sign in with Discord, or use an account held by this PC (a name and a recovery code, no Discord needed)."),
+                L.T("Cancel"), "Discord", L.T("Without Discord…"), L.T("Recover with a code…"));
+            if (how <= 0) return;
+            if (how >= 2)
+            {
+                await AccountWithoutDiscordAsync(recover: how == 3);
+                return;
+            }
+            _linking = new CancellationTokenSource();
+            _hdButton.Text = L.T("Cancel");
+            try
+            {
+                var link = await HuntersDream.StartLinkAsync(_linking.Token);
+                ClipboardText.Set(link.UserCode);
+                Ui.OpenLink(link.Page);
+                SetHint(_hdHint, L.F($"Enter the code {link.UserCode} on the page that opened (it is on the clipboard), then approve"));
+                _hdHint.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorTertiaryBrush");
+                var (name, linked) = await HuntersDream.WaitLinkAsync(link, _linking.Token);
+                S.HuntersDreamToken = linked;
+                S.Set("hd_name", name);
+                Ini.Set("online_pool", "huntersdream");
+                Ws.SaveNow();
+                Ws.Log(L.F($"The Hunter's Dream: connected as {name}"), LogLevel.Good);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception e)
+            {
+                Prompt.Tell(L.T("Connecting failed"), e.Message);
+            }
+            finally
+            {
+                _linking.Dispose();
+                _linking = null;
+                ShowLink();
+            }
+        }
+
+        private void IniText(SymbolRegular icon, string title, string? hint, string placeholder, string key, double width = 300) =>
+            TextRow(icon, title, hint, placeholder, () => Ini.Get(key), v => Ini.Set(key, v.Trim()), width: width);
+
+        public override void OnShown()
+        {
+            _online.IsChecked = Ini.Get("online_enabled") == "1";
+            if (_linking is null) ShowLink();
+        }
+
+        private async Task TestAsync()
+        {
+            _results.Children.Clear();
+            _test.IsEnabled = false;
+            _test.Text = L.T("Testing…");
+            try
+            {
+                var results = await Online.CheckAsync(Online.GameServer(Ini.Get("online_game_api")));
+                foreach (var r in results)
+                {
+                    var said = r.Ok ? (r.Detail.Length > 0 ? L.F($"Reachable: {r.Detail}") : L.T("Reachable")) : L.F($"Not reachable ({r.Detail})");
+                    var card = Card(r.Ok ? SymbolRegular.CheckmarkCircle24 : SymbolRegular.ErrorCircle24,
+                        $"{r.Name}: {r.Address}", said, null, out _);
+                    card.ShowIcon = true;
+                    card.Icon.SetResourceReference(TextBlock.ForegroundProperty, r.Ok ? "GoodTextBrush" : "DangerTextBrush");
+                    SetHint(card.Hint, said);
+                    card.Margin = new Thickness(24, 0, 0, 4);
+                    _results.Children.Add(card);
+                    Ws.Log($"{r.Name} {r.Address}: {(r.Ok ? "reachable" : "not reachable " + r.Detail)}", r.Ok ? LogLevel.Good : LogLevel.Warn);
+                }
+            }
+            finally
+            {
+                _test.IsEnabled = true;
+                _test.Text = L.T("Test");
+            }
+        }
+    }
+}

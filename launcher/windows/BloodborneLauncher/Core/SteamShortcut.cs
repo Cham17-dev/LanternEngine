@@ -17,14 +17,30 @@ namespace BloodborneLauncher.Core
         /// <summary>Steam's folder, or null when Steam is not installed.</summary>
         public static string? SteamDir()
         {
+#if AVALONIA
+            if (!OperatingSystem.IsWindows())
+            {
+                // Linux: the native package, the old ~/.steam links, or the Flatpak.
+                var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                return new[] { ".local/share/Steam", ".steam/steam", ".steam/root", ".var/app/com.valvesoftware.Steam/data/Steam" }
+                    .Select(p => Path.Combine(home, p))
+                    .FirstOrDefault(p => Directory.Exists(Path.Combine(p, "userdata")) || Directory.Exists(Path.Combine(p, "config")));
+            }
+#endif
             var path = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam", "SteamPath", null) as string;
             return path is { Length: > 0 } && Directory.Exists(path) ? Path.GetFullPath(path) : null;
         }
 
         public static bool SteamRunning() => Process.GetProcessesByName("steam").Length > 0;
 
+#if AVALONIA
+        /// <summary>Adds (or updates) the shortcut; launchOptions: the arguments Steam passes (Linux: --play
+        /// for the launcher itself). Returns the Steam account folders it went into.</summary>
+        public static List<string> Add(string exe, string launchOptions = "")
+#else
         /// <summary>Adds (or updates) the shortcut. Returns the Steam account folders it went into.</summary>
         public static List<string> Add(string exe)
+#endif
         {
             var steam = SteamDir() ?? throw new InvalidOperationException(L.T("Steam is not installed for this Windows user."));
             if (SteamRunning())
@@ -54,10 +70,18 @@ namespace BloodborneLauncher.Core
                 entry.Set("appid", AppId(quoted, AppName));
                 entry.Set("AppName", AppName);
                 entry.Set("Exe", quoted);
+#if AVALONIA
+                entry.Set("StartDir", $"\"{Path.GetDirectoryName(exe)}{Path.DirectorySeparatorChar}\"");
+#else
                 entry.Set("StartDir", $"\"{Path.GetDirectoryName(exe)}\\\"");
+#endif
                 entry.Set("icon", exe);
                 entry.Set("ShortcutPath", "");
+#if AVALONIA
+                entry.Set("LaunchOptions", launchOptions);
+#else
                 entry.Set("LaunchOptions", "");
+#endif
                 entry.Set("IsHidden", 0);
                 entry.Set("AllowDesktopConfig", 1);
                 entry.Set("AllowOverlay", 1);

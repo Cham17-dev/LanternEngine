@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Lantern Engine launcher on Avalonia: Windows and Linux from one launcher. The logic (Core)
+       is the WPF launcher's own files, compiled here too; AVALONIA marks what differs. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Lantern Engine</AssemblyName>
+    <RootNamespace>BloodborneLauncher</RootNamespace>
+    <DefineConstants>$(DefineConstants);AVALONIA</DefineConstants>
+    <ApplicationIcon>..\BloodborneLauncher\app.ico</ApplicationIcon>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- Core/PadMap.cs has a Main of its own (not an entry point). -->
+    <StartupObject>BloodborneLauncher.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />
+    <!-- SoundPlayer (Core/Chime.cs): plays on Windows; elsewhere it throws and the chime is silent. -->
+    <PackageReference Include="System.Windows.Extensions" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\BloodborneLauncher\Core\**\*.cs" Link="Core\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Shared\SourceStamp.cs" Link="Core\SourceStamp.cs" />
+    <Compile Include="..\BloodborneLauncher\GlobalUsings.cs" Link="GlobalUsings.cs" />
+    <!-- The window icons (Core/AppIcon.cs reads them by file name). -->
+    <EmbeddedResource Include="..\BloodborneLauncher\app.ico" LogicalName="app.ico" />
+    <EmbeddedResource Include="..\BloodborneLauncher\lantern-beta.ico" LogicalName="lantern-beta.ico" />
+    <EmbeddedResource Include="..\BloodborneLauncher\lantern-stable.ico" LogicalName="lantern-stable.ico" />
+    <EmbeddedResource Include="..\BloodborneLauncher\lantern-j3loo.ico" LogicalName="lantern-j3loo.ico" />
+    <EmbeddedResource Include="..\BloodborneLauncher\Localization\*.json" LogicalName="BloodborneLauncher.Localization.%(Filename)%(Extension)" />
+    <!-- The Discord status preview's picture (Settings › Community). -->
+    <AvaloniaResource Include="..\BloodborneLauncher\Assets\discord-logo.png" Link="Assets\discord-logo.png" />
+    <!-- Fluent System Icons (Microsoft, MIT licence), the icon fonts WPF-UI carries: the same icons
+         as the WPF launcher, on every platform. -->
+    <AvaloniaResource Include="Assets\Fonts\*.ttf" />
+  </ItemGroup>
+
+</Project>

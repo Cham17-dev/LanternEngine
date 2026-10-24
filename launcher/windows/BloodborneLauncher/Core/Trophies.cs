@@ -10,12 +10,16 @@ namespace BloodborneLauncher.Core
     {
         /// <summary>PlayStation trophy points, which weight the completion rate.</summary>
         public int Points => Grade switch { Grade.Platinum => 180, Grade.Gold => 90, Grade.Silver => 30, _ => 15 };
+
+        /// <summary>The grade's name in the launcher language.</summary>
+        public static string GradeName(Grade grade) =>
+            grade switch { Grade.Platinum => L.T("Platinum"), Grade.Gold => L.T("Gold"), Grade.Silver => L.T("Silver"), _ => L.T("Bronze") };
     }
 
     /// <summary>
     /// Bloodborne's 40 trophies (the PS4 ids of CUSA03173) and the unlocks the game made.
     ///
-    /// A runtime with trophy support (github.com/pyL1nx/bloodborne_pc) handles
+    /// A runtime with trophy support handles
     /// sceNpTrophyUnlockTrophy by appending "id unix-time" to &lt;saves&gt;\trophies.log and printing
     /// "Runtime: trophy &lt;id&gt; unlocked". The tracker reads both (the output line also from
     /// last_run.log, for games started without the launcher) and records what it finds in the same

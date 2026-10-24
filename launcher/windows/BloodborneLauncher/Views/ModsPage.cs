@@ -81,7 +81,7 @@ namespace BloodborneLauncher.Views
             }
             if (read != _modReads) return;
             _mods = mods;
-            SetHint(_modsHint, _mods.Count == 0 ? L.F($"{dir} — no mods") : L.F($"{dir} — {_mods.Count} mod{(_mods.Count == 1 ? "" : "s")}"));
+            SetHint(_modsHint, _mods.Count == 0 ? L.F($"{dir} — no mods") : _mods.Count == 1 ? L.F($"{dir} — 1 mod") : L.F($"{dir} — {_mods.Count} mods"));
             var shown = string.Join("|", _mods.Select(m => $"{m.Name}={m.Enabled}"));
             if (shown == _modsShown) return;
             DrawMods();

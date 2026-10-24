@@ -1,0 +1,306 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Media;
+
+namespace BloodborneLauncher.Views
+{
+    /// <summary>
+    /// The Fluent System Icons the WPF launcher uses through WPF-UI, by the same names, as their
+    /// codepoints in the regular font (Assets/Fonts, the fonts WPF-UI ships; MIT licensed). An icon
+    /// used for the first time is added here with its codepoint from WPF-UI's SymbolRegular.
+    /// </summary>
+    public enum SymbolRegular
+    {
+        Add24 = 0xF10A,
+        Alert24 = 0xF115,
+        ArrowBidirectionalLeftRight24 = 0xF02A2,
+        ArrowBidirectionalUpDown24 = 0xE085,
+        ArrowClockwise24 = 0xF13E,
+        ArrowDown24 = 0xF149,
+        ArrowDownload24 = 0xF151,
+        ArrowExit20 = 0xE0C4,
+        ArrowExportUp24 = 0xE0CC,
+        ArrowForward24 = 0xF158,
+        ArrowImport24 = 0xF15A,
+        ArrowMaximize24 = 0xF160,
+        ArrowMove24 = 0xF169,
+        ArrowReset24 = 0xF1A0,
+        ArrowRotateClockwise24 = 0xF186,
+        ArrowSortDown24 = 0xF811,
+        ArrowSwap24 = 0xF18E,
+        ArrowSync24 = 0xF191,
+        ArrowTrendingLines24 = 0xE11D,
+        ArrowUndo24 = 0xF19A,
+        ArrowUp24 = 0xF19C,
+        Beaker24 = 0xF1D8,
+        Blur24 = 0xF8FB,
+        BorderAll24 = 0xE19D,
+        Box24 = 0xE1BC,
+        BrainCircuit24 = 0xF83B,
+        Branch24 = 0xF1FB,
+        BrightnessHigh24 = 0xE1F8,
+        Broom24 = 0xF202,
+        Bug24 = 0xE207,
+        Camera24 = 0xF255,
+        CheckmarkCircle24 = 0xF299,
+        ChevronDown16 = 0xF2A2,
+        ChevronRight16 = 0xF2AF,
+        CircleHalfFill24 = 0xF2BE,
+        CircleSmall24 = 0xF2C0,
+        ClipboardPaste24 = 0xF2D6,
+        Code24 = 0xF2F0,
+        Color24 = 0xF2F6,
+        ColorBackground24 = 0xF2F8,
+        Copy24 = 0xF32C,
+        Cube24 = 0xF336,
+        CursorClick24 = 0xE446,
+        CursorHover24 = 0xE449,
+        CursorHoverOff24 = 0xE44F,
+        DarkTheme24 = 0xF33C,
+        DataUsage24 = 0xF349,
+        Delete24 = 0xF34D,
+        Desktop24 = 0xF35A,
+        DeveloperBoard24 = 0xF35C,
+        Dismiss16 = 0xF368,
+        Dismiss24 = 0xF36A,
+        DocumentArrowDown20 = 0xE4E0,
+        DocumentSettings20 = 0xE542,
+        DocumentText24 = 0xE558,
+        Drop24 = 0xE591,
+        ErrorCircle24 = 0xF3F2,
+        Eye24 = 0xE5F3,
+        EyeOff24 = 0xE5F6,
+        Eyedropper24 = 0xE5FE,
+        FastForward24 = 0xF3FF,
+        Flash24 = 0xE619,
+        FlashFlow24 = 0xE623,
+        Flow20 = 0xE637,
+        Folder24 = 0xF419,
+        FolderArrowRight24 = 0xE64D,
+        FolderLink24 = 0xF426,
+        FolderOpen24 = 0xF42F,
+        FullScreenMaximize24 = 0xE685,
+        Games24 = 0xF451,
+        Gauge24 = 0xF4C8,
+        Globe24 = 0xF45B,
+        Hdr24 = 0xF471,
+        Heart24 = 0xF47A,
+        History24 = 0xF47F,
+        HourglassHalf24 = 0xEF6E,
+        Image24 = 0xF489,
+        ImageEdit24 = 0xF494,
+        Info16 = 0xF4A2,
+        Key24 = 0xF4B7,
+        Keyboard24 = 0xF4B9,
+        KeyboardShift24 = 0xF4BF,
+        Lightbulb24 = 0xF4D7,
+        Link24 = 0xF4E5,
+        LocalLanguage24 = 0xF4F4,
+        MusicNote224 = 0xE855,
+        NumberSymbol24 = 0xF57E,
+        Open24 = 0xF583,
+        Options24 = 0xF588,
+        PaintBrush24 = 0xF593,
+        PanelLeft24 = 0xE8B1,
+        People24 = 0xF5A9,
+        PeopleCommunity24 = 0xF5B1,
+        Person24 = 0xF5BE,
+        PersonAccounts24 = 0xF5C1,
+        PersonAdd24 = 0xF5C3,
+        PersonDelete24 = 0xF5D1,
+        Pin24 = 0xF602,
+        Play24 = 0xF606,
+        PlayCircle24 = 0xF608,
+        PositionToFront24 = 0xE9AF,
+        Pulse24 = 0xE9DD,
+        PuzzlePiece24 = 0xE9EA,
+        RatioOneToOne24 = 0xF70B,
+        Rename24 = 0xF66A,
+        ResizeLarge24 = 0xEA17,
+        Rocket24 = 0xF678,
+        Router24 = 0xF679,
+        Ruler24 = 0xF67D,
+        Run24 = 0xF67E,
+        Save24 = 0xF680,
+        Search24 = 0xF690,
+        Server24 = 0xF76C,
+        Settings24 = 0xF6AA,
+        Shapes24 = 0xF6AE,
+        Share24 = 0xF6B0,
+        Shield24 = 0xF6BF,
+        ShieldCheckmark24 = 0xEAC9,
+        Sleep24 = 0xF6E5,
+        SlideSize24 = 0xEB26,
+        Sparkle24 = 0xEB34,
+        Speaker124 = 0xF6FB,
+        Speaker224 = 0xEB43,
+        Stop24 = 0xF72B,
+        Storage24 = 0xF72C,
+        Target24 = 0xF782,
+        TextBulletListSquare24 = 0xF7A9,
+        TextDescription24 = 0xF7CC,
+        TextFont24 = 0xF7E5,
+        TextFontSize24 = 0xF7E7,
+        Timer24 = 0xF827,
+        TopSpeed24 = 0xF831,
+        Translate24 = 0xF834,
+        Trophy24 = 0xF837,
+        Warning24 = 0xF86A,
+        WeatherFog24 = 0xF875,
+        WeatherSunny24 = 0xF8A2,
+        Window24 = 0xEE5E,
+        WindowConsole20 = 0xEE6F,
+        WindowNew24 = 0xEE7B,
+        Wrench24 = 0xF8C1,
+        XboxController24 = 0xEEB9,
+        ZoomIn24 = 0xF8C5,
+        ZoomOut24 = 0xF8C7,
+    }
+
+    /// <summary>A Fluent icon: a glyph of the icon font, regular or filled, in the text's colour.</summary>
+    public sealed class SymbolIcon : TextBlock
+    {
+        private static readonly FontFamily Regular = new("avares://Lantern Engine/Assets/Fonts#FluentSystemIcons-Regular");
+        private static readonly FontFamily FilledFont = new("avares://Lantern Engine/Assets/Fonts#FluentSystemIcons-Filled");
+
+        /// <summary>The filled glyphs, where they differ from the regular one's codepoint.</summary>
+        private static readonly Dictionary<SymbolRegular, int> FilledCodes = new()
+        {
+        [SymbolRegular.ArrowBidirectionalLeftRight24] = 0xF02B5,
+        [SymbolRegular.ArrowSortDown24] = 0xF82A,
+        [SymbolRegular.Blur24] = 0xE164,
+        [SymbolRegular.BorderAll24] = 0xE1B1,
+        [SymbolRegular.Box24] = 0xE1D0,
+        [SymbolRegular.BrainCircuit24] = 0xF853,
+        [SymbolRegular.BrightnessHigh24] = 0xE20C,
+        [SymbolRegular.Bug24] = 0xE21B,
+        [SymbolRegular.CursorClick24] = 0xE452,
+        [SymbolRegular.CursorHover24] = 0xE455,
+        [SymbolRegular.CursorHoverOff24] = 0xE45B,
+        [SymbolRegular.DocumentArrowDown20] = 0xE4EC,
+        [SymbolRegular.DocumentSettings20] = 0xE54E,
+        [SymbolRegular.DocumentText24] = 0xE564,
+        [SymbolRegular.Drop24] = 0xE59D,
+        [SymbolRegular.ErrorCircle24] = 0xF3F1,
+        [SymbolRegular.Eye24] = 0xE600,
+        [SymbolRegular.EyeOff24] = 0xE603,
+        [SymbolRegular.Eyedropper24] = 0xE60B,
+        [SymbolRegular.FastForward24] = 0xF3FE,
+        [SymbolRegular.Flash24] = 0xE626,
+        [SymbolRegular.FlashFlow24] = 0xE630,
+        [SymbolRegular.Flow20] = 0xE644,
+        [SymbolRegular.Folder24] = 0xF41D,
+        [SymbolRegular.FolderArrowRight24] = 0xE65A,
+        [SymbolRegular.FolderLink24] = 0xF42A,
+        [SymbolRegular.FolderOpen24] = 0xF433,
+        [SymbolRegular.FullScreenMaximize24] = 0xE692,
+        [SymbolRegular.Games24] = 0xF455,
+        [SymbolRegular.Gauge24] = 0xF4D2,
+        [SymbolRegular.Globe24] = 0xF45F,
+        [SymbolRegular.Hdr24] = 0xF475,
+        [SymbolRegular.Heart24] = 0xF47E,
+        [SymbolRegular.History24] = 0xF486,
+        [SymbolRegular.Image24] = 0xF490,
+        [SymbolRegular.ImageEdit24] = 0xF49B,
+        [SymbolRegular.Info16] = 0xF4A9,
+        [SymbolRegular.Key24] = 0xF4C1,
+        [SymbolRegular.Keyboard24] = 0xF4C3,
+        [SymbolRegular.KeyboardShift24] = 0xF4C9,
+        [SymbolRegular.Lightbulb24] = 0xF4E1,
+        [SymbolRegular.Link24] = 0xF4EF,
+        [SymbolRegular.LocalLanguage24] = 0xF4FE,
+        [SymbolRegular.MusicNote224] = 0xE863,
+        [SymbolRegular.NumberSymbol24] = 0xF588,
+        [SymbolRegular.Open24] = 0xF58D,
+        [SymbolRegular.Options24] = 0xF592,
+        [SymbolRegular.PaintBrush24] = 0xF59D,
+        [SymbolRegular.PanelLeft24] = 0xE8BF,
+        [SymbolRegular.People24] = 0xF5B3,
+        [SymbolRegular.PeopleCommunity24] = 0xF5BB,
+        [SymbolRegular.Person24] = 0xF5C8,
+        [SymbolRegular.PersonAccounts24] = 0xF5CB,
+        [SymbolRegular.PersonAdd24] = 0xF5CD,
+        [SymbolRegular.PersonDelete24] = 0xF5DB,
+        [SymbolRegular.Pin24] = 0xF60C,
+        [SymbolRegular.Play24] = 0xF610,
+        [SymbolRegular.PlayCircle24] = 0xF612,
+        [SymbolRegular.PositionToFront24] = 0xE9C1,
+        [SymbolRegular.Pulse24] = 0xE9E5,
+        [SymbolRegular.PuzzlePiece24] = 0xE9F2,
+        [SymbolRegular.RatioOneToOne24] = 0xF714,
+        [SymbolRegular.Rename24] = 0xF674,
+        [SymbolRegular.ResizeLarge24] = 0xEA1F,
+        [SymbolRegular.Rocket24] = 0xF682,
+        [SymbolRegular.Router24] = 0xF683,
+        [SymbolRegular.Ruler24] = 0xF687,
+        [SymbolRegular.Run24] = 0xF688,
+        [SymbolRegular.Save24] = 0xF68A,
+        [SymbolRegular.Search24] = 0xF69A,
+        [SymbolRegular.Server24] = 0xF784,
+        [SymbolRegular.Settings24] = 0xF6B3,
+        [SymbolRegular.Shapes24] = 0xF6B7,
+        [SymbolRegular.Share24] = 0xF6B9,
+        [SymbolRegular.Shield24] = 0xF6C8,
+        [SymbolRegular.ShieldCheckmark24] = 0xEAD2,
+        [SymbolRegular.Sleep24] = 0xF6EE,
+        [SymbolRegular.SlideSize24] = 0xEB2F,
+        [SymbolRegular.Sparkle24] = 0xEB3D,
+        [SymbolRegular.Speaker124] = 0xF704,
+        [SymbolRegular.Speaker224] = 0xEB4C,
+        [SymbolRegular.Stop24] = 0xF743,
+        [SymbolRegular.Storage24] = 0xF744,
+        [SymbolRegular.Target24] = 0xF79A,
+        [SymbolRegular.TextBulletListSquare24] = 0xF7C1,
+        [SymbolRegular.TextDescription24] = 0xF7E4,
+        [SymbolRegular.TextFont24] = 0xF7FD,
+        [SymbolRegular.TextFontSize24] = 0xF7FF,
+        [SymbolRegular.Timer24] = 0xF840,
+        [SymbolRegular.TopSpeed24] = 0xF84A,
+        [SymbolRegular.Translate24] = 0xF84C,
+        [SymbolRegular.Trophy24] = 0xF84F,
+        [SymbolRegular.Warning24] = 0xF882,
+        [SymbolRegular.WeatherFog24] = 0xF88D,
+        [SymbolRegular.WeatherSunny24] = 0xF8BA,
+        [SymbolRegular.Wrench24] = 0xF8D9,
+        [SymbolRegular.ZoomIn24] = 0xF8DD,
+        [SymbolRegular.ZoomOut24] = 0xF8DF,
+        };
+
+        protected override Type StyleKeyOverride => typeof(TextBlock);
+
+        private SymbolRegular _symbol;
+        private bool _filled;
+
+        public SymbolIcon()
+        {
+            FontSize = 16;
+            FontWeight = FontWeight.Normal;
+            FontStyle = FontStyle.Normal;
+            TextWrapping = TextWrapping.NoWrap;
+            TextTrimming = TextTrimming.None;
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
+            Draw();
+        }
+
+        public SymbolIcon(SymbolRegular symbol) : this() => Symbol = symbol;
+
+        public SymbolRegular Symbol
+        {
+            get => _symbol;
+            set { _symbol = value; Draw(); }
+        }
+
+        public bool Filled
+        {
+            get => _filled;
+            set { _filled = value; Draw(); }
+        }
+
+        private void Draw()
+        {
+            FontFamily = _filled ? FilledFont : Regular;
+            var code = _filled && FilledCodes.TryGetValue(_symbol, out var filled) ? filled : (int)_symbol;
+            Text = code == 0 ? "" : char.ConvertFromUtf32(code);
+        }
+    }
+}

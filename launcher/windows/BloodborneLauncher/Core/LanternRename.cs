@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.IO;
+#if !AVALONIA
 using System.Windows;
 using System.Windows.Controls;
+#endif
 
 namespace BloodborneLauncher.Core
 {
@@ -21,6 +23,10 @@ namespace BloodborneLauncher.Core
         /// <summary>Returns true when this process should end now (it started the renamed launcher).</summary>
         public static bool Run(string[] args)
         {
+#if AVALONIA
+            // Only Windows packages ever had the old name.
+            if (!OperatingSystem.IsWindows()) return false;
+#endif
             try
             {
                 var self = Environment.ProcessPath;
@@ -47,8 +53,14 @@ namespace BloodborneLauncher.Core
                 var oldIsFull = new FileInfo(old).Length > ForwarderMaxBytes;
                 var shortcuts = Shortcuts.Pointing(old);
                 var steps = new List<(string Text, Action Work)>();
+#if AVALONIA
+#pragma warning disable CA1416 // Windows only: Run returned at its start elsewhere
+#endif
                 if (shortcuts.Count > 0)
                     steps.Add(($"Pointing {shortcuts.Count} shortcut(s) at Lantern Engine.exe", () => Shortcuts.Retarget(shortcuts, renamed)));
+#if AVALONIA
+#pragma warning restore CA1416
+#endif
                 // The old launcher or the forwarder that started this one may still be closing.
                 steps.Add(("Removing Bloodborne Launcher.exe", () => Retry(() => File.Delete(old), attempts: 40)));
                 if (oldIsFull || shortcuts.Count > 0)
@@ -77,6 +89,13 @@ namespace BloodborneLauncher.Core
 
         private static void Show(List<(string Text, Action Work)> steps)
         {
+#if AVALONIA
+            foreach (var (_, work) in steps)
+            {
+                try { work(); } catch (Exception) { /* the next step still runs */ }
+            }
+            return;
+#else
             if (steps.Count == 0) return;
             var status = new TextBlock { Margin = new Thickness(0, 10, 0, 0), Opacity = 0.8 };
             var bar = new ProgressBar { Height = 6, Minimum = 0, Maximum = steps.Count, Margin = new Thickness(0, 12, 0, 0) };
@@ -125,10 +144,14 @@ namespace BloodborneLauncher.Core
             Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             window.ShowDialog();
             Application.Current.ShutdownMode = mode;
+#endif
         }
 
         /// <summary>Shortcuts (.lnk) on the desktop, in the Start menu and pinned to the taskbar.</summary>
-        private static class Shortcuts
+#if AVALONIA
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+#endif
+        internal static class Shortcuts
         {
             private static IEnumerable<string> Folders()
             {
@@ -175,6 +198,24 @@ namespace BloodborneLauncher.Core
                         shortcut.TargetPath = target;
                         shortcut.WorkingDirectory = Path.GetDirectoryName(target);
                         shortcut.IconLocation = target + ",0";
+                        shortcut.Save();
+                    }
+                    catch (Exception) { }
+                }
+            }
+
+            public static void Restyle(IEnumerable<string> links, string icon)
+            {
+                var shell = Shell();
+                if (shell == null) return;
+                var location = icon + ",0";
+                foreach (var link in links)
+                {
+                    try
+                    {
+                        var shortcut = shell.CreateShortcut(link);
+                        if (string.Equals((string)shortcut.IconLocation, location, StringComparison.OrdinalIgnoreCase)) continue;
+                        shortcut.IconLocation = location;
                         shortcut.Save();
                     }
                     catch (Exception) { }

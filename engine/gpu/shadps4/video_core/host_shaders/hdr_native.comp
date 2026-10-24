@@ -1,0 +1,466 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// bbport: native HDR output (hdr_mode=native, docs/hdr.md). The game tonemaps its linear HDR
+// scene into an 8-bit SDR frame. These passes measure how much brighter than that frame its own
+// scene is where the game's curve compressed the highlights, as a gain map the HDR encode
+// (hdr_output.frag) multiplies the finished SDR frame (UI included) with:
+//   LUMA      before the post-processing combine: the scene color's brightest channel at half
+//             size, the 2x2 maximum (highlights) and that of the 2x2 average (exposure).
+//   STATS     the exposure statistics: log2(SDR / scene) over the SDR midtones (bloom's outliers
+//             weighted down), one sum per group, and the game's tone curve: the scene on the SDR
+//             scale per bin of SDR brightness in its shoulder; with SNAPSHOT also a copy of the
+//             tonemapped frame before the first UI pass.
+//   EXPOSURE  group 0: the sums added up, the exposure and the tone curve smoothed over frames;
+//             groups 1..TILES: the exposure of each tile of the frame (the vignette, local grading).
+//   GAIN      at the display pass: the gain per pixel of the finished frame.
+// The midtones keep the SDR picture exactly (gain 1 below the knee); the game's look (grading,
+// contrast, vignette, fog colour) stays, only the highlights get brighter.
+
+#version 450
+#extension GL_EXT_samplerless_texture_functions : require
+
+float Max3(vec3 c) {
+    return max(c.r, max(c.g, c.b));
+}
+
+// As hdr_output.frag: the game's picture is made for SDR displays, which show it with 2.2.
+vec3 SdrToLinear(vec3 c) {
+    return pow(max(c, vec3(0.0)), vec3(2.2));
+}
+
+// What the game's curve does to the midtones, as log2(SDR linear / scene).
+struct Exposure {
+    float log_scale; // smoothed over frames
+    float valid;     // 1 once measured
+    float samples;   // midtone samples of the last measurement (debugging)
+    float frames;    // measurements so far
+};
+
+// The game's tone curve in its shoulder: bins of SDR brightness (linear brightest channel) from
+// CURVE_LOW to CURVE_HIGH, each with the scene's brightness on the SDR scale (exposure * scene,
+// log2) that the game shows at that SDR value: the curve's inverse. Bloom and glare are added
+// after the scene color, so a halo's SDR value says how bright it really is where the scene
+// alone cannot.
+const int CURVE_BINS = 16;
+const float CURVE_LOW = 0.5;
+const float CURVE_HIGH = 0.97;
+// The exposure per tile of the frame: what the vignette and local grading do to the SDR picture
+// but not to the scene.
+const int TILES_X = 8;
+const int TILES_Y = 6;
+const int TILES = TILES_X * TILES_Y;
+// vec4s per STATS group in the partial sums: the exposure, then two curve bins per vec4.
+const int PARTIAL_STRIDE = 1 + CURVE_BINS / 2;
+
+float CurveBinCenter(int bin) {
+    return CURVE_LOW + (float(bin) + 0.5) * (CURVE_HIGH - CURVE_LOW) / float(CURVE_BINS);
+}
+
+// The state the passes keep across frames (std430): the exposure; per curve bin x: log2(exposure
+// * scene) smoothed, y: confidence 0..1, z: last frame's weight, w: x made monotonic (what GAIN
+// reads); per tile x: log2(SDR / scene) smoothed, y: confidence 0..1, z: last frame's samples.
+#define STATE_BLOCK Exposure exposure; vec4 curve[CURVE_BINS]; vec4 tiles[TILES];
+
+#if defined(LUMA)
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0) uniform texture2D scene_tex;
+layout(binding = 1, rg16f) uniform writeonly image2D luma_img;
+
+void main() {
+    const ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(texel, imageSize(luma_img)))) {
+        return;
+    }
+    const ivec2 last = textureSize(scene_tex, 0) - 1;
+    float peak = 0.0;
+    vec3 sum = vec3(0.0);
+    for (int y = 0; y < 2; ++y) {
+        for (int x = 0; x < 2; ++x) {
+            vec3 c = texelFetch(scene_tex, min(texel * 2 + ivec2(x, y), last), 0).rgb;
+            // A NaN from an effect must not spread; an overflow (inf) is just very bright.
+            c = clamp(mix(c, vec3(0.0), isnan(c)), vec3(0.0), vec3(65504.0));
+            peak = max(peak, Max3(c));
+            sum += c;
+        }
+    }
+    imageStore(luma_img, texel, vec4(peak, Max3(sum * 0.25), 0.0, 0.0));
+}
+
+#elif defined(STATS)
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0) uniform texture2D frame_tex; // UNORM view: the display-encoded values
+layout(binding = 1) uniform texture2D luma_tex;
+layout(std430, binding = 2) writeonly buffer Partials {
+    // per group: weighted sum of log2(SDR / scene), weights, samples; then per curve bin the
+    // weighted sum of log2(exposure * scene) and the weights
+    vec4 partials[];
+};
+layout(std430, binding = 3) readonly buffer State {
+    STATE_BLOCK
+};
+#ifdef SNAPSHOT
+layout(binding = 4, rgba8) uniform writeonly image2D snapshot_img;
+#endif
+layout(push_constant) uniform Params {
+    uint reset; // the last exposure is stale (no measurement last frame)
+};
+
+// SDR midtones (linear brightest channel): above the toe of the game's curve, below its
+// shoulder, where it is close to a plain exposure.
+const float MID_LOW = 0.02;
+const float MID_HIGH = 0.45;
+// Bloom and glare light up SDR midtones around lamps where the scene is dark: samples far from
+// the last exposure (in stops) count less. A uniform shift (a new area, the eye adapting) moves
+// all samples alike and the weighted mean follows it.
+const float SPREAD = 1.0;
+// The curve bins: fixed point for the group's integer sums (log2 values offset by CURVE_OFFSET
+// stay positive).
+const float CURVE_FIXED = 65536.0;
+const float CURVE_OFFSET = 16.0;
+
+shared vec3 group_sums[256];
+shared uint bin_values[CURVE_BINS];
+shared uint bin_weights[CURVE_BINS];
+
+void main() {
+    const uint index = gl_LocalInvocationIndex;
+    if (index < uint(CURVE_BINS)) {
+        bin_values[index] = 0u;
+        bin_weights[index] = 0u;
+    }
+    barrier();
+    const ivec2 size = textureSize(frame_tex, 0);
+    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    vec3 sample_sum = vec3(0.0);
+    if (all(lessThan(pixel, size))) {
+        const vec4 c = texelFetch(frame_tex, pixel, 0);
+#ifdef SNAPSHOT
+        // Bit for bit (8-bit values in and out): the display pass finds the UI as any change.
+        imageStore(snapshot_img, pixel, c);
+#endif
+        const float sdr = Max3(SdrToLinear(c.rgb));
+        const ivec2 luma_size = textureSize(luma_tex, 0);
+        const ivec2 at = min(ivec2((vec2(pixel) + 0.5) * vec2(luma_size) / vec2(size)),
+                             luma_size - 1);
+        const float scene = texelFetch(luma_tex, at, 0).g;
+        if (sdr >= MID_LOW && sdr <= MID_HIGH && scene > 1e-5) {
+            const float stops = clamp(log2(sdr / scene), -32.0, 32.0);
+            const float off = reset == 0u && exposure.valid > 0.0
+                                  ? (stops - exposure.log_scale) / SPREAD
+                                  : 0.0;
+            const float weight = exp(-0.5 * off * off) + 1e-6;
+            sample_sum = vec3(stops * weight, weight, 1.0);
+        }
+        // The curve, once the exposure is known: the scene on the SDR scale where the SDR frame
+        // is in the shoulder. A pixel brighter in SDR than the scene can make it (bloom, glare)
+        // says nothing about the curve; the rest are weighted around each bin's last value.
+        if (reset == 0u && exposure.valid > 0.0 && sdr >= CURVE_LOW && sdr < CURVE_HIGH &&
+            scene > 1e-5) {
+            const int bin = min(int((sdr - CURVE_LOW) / (CURVE_HIGH - CURVE_LOW) *
+                                    float(CURVE_BINS)),
+                                CURVE_BINS - 1);
+            const float value = clamp(exposure.log_scale + log2(scene), -CURVE_OFFSET + 0.01,
+                                      CURVE_OFFSET - 0.01);
+            if (value >= log2(sdr) - 0.25) {
+                const vec4 last = curve[bin];
+                const float off = last.y > 0.0 ? (value - last.x) / SPREAD : 0.0;
+                const float weight = exp(-0.5 * off * off);
+                atomicAdd(bin_values[bin], uint((value + CURVE_OFFSET) * weight * CURVE_FIXED));
+                atomicAdd(bin_weights[bin], uint(weight * CURVE_FIXED));
+            }
+        }
+    }
+    group_sums[index] = sample_sum;
+    barrier();
+    for (uint stride = 128u; stride > 0u; stride >>= 1u) {
+        if (index < stride) {
+            group_sums[index] += group_sums[index + stride];
+        }
+        barrier();
+    }
+    const uint group = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+    const uint base = group * uint(PARTIAL_STRIDE);
+    if (index == 0u) {
+        partials[base] = vec4(group_sums[0], 0.0);
+    }
+    if (index < uint(CURVE_BINS)) {
+        const float weight = float(bin_weights[index]) / CURVE_FIXED;
+        const float value = float(bin_values[index]) / CURVE_FIXED - CURVE_OFFSET * weight;
+        if ((index & 1u) == 0u) {
+            partials[base + 1u + index / 2u].xy = vec2(value, weight);
+        } else {
+            partials[base + 1u + index / 2u].zw = vec2(value, weight);
+        }
+    }
+}
+
+#elif defined(EXPOSURE)
+
+layout(local_size_x = 256) in;
+
+layout(std430, binding = 0) readonly buffer Partials {
+    vec4 partials[];
+};
+layout(std430, binding = 1) buffer State {
+    STATE_BLOCK
+};
+layout(push_constant) uniform Params {
+    uint count;        // groups of the STATS pass
+    uint reset;        // no measurement last frame: take this one as it is
+    float min_samples; // fewer midtone samples (a dark or white frame): keep the last value
+    float rate;        // smoothing per frame
+    uint groups_x;     // the STATS pass's groups per row
+    float min_tile;    // the least midtone samples for a tile's exposure
+};
+
+// The least weight of a curve bin's samples in a frame to count, and how fast a bin's
+// confidence builds up (20 frames) and fades without samples.
+const float BIN_MIN_WEIGHT = 24.0;
+const float BIN_CONFIDENCE_STEP = 0.05;
+const float BIN_CONFIDENCE_FADE = 0.999;
+const float TILE_CONFIDENCE_STEP = 0.1;
+const float TILE_CONFIDENCE_FADE = 0.98;
+
+shared vec4 sums[256];
+
+// Sums `value` over the group (all invocations call it); the total in sums[0].
+vec4 GroupSum(vec4 value) {
+    const uint index = gl_LocalInvocationIndex;
+    barrier();
+    sums[index] = value;
+    barrier();
+    for (uint stride = 128u; stride > 0u; stride >>= 1u) {
+        if (index < stride) {
+            sums[index] += sums[index + stride];
+        }
+        barrier();
+    }
+    return sums[0];
+}
+
+void main() {
+    const uint index = gl_LocalInvocationIndex;
+    if (gl_WorkGroupID.x > 0u) {
+        // A tile: the exposure statistics of the STATS groups in it.
+        const uint tile = gl_WorkGroupID.x - 1u;
+        const uint groups_y = count / max(groups_x, 1u);
+        const uint tx = tile % uint(TILES_X), ty = tile / uint(TILES_X);
+        const uint x0 = tx * groups_x / uint(TILES_X), x1 = (tx + 1u) * groups_x / uint(TILES_X);
+        const uint y0 = ty * groups_y / uint(TILES_Y), y1 = (ty + 1u) * groups_y / uint(TILES_Y);
+        const uint width = max(x1 - x0, 1u);
+        const uint cells = (x1 - x0) * (y1 - y0);
+        vec3 sum = vec3(0.0);
+        for (uint i = index; i < cells; i += 256u) {
+            const uint g = (y0 + i / width) * groups_x + x0 + i % width;
+            sum += partials[g * uint(PARTIAL_STRIDE)].xyz;
+        }
+        const vec3 total = GroupSum(vec4(sum, 0.0)).xyz;
+        if (index != 0u) {
+            return;
+        }
+        vec4 state = tiles[tile];
+        state.z = total.z;
+        if (total.z >= min_tile && total.y > 0.0) {
+            const float measured = total.x / total.y;
+            state.x = reset != 0u || state.y == 0.0 ? measured : mix(state.x, measured, rate);
+            state.y = min(state.y + TILE_CONFIDENCE_STEP, 1.0);
+        } else if (reset != 0u) {
+            state.y = 0.0;
+        } else {
+            state.y *= TILE_CONFIDENCE_FADE;
+        }
+        tiles[tile] = state;
+        return;
+    }
+
+    vec3 sum = vec3(0.0);
+    vec2 bins[CURVE_BINS];
+    for (int b = 0; b < CURVE_BINS; ++b) {
+        bins[b] = vec2(0.0);
+    }
+    for (uint i = index; i < count; i += 256u) {
+        const uint base = i * uint(PARTIAL_STRIDE);
+        sum += partials[base].xyz;
+        for (int k = 0; k < CURVE_BINS / 2; ++k) {
+            const vec4 pair = partials[base + 1u + uint(k)];
+            bins[2 * k] += pair.xy;
+            bins[2 * k + 1] += pair.zw;
+        }
+    }
+    const vec3 total = GroupSum(vec4(sum, 0.0)).xyz;
+    vec2 bin_totals[CURVE_BINS];
+    for (int k = 0; k < CURVE_BINS / 2; ++k) {
+        const vec4 pair = GroupSum(vec4(bins[2 * k], bins[2 * k + 1]));
+        bin_totals[2 * k] = pair.xy;
+        bin_totals[2 * k + 1] = pair.zw;
+    }
+    if (index != 0u) {
+        return;
+    }
+    exposure.samples = total.z;
+    if (total.z >= min_samples && total.y > 0.0) {
+        const float measured = total.x / total.y;
+        exposure.log_scale = reset != 0u || exposure.valid == 0.0
+                                 ? measured
+                                 : mix(exposure.log_scale, measured, rate);
+        exposure.valid = 1.0;
+        exposure.frames += 1.0;
+    } else if (reset != 0u) {
+        // Back from menus or loading with too little to measure: no stale exposure.
+        exposure.valid = 0.0;
+    }
+    // The curve: the game's, not the area's, so it is kept across resets. Then made monotonic
+    // (and never below the SDR value itself: a shoulder only compresses) for GAIN.
+    float running = -100.0;
+    for (int b = 0; b < CURVE_BINS; ++b) {
+        vec4 state = curve[b];
+        const vec2 bin = bin_totals[b];
+        state.z = bin.y;
+        if (bin.y >= BIN_MIN_WEIGHT) {
+            const float measured = bin.x / bin.y;
+            state.x = state.y == 0.0 ? measured : mix(state.x, measured, rate);
+            state.y = min(state.y + BIN_CONFIDENCE_STEP, 1.0);
+        } else {
+            state.y *= BIN_CONFIDENCE_FADE;
+        }
+        const float floor_value = log2(CurveBinCenter(b));
+        if (state.y > 0.0) {
+            running = max(running, max(state.x, floor_value));
+            state.w = running;
+        } else {
+            state.w = max(running, floor_value);
+        }
+        curve[b] = state;
+    }
+}
+
+#elif defined(GAIN)
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0) uniform texture2D frame_tex;    // the finished frame (UI included)
+layout(binding = 1) uniform texture2D snapshot_tex; // the same before the first UI pass
+layout(binding = 2) uniform texture2D luma_tex;
+layout(std430, binding = 3) readonly buffer State {
+    STATE_BLOCK
+};
+layout(binding = 4, r16f) uniform writeonly image2D gain_img;
+
+layout(push_constant) uniform Params {
+    float strength; // share of the scene's highlight range, in log2 (0: SDR, 1: all of it)
+    float white;    // peak / paper white: the most a pixel may reach (SDR white = 1)
+    float knee;     // linear brightest channel of the SDR frame where the gain starts
+    float rolloff;  // share of the range from SDR white to the peak (in stops) kept as it is
+};
+
+// Unchanged up to `rolloff` of the way from SDR white to the peak in stops, then towards the
+// peak in log2 with the same slope there: every further doubling of a highlight's brightness
+// gets a smaller share of the room left, so the moon, a lamp and the sun keep apart instead of
+// all clipping at the peak.
+float RollOff(float x, float limit) {
+    if (limit <= 1.0) {
+        return min(x, limit);
+    }
+    const float top = log2(limit);
+    const float start = rolloff * top;
+    const float lx = log2(max(x, 1e-6));
+    if (lx <= start) {
+        return x;
+    }
+    const float room = top - start;
+    return exp2(start + room * (1.0 - exp(-(lx - start) / room)));
+}
+
+// The exposure where `uv` (0..1 over the frame) is: the frame's, moved by the tiles around it
+// as far as they are sure, at most a stop either way.
+float LocalLogScale(vec2 uv) {
+    const float global = exposure.log_scale;
+    const vec2 p = uv * vec2(TILES_X, TILES_Y) - 0.5;
+    const ivec2 base = ivec2(floor(p));
+    const vec2 f = p - vec2(base);
+    float offset = 0.0;
+    for (int y = 0; y < 2; ++y) {
+        for (int x = 0; x < 2; ++x) {
+            const ivec2 t = clamp(base + ivec2(x, y), ivec2(0), ivec2(TILES_X - 1, TILES_Y - 1));
+            const vec4 tile = tiles[t.y * TILES_X + t.x];
+            const float w = (x == 0 ? 1.0 - f.x : f.x) * (y == 0 ? 1.0 - f.y : f.y);
+            offset += w * clamp(tile.x - global, -1.0, 1.0) * clamp(tile.y, 0.0, 1.0);
+        }
+    }
+    return global + offset;
+}
+
+// The scene's brightness on the SDR scale (log2) that the game's curve shows at the SDR value
+// `sdr` (linear brightest channel): the identity below the shoulder, the measured bins in it
+// (as far as they are sure), the last bin above it.
+float CurveInverse(float sdr) {
+    const float identity = log2(max(sdr, 1e-4));
+    if (sdr <= CURVE_LOW) {
+        return identity;
+    }
+    const float p = (min(sdr, CURVE_HIGH) - CURVE_LOW) / (CURVE_HIGH - CURVE_LOW) *
+                        float(CURVE_BINS) - 0.5;
+    float value;
+    if (p < 0.0) {
+        const vec4 first = curve[0];
+        const float c0 = mix(log2(CurveBinCenter(0)), first.w, clamp(first.y, 0.0, 1.0));
+        value = mix(log2(CURVE_LOW), c0, (p + 0.5) / 0.5);
+    } else {
+        const int i = min(int(p), CURVE_BINS - 1);
+        const int j = min(i + 1, CURVE_BINS - 1);
+        const float ci = mix(log2(CurveBinCenter(i)), curve[i].w, clamp(curve[i].y, 0.0, 1.0));
+        const float cj = mix(log2(CurveBinCenter(j)), curve[j].w, clamp(curve[j].y, 0.0, 1.0));
+        value = mix(ci, cj, clamp(p - float(i), 0.0, 1.0));
+    }
+    return max(value, identity);
+}
+
+void main() {
+    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 size = imageSize(gain_img);
+    if (any(greaterThanEqual(pixel, size))) {
+        return;
+    }
+    const vec3 finished = texelFetch(frame_tex, pixel, 0).rgb;
+    const vec3 before_ui = texelFetch(snapshot_tex, pixel, 0).rgb;
+    // UI: whatever the UI passes changed (HUD, menus, subtitles, their translucent backgrounds).
+    const float ui = smoothstep(0.5 / 255.0, 2.5 / 255.0, Max3(abs(finished - before_ui)));
+    float gain = 1.0;
+    const float sdr = Max3(SdrToLinear(before_ui));
+    const float ramp = smoothstep(knee, 1.0, sdr);
+    if (exposure.valid > 0.0 && ramp > 0.0 && white > 1.0) {
+        // The brightest scene pixel of the 2x2 luma texels around (4x4 scene pixels): the
+        // highlight's footprint does not shimmer with the upscalers' sub-pixel jitter or the
+        // resampling between the scene and this frame (scaled presets).
+        const ivec2 luma_size = textureSize(luma_tex, 0);
+        const vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+        const vec2 at = uv * vec2(luma_size) - 0.5;
+        const ivec2 base = ivec2(floor(at));
+        float peak = 0.0;
+        for (int y = 0; y < 2; ++y) {
+            for (int x = 0; x < 2; ++x) {
+                const ivec2 texel = clamp(base + ivec2(x, y), ivec2(0), luma_size - 1);
+                peak = max(peak, texelFetch(luma_tex, texel, 0).r);
+            }
+        }
+        // The scene's brightness on the SDR frame's scale, as the midtones around are shown.
+        // Bloom and glare are in the SDR frame only: there the game's own curve, inverted, says
+        // how bright the pixel was before it (a halo rises with its lamp); clipped highlights
+        // only the scene can tell.
+        const float scene = exp2(LocalLogScale(uv)) * peak;
+        const float before_curve = exp2(CurveInverse(sdr));
+        const float ratio = max(scene, before_curve) / max(sdr, 1e-4);
+        if (ratio > 1.0) {
+            const float target = RollOff(sdr * exp2(strength * ramp * log2(ratio)), white);
+            gain = max(target / max(sdr, 1e-4), 1.0);
+        }
+    }
+    gain = mix(gain, 1.0, ui);
+    // Negative where UI was found (for the debug view); the encode uses the magnitude.
+    imageStore(gain_img, pixel, vec4(ui >= 0.5 ? -gain : gain, 0.0, 0.0, 0.0));
+}
+
+#endif

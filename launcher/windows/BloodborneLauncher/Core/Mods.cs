@@ -159,7 +159,7 @@ namespace BloodborneLauncher.Core
             try
             {
                 var xml = XDocument.Load(Path.Combine(Paths.EngineDir, "patches", "Bloodborne.xml"));
-                var template = xml.Descendants("Metadata").FirstOrDefault(m => (string?)m.Attribute(L.T("Name")) == ResolutionTemplate);
+                var template = xml.Descendants("Metadata").FirstOrDefault(m => (string?)m.Attribute("Name") == ResolutionTemplate);
                 return template?.Descendants("Line").Select(Range).Where(r => r.HasValue).Select(r => r!.Value).ToList() ?? new();
             }
             catch
@@ -252,12 +252,12 @@ namespace BloodborneLauncher.Core
                     if (!IsSupportedVersion((string?)meta.Attribute("AppVer")) ||
                         ((string?)meta.Attribute("AppElf") ?? "eboot.bin") != "eboot.bin")
                         continue;
-                    var name = (string?)meta.Attribute(L.T("Name")) ?? "";
+                    var name = (string?)meta.Attribute("Name") ?? "";
                     if (isBuiltIn && ManagedBuiltIn(name))
                         continue;
                     var file = Path.GetFileName(path);
                     found.Add(new Patch($"{file}/{name}", name.Length > 0 ? name : $"{file}/{name}", file,
-                        (string?)meta.Attribute(L.T("Author")) ?? "",
+                        (string?)meta.Attribute("Author") ?? "",
                         ((string?)meta.Attribute("Note") ?? "").Replace("\\n", "\n"),
                         !isBuiltIn && string.Equals((string?)meta.Attribute("isEnabled"), "true", StringComparison.OrdinalIgnoreCase),
                         meta.Descendants("Line").Any(WritesRegion),
@@ -268,12 +268,43 @@ namespace BloodborneLauncher.Core
             return found;
         }
 
+        private static readonly Dictionary<string, string> RenamedBuiltIns = new(StringComparer.Ordinal)
+        {
+            ["Bloodborne.xml/All languages (region unlock)"] = "Bloodborne.xml/Unlock Game Region",
+            ["Bloodborne.xml/Camera: no auto-turn"] = "Bloodborne.xml/Disable Camera Auto Rotation via Movement",
+            ["Bloodborne.xml/Can't die (HP stops at 1)"] = "Bloodborne.xml/Player No Dead (Read note)",
+        };
+
+        private static bool Rename(HashSet<string> keys)
+        {
+            var old = keys.Where(RenamedBuiltIns.ContainsKey).ToList();
+            foreach (var key in old)
+            {
+                keys.Remove(key);
+                keys.Add(RenamedBuiltIns[key]);
+            }
+            return old.Count > 0;
+        }
+
         public static (HashSet<string> Enabled, HashSet<string> Disabled) LoadProfile()
         {
             try
             {
                 if (File.Exists(ProfilePath) && JsonNode.Parse(File.ReadAllText(ProfilePath)) is JsonObject profile)
-                    return (Set(profile["enabled"]), Set(profile["disabled"]));
+                {
+                    var (enabled, disabled) = (Set(profile["enabled"]), Set(profile["disabled"]));
+                    if (Rename(enabled) | Rename(disabled))
+                    {
+                        try
+                        {
+                            Write(enabled, disabled);
+                        }
+                        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                        {
+                        }
+                    }
+                    return (enabled, disabled);
+                }
             }
             catch
             {
@@ -302,7 +333,11 @@ namespace BloodborneLauncher.Core
                 if (on == patch.DefaultOn) continue;
                 (on ? enabled : disabled).Add(patch.Key);
             }
+            Write(enabled, disabled);
+        }
 
+        private static void Write(HashSet<string> enabled, HashSet<string> disabled)
+        {
             var profile = new JsonObject
             {
                 ["enabled"] = new JsonArray(enabled.OrderBy(k => k, StringComparer.Ordinal).Select(k => (JsonNode?)k).ToArray()),

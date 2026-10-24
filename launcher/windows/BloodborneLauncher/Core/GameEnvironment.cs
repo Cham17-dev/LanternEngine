@@ -3,7 +3,7 @@ using System.IO;
 namespace BloodborneLauncher.Core
 {
     /// <summary>
-    /// The environment run_windows.py gets from the launcher. Most settings travel in bbport.ini
+    /// The environment run_windows.py gets from the launcher. Most settings travel in lantern.ini
     /// (graphics, controls, online); these are the ones the engine takes from the environment.
     /// </summary>
     public static class GameEnvironment
@@ -145,7 +145,7 @@ namespace BloodborneLauncher.Core
             if (s.Bool("fsr_profile")) env["BB_FSR4_PROFILE"] = "1";
             if (s.Bool("audio_stats")) env["BB_AUDIO_STATS"] = "1";
             if (s.Bool("load_profile")) env["BB_SAMPLE_THREADS"] = "load";
-            if (s.Bool("fsr4_balanced")) env["BB_FSR4_BALANCED"] = "1";
+            if (s.Bool("fsr4_balanced")) env["BB_FSR4_MODEL"] = "balanced";
             // Experimental engine features: on by default, each can be turned off.
             env["BB_PRECISE_PACING"] = s.Bool("exp_frame_pacing") ? "1" : "0";
             env["BB_IMAGE_WRITEBACK_GC"] = s.Bool("exp_vram_cleanup") ? "1" : "0";
@@ -179,6 +179,11 @@ namespace BloodborneLauncher.Core
             if (output == "directsound_large") env["SDL_AUDIO_DEVICE_SAMPLE_FRAMES"] = "2048";
             if (s.Bool("exp_fast_loading")) env["BB_FAST_LOADING"] = "1";
             if (s.Bool("exp_hot_pages")) env["BB_HOT_PAGES"] = "2";
+            // The PC memory model (the GPU reads the game's memory in place; the engine checks the
+            // GPU first and keeps copying where it cannot) and the game's draw calls handed over
+            // directly: on since 0.9.37 beta 4.
+            if (s.Bool("exp_guest_in_place")) env["BB_GUEST_IN_PLACE"] = "1";
+            if (s.Bool("exp_native_calls")) env["BB_NATIVE_CALLS"] = "1";
             if (s.Bool("exp_sfx_workaround")) env["BB_SFX_WORKAROUND"] = "1";
             if (s.Bool("exp_camera_easing")) env["BB_CAMERA_FIX"] = "1";
             if (s.Bool("borderless_fullscreen")) env["BB_EXCLUSIVE_FULLSCREEN"] = "0";
@@ -191,7 +196,6 @@ namespace BloodborneLauncher.Core
             if (s.Bool("section_stats")) env["BB_SECTIONS"] = "1";
             if (s.Str("overlay_keys") is "insert" or "off") env["BB_OVERLAY_KEYS"] = s.Str("overlay_keys");
             if (s.Bool("legacy_shaders")) env["BB_NATIVE_SHADERS"] = "0";
-            if (s.Str("dlss_preset") is { Length: > 0 } dlss && dlss != "k") env["BB_DLSS_PRESET"] = dlss;
             if (s.Bool("shader_capture"))
             {
                 env["BB_SHADER_CAPTURE"] = "1";
@@ -202,6 +206,8 @@ namespace BloodborneLauncher.Core
                 // Safe mode (after a crash, one run): every experimental engine option and the mods off.
                 env.Remove("BB_FAST_LOADING");
                 env.Remove("BB_HOT_PAGES");
+                env.Remove("BB_GUEST_IN_PLACE");
+                env.Remove("BB_NATIVE_CALLS");
                 env.Remove("BB_CAMERA_FIX");
                 env["BB_PRECISE_PACING"] = "0";
                 env["BB_IMAGE_WRITEBACK_GC"] = "0";

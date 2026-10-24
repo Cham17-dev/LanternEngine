@@ -16,6 +16,7 @@ namespace BloodborneLauncher.Core
     /// package has no package.json yet), the whole package is downloaded and copied over this one,
     /// keeping the player's settings, saves, mods and profiles. A running exe cannot be overwritten
     /// but can be renamed, so the launcher moves itself aside and is removed on the next start.
+    /// On Linux the update is always the whole package (LanternEngine-v&lt;version&gt;-linux-x64.tar.gz).
     ///
     /// Two channels: stable follows GitHub's latest release; beta also takes pre-releases, tagged
     /// v&lt;version&gt;-beta.&lt;n&gt;. A beta comes before the stable release of the same version.
@@ -26,7 +27,7 @@ namespace BloodborneLauncher.Core
         public static string ReleasesPage => $"https://github.com/{Repository}/releases";
 
         /// <summary>The engine build this launcher is made for (package.json "engine").</summary>
-        public const string EngineId = "lantern-16d7b51-psychov30-v1";
+        public const string EngineId = "lantern-d901fbd-hdr16-v1";
 
         public const string ExeName = "Lantern Engine.exe";
         /// <summary>The launcher's name before 0.9.34 beta 8 (now a forwarder to ExeName).</summary>
@@ -34,7 +35,7 @@ namespace BloodborneLauncher.Core
         private const string PackageFile = "package.json";
 
         /// <summary>Files and folders of the player's that a package update never touches.</summary>
-        private static readonly string[] Kept = { "bbport.ini", "mods.json", "patches.json", "user", "mods", "logs", "network", "engine-assets" };
+        private static readonly string[] Kept = { "lantern.ini", "bbport.ini", "mods.json", "patches.json", "user", "mods", "logs", "network", "engine-assets" };
 
         public sealed record Release(Version Version, int Beta, string Tag, string Name, string Notes, string Page,
             string? ExeUrl, string? ZipUrl, string? PackageUrl, long ExeSize, long ZipSize, DateTime Published = default)
@@ -43,21 +44,43 @@ namespace BloodborneLauncher.Core
             public bool IsCurrent => Compare(Version, Beta, Current, CurrentBeta) == 0;
         }
 
-        public static Version Current
-        {
-            get
-            {
-                var v = typeof(Updater).Assembly.GetName().Version ?? new Version(0, 0, 0);
-                return new Version(v.Major, v.Minor, Math.Max(0, v.Build));
-            }
-        }
+        public static Version Current => Stamp.Version;
 
         /// <summary>The beta number of this build (from its informational version, "0.9.7-beta.2"), 0 when stable.</summary>
-        public static int CurrentBeta { get; } =
-            TryVersion(typeof(Updater).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
-                .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "", out _, out var beta)
-                ? beta
-                : 0;
+        public static int CurrentBeta => Stamp.Beta;
+
+        /// <summary>The version this build was stamped with (build.ps1: -p:Version, -p:InformationalVersion).
+        /// A build without one carries .NET's 1.0.0: the Linux launcher of 0.9.37 betas 5-8 was published so,
+        /// called itself v1.0.0 and never saw an update as newer. Such a build takes its package's
+        /// package.json version instead (not a stamped one: a launcher that updates alone keeps an older
+        /// package.json beside it).</summary>
+        private static readonly (Version Version, int Beta) Stamp = ReadStamp();
+
+        private static (Version, int) ReadStamp()
+        {
+            var assembly = typeof(Updater).Assembly;
+            var v = assembly.GetName().Version ?? new Version(0, 0, 0);
+            var informational = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "";
+            var stamped = TryVersion(informational, out _, out var beta) ? beta : 0;
+            var own = new Version(v.Major, v.Minor, Math.Max(0, v.Build));
+            if (own == new Version(1, 0, 0) && (informational == "" || informational.StartsWith("1.0.0", StringComparison.Ordinal)))
+            {
+                try
+                {
+                    var file = Path.Combine(AppContext.BaseDirectory, PackageFile);
+                    if (File.Exists(file) && JsonNode.Parse(File.ReadAllText(file)) is JsonObject o &&
+                        (string?)o["version"] is { } version && TryVersion(version, out var packaged, out var packagedBeta))
+                    {
+                        return (packaged, packagedBeta);
+                    }
+                }
+                catch
+                {
+                }
+            }
+            return (own, stamped);
+        }
 
         /// <summary>This build as players see it: "v0.9.6" or "v0.9.7 beta 2".</summary>
         public static string CurrentLabel => Label(Current, CurrentBeta);
@@ -118,14 +141,17 @@ namespace BloodborneLauncher.Core
                 return null;
             response.EnsureSuccessStatusCode();
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            // Linux: only releases with the Linux package count (some early ones had none).
+            static bool ForThisSystem(Release r) => !OperatingSystem.IsLinux() || r.ZipUrl != null;
             if (!beta)
-                return Parse(doc.RootElement);
+                return Parse(doc.RootElement) is { } latest && ForThisSystem(latest) ? latest : null;
 
             Release? newest = null;
             foreach (var item in doc.RootElement.EnumerateArray())
             {
                 if (item.TryGetProperty("draft", out var draft) && draft.GetBoolean()) continue;
-                if (Parse(item) is { } release && (newest == null || release.IsNewerThan(newest.Version, newest.Beta)))
+                if (Parse(item) is { } release && ForThisSystem(release) &&
+                    (newest == null || release.IsNewerThan(newest.Version, newest.Beta)))
                     newest = release;
             }
             return newest;
@@ -154,10 +180,19 @@ namespace BloodborneLauncher.Core
         public static async Task<bool> SwitchNeedsPackageAsync(Release release)
         {
             if (OwnPackage == null || release.ZipUrl == null) return false;
-            if (release.ExeUrl == null) return true;
+            if (release.ExeUrl == null) return true; // Linux: always the package
             var remote = await RemoteEngineAsync(release);
             return remote == null || remote != LocalEngine();
         }
+
+        /// <summary>The release's package for this system: the Windows zip, or on Linux the tarball
+        /// (LanternEngine-v&lt;version&gt;-linux-x64.tar.gz, packaging/linux/build.sh).</summary>
+        private static bool IsPackageAsset(string name) => OperatingSystem.IsLinux()
+            ? name.EndsWith("-linux-x64.tar.gz", StringComparison.OrdinalIgnoreCase)
+            : name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>The launcher's file in a package: "Lantern Engine.exe", on Linux "Lantern Engine".</summary>
+        private static string LauncherFile => OperatingSystem.IsWindows() ? ExeName : Path.GetFileNameWithoutExtension(ExeName);
 
         private static Release? Parse(JsonElement root)
         {
@@ -175,10 +210,11 @@ namespace BloodborneLauncher.Core
                 // GitHub stores "Lantern Engine.exe" as "Lantern.Engine.exe". A release before the
                 // rename has only the old name.
                 var spaced = name.Replace(".", " ").Replace(" exe", ".exe");
-                if (spaced.Equals(ExeName, StringComparison.OrdinalIgnoreCase) ||
-                    (exe == null && spaced.Equals(OldExeName, StringComparison.OrdinalIgnoreCase)))
+                if (!OperatingSystem.IsLinux() &&
+                    (spaced.Equals(ExeName, StringComparison.OrdinalIgnoreCase) ||
+                     (exe == null && spaced.Equals(OldExeName, StringComparison.OrdinalIgnoreCase))))
                     (exe, exeSize) = (url, size);
-                else if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) && zip == null)
+                else if (IsPackageAsset(name) && zip == null)
                     (zip, zipSize) = (url, size);
                 else if (name.Equals(PackageFile, StringComparison.OrdinalIgnoreCase))
                     package = url;
@@ -240,6 +276,8 @@ namespace BloodborneLauncher.Core
         public static async Task<bool> NeedsPackageAsync(Release release)
         {
             if (OwnPackage == null || release.ZipUrl == null) return false;
+            // Linux releases have no launcher on its own: the package carries it.
+            if (OperatingSystem.IsLinux()) return true;
             var remote = await RemoteEngineAsync(release);
             return remote != null ? remote != LocalEngine() : LocalEngine() == null && release.ExeUrl == null;
         }
@@ -253,7 +291,7 @@ namespace BloodborneLauncher.Core
             var folder = Path.GetDirectoryName(self)!;
             // A folder of its own each time: one an antivirus still holds a file in (from an earlier
             // attempt) cannot be deleted, and must not stop this one.
-            var parent = Path.Combine(Path.GetTempPath(), "bbport-launcher-update");
+            var parent = Path.Combine(Path.GetTempPath(), "lantern-engine-update");
             if (Directory.Exists(parent))
             {
                 foreach (var old in Directory.GetDirectories(parent).Append(parent))
@@ -269,14 +307,18 @@ namespace BloodborneLauncher.Core
             {
                 if (Process.GetProcessesByName("bb-probe").Length > 0)
                     throw new InvalidOperationException("Close the game first: the update replaces the engine.");
-                var zip = Path.Combine(work, "package.zip");
+                var tarball = OperatingSystem.IsLinux();
+                var zip = Path.Combine(work, tarball ? "package.tar.gz" : "package.zip");
                 await DownloadAsync(release.ZipUrl!, zip, release.ZipSize, progress);
                 var unpacked = Path.Combine(work, "unpacked");
-                Extract(zip, unpacked, skipped);
-                var root = (Directory.GetFiles(unpacked, ExeName, SearchOption.AllDirectories).FirstOrDefault() ??
-                            Directory.GetFiles(unpacked, OldExeName, SearchOption.AllDirectories).FirstOrDefault()) is { } found
+                if (tarball)
+                    ExtractTarball(zip, unpacked);
+                else
+                    Extract(zip, unpacked, skipped);
+                var root = (Directory.GetFiles(unpacked, LauncherFile, SearchOption.AllDirectories).FirstOrDefault() ??
+                            (tarball ? null : Directory.GetFiles(unpacked, OldExeName, SearchOption.AllDirectories).FirstOrDefault())) is { } found
                     ? Path.GetDirectoryName(found)
-                    : throw new InvalidOperationException($"The package has no {ExeName}.");
+                    : throw new InvalidOperationException($"The package has no {LauncherFile}.");
                 CopyPackage(root!, folder, self, skipped);
             }
             else
@@ -288,8 +330,18 @@ namespace BloodborneLauncher.Core
                     throw new InvalidOperationException("The download is too small to be the launcher.");
                 ReplaceSelf(self, exe);
             }
-            Process.Start(new ProcessStartInfo(self) { UseShellExecute = true, WorkingDirectory = folder });
+            Process.Start(new ProcessStartInfo(self) { UseShellExecute = OperatingSystem.IsWindows(), WorkingDirectory = folder });
             return skipped;
+        }
+
+        /// <summary>Unpacks the Linux package: its files keep their modes (programs stay executable),
+        /// and an entry that would land outside the folder stops the update.</summary>
+        private static void ExtractTarball(string tarball, string to)
+        {
+            Directory.CreateDirectory(to);
+            using var file = File.OpenRead(tarball);
+            using var gzip = new GZipStream(file, CompressionMode.Decompress);
+            System.Formats.Tar.TarFile.ExtractToDirectory(gzip, to, overwriteFiles: true);
         }
 
         /// <summary>Package folders the game runs without: a file there an antivirus will not let
@@ -345,6 +397,15 @@ namespace BloodborneLauncher.Core
         /// <summary>Copies a new package over this one, leaving the player's own files alone.</summary>
         private static void CopyPackage(string from, string to, string self, List<string> skipped)
         {
+            // The shader catalog is one set (its keys name its permutations by number): a game's
+            // catalog in the package replaces the old one whole, so no older catalog file stays.
+            var catalogs = Path.Combine(from, "engine", "shader-catalog");
+            if (Directory.Exists(catalogs))
+                foreach (var game in Directory.GetDirectories(catalogs))
+                {
+                    var old = Path.Combine(to, "engine", "shader-catalog", Path.GetFileName(game));
+                    try { if (Directory.Exists(old)) Directory.Delete(old, recursive: true); } catch (Exception) { }
+                }
             foreach (var file in Directory.GetFiles(from, "*", SearchOption.AllDirectories))
             {
                 var relative = Path.GetRelativePath(from, file);
@@ -358,6 +419,10 @@ namespace BloodborneLauncher.Core
                     continue;
                 }
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                // Linux: a new file, not the old one rewritten: this launcher's own libraries
+                // (libSkiaSharp.so, ...) are mapped while it runs, and rewriting them in place
+                // crashes it.
+                if (!OperatingSystem.IsWindows() && File.Exists(target)) File.Delete(target);
                 try { Retry(() => File.Copy(file, target, overwrite: true)); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {
@@ -402,6 +467,12 @@ namespace BloodborneLauncher.Core
             }
         }
 
+#if AVALONIA
+        /// <summary>Whether this launcher can update itself: releases carry the Windows package and the
+        /// Linux one (LanternEngine-v&lt;version&gt;-linux-x64.tar.gz, with this launcher inside).</summary>
+        public static bool Supported => OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
+
+#endif
         /// <summary>Removes the exe an update moved aside (it was still running then).</summary>
         public static void CleanUp()
         {

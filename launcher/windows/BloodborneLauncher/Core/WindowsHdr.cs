@@ -21,6 +21,10 @@ namespace BloodborneLauncher.Core
         public static List<Display> Displays()
         {
             var list = new List<Display>();
+#if AVALONIA
+            // Linux: HDR is the desktop's (KDE Plasma, GNOME, gamescope): nothing to read or turn back on here.
+            if (!OperatingSystem.IsWindows()) return list;
+#endif
             try
             {
                 if (GetDisplayConfigBufferSizes(QdcOnlyActivePaths, out var paths, out var modes) != 0) return list;

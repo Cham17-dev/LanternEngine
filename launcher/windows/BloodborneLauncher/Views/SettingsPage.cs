@@ -23,14 +23,14 @@ namespace BloodborneLauncher.Views
         private readonly TextBlock _versionHint;
         private IReadOnlyList<Updater.Release>? _releases;
         private bool _versionsLoading;
-        private readonly StackPanel _themeColour = new(), _picture = new();
-        private TextBlock _pictureHint = null!;
+        private readonly StackPanel _themeColour = new(), _picture = new(), _iconPicture = new();
+        private TextBlock _pictureHint = null!, _iconPictureHint = null!;
 
         public SettingsPage() : base(L.T("Settings"), L.T("The Lantern Engine, how the game is started, and keeping this launcher up to date."))
         {
             Group(L.T("Appearance"));
             ComboRow(SymbolRegular.LocalLanguage24, L.T("Launcher language"), L.T("Restart the launcher to apply the language."),
-                new[] { new Choice("English", "en"), new Choice("简体中文", "zh-CN") },
+                L.Languages.Select(l => new Choice(l.Name, l.Code)).ToArray(),
                 () => S.Str("ui_language"), v => S.Set("ui_language", v), changed: () =>
                 {
                     Ws.SaveNow();
@@ -53,6 +53,13 @@ namespace BloodborneLauncher.Views
                     else if (layout is ComboBox box) box.SelectedIndex = index;
                     reverting = false;
                 });
+
+            // The Modern layout's pages: tabs across the top, or a sidebar in groups (live).
+            if (!SettingRow.Classic)
+                ComboRow(SymbolRegular.TextBulletListSquare24, L.T("Navigation"), L.T("Tabs across the top, or a sidebar with the pages in groups"),
+                    new[] { new Choice(L.T("Tabs"), "tabs"), new Choice(L.T("Sidebar"), "sidebar") },
+                    () => S.Str("ui_navigation") == "sidebar" ? "sidebar" : "tabs", v => S.Set("ui_navigation", v),
+                    changed: () => MainWindow.Instance?.ApplyNavigation());
 
             SettingCombo(SymbolRegular.PaintBrush24, L.T("Theme"), L.T("The accent colour, and a faint tint of it in the launcher's surfaces"),
                 LauncherTheme.Themes, "ui_theme", changed: () =>
@@ -114,7 +121,14 @@ namespace BloodborneLauncher.Views
                 new[] { new Choice(L.T("Strong"), "strong"), new Choice(L.T("Light"), "light"), new Choice(L.T("Off"), "off") },
                 "ui_background_blur", changed: () => MainWindow.Instance?.ApplyBackdrop());
             SettingCombo(SymbolRegular.Image24, L.T("App icon"), L.T("The launcher's and the game window's icon. The game window takes it at its next start"),
-                AppIcon.Choices, "app_icon", changed: () => MainWindow.Instance?.ApplyIcon());
+                AppIcon.Choices, "app_icon", changed: () =>
+                {
+                    ShowAppearance();
+                    MainWindow.Instance?.ApplyIcon();
+                });
+            Add(Card(SymbolRegular.ImageEdit24, L.T("Icon picture"), L.T("A PNG, JPG, BMP or ICO; square pictures look best"),
+                SmallButton(L.T("Choose"), SymbolRegular.FolderOpen24, (_, _) => ChooseIcon()), out _iconPictureHint), _iconPicture);
+            Body.Children.Add(_iconPicture);
             SettingCombo(SymbolRegular.Window24, L.T("Window buttons"), L.T("macOS: the red, yellow and green dots. Windows: – □ ✕"),
                 new[] { new Choice("macOS", "mac"), new Choice("Windows", "windows") },
                 "ui_window_buttons", changed: () => MainWindow.Instance?.ApplyWindowButtons());
@@ -176,17 +190,17 @@ namespace BloodborneLauncher.Views
             Group(L.T("Files"));
             Add(Card(SymbolRegular.DocumentSettings20, L.T("Launcher settings"), Paths.ConfigFile,
                 IconButton(SymbolRegular.Open24, L.T("Open in Explorer"), (_, _) => Paths.OpenFolder(Paths.ConfigDir)), out _));
-            Add(Card(SymbolRegular.DocumentSettings20, L.T("Port settings (bbport.ini)"), Paths.IniPath,
+            Add(Card(SymbolRegular.DocumentSettings20, L.T("Port settings (lantern.ini)"), Paths.IniPath,
                 IconButton(SymbolRegular.Open24, L.T("Open in Explorer"), (_, _) => Paths.OpenFolder(Path.GetDirectoryName(Paths.IniPath)!)), out _));
             Add(Card(SymbolRegular.Broom24, L.T("Shader cache"),
                 L.T("The game's compiled shaders, kept between starts (a new engine version clears them itself). Clear them if ") +
                 L.T("something draws wrong in every save, such as missing skin or hair; the next start compiles them again and stutters for a while"),
                 SmallButton(L.T("Clear"), SymbolRegular.Broom24, (_, _) => ClearShaderCache()), out _));
-            Add(Card(SymbolRegular.Share24, L.T("Share shader cache"),
-                L.T("Save your compiled shaders as a file, or use someone else's: areas they have played don't stutter for you. ") +
-                L.T("It works between the same launcher version and the same kind of graphics card; using one replaces yours (kept as a backup)"),
-                Row(SmallButton(L.T("Save as file"), SymbolRegular.Save24, (_, _) => ExportShaderCache()),
-                    SmallButton(L.T("Use a file"), SymbolRegular.FolderOpen24, (_, _) => ImportShaderCache())), out _));
+            Add(Card(SymbolRegular.Share24, L.T("Shader catalog"),
+                L.T("Save your shaders as a catalog file, or add someone else's: areas they have played don't pop in or stutter for you. ") +
+                L.T("It works with the same kind of graphics card; a catalog adds to your shaders, it never replaces them"),
+                Row(SmallButton(L.T("Export catalog"), SymbolRegular.Save24, (_, _) => ExportShaderCache()),
+                    SmallButton(L.T("Add catalog"), SymbolRegular.FolderOpen24, (_, _) => ImportShaderCache())), out _));
 
             Group(L.T("Share settings"));
             Add(Card(SymbolRegular.Share24, L.T("Share your settings"),
@@ -383,6 +397,29 @@ namespace BloodborneLauncher.Views
             var own = S.Str("ui_background_image");
             SetHint(_pictureHint, own.Length == 0 ? L.T("None chosen yet: the game artwork shows")
                 : File.Exists(own) ? own : L.F($"{own} is missing: the game artwork shows"));
+            _iconPicture.Visibility = S.Str("app_icon") == "custom" ? Visibility.Visible : Visibility.Collapsed;
+            SetHint(_iconPictureHint, S.Str("app_icon_image") is { Length: > 0 } icon && File.Exists(AppIcon.CustomFile)
+                ? icon : L.T("None chosen yet: the build's own lantern shows"));
+        }
+
+        /// <summary>Your picture for the app icon, made into an icon file at once (the picture may move later).</summary>
+        private void ChooseIcon()
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = L.T("Icon picture"),
+                Filter = L.T("Pictures|*.png;*.jpg;*.jpeg;*.bmp;*.ico|All files|*.*"),
+            };
+            if (dialog.ShowDialog() != true) return;
+            if (!AppIcon.MakeCustom(dialog.FileName))
+            {
+                Prompt.Tell(L.T("Icon picture"), L.F($"{Path.GetFileName(dialog.FileName)} could not be read as a picture."));
+                return;
+            }
+            S.Set("app_icon_image", dialog.FileName);
+            Ws.SaveSoon();
+            ShowAppearance();
+            MainWindow.Instance?.ApplyIcon();
         }
 
         private void ChoosePicture()
@@ -449,34 +486,58 @@ namespace BloodborneLauncher.Views
                    failed == 0 ? LogLevel.Good : LogLevel.Warn);
         }
 
-        private static void ExportShaderCache()
+        private static async void ExportShaderCache()
         {
             var dialog = new Microsoft.Win32.SaveFileDialog
             {
-                Title = L.T("Save shader cache"), Filter = L.T("Shader cache|*.zip"),
-                FileName = $"Lantern Engine shaders {Updater.EngineId}.zip",
+                Title = L.T("Export shader catalog"), Filter = L.T("Shader catalog|*.zip"),
+                FileName = "Lantern Engine shader catalog.zip",
             };
             if (dialog.ShowDialog() != true) return;
             try
             {
-                var count = ShaderCacheShare.Export(dialog.FileName);
-                Ws.Log(L.F($"Shader cache saved: {count} pipelines in {dialog.FileName}"), LogLevel.Good);
+                Ws.Log(L.T("Saving the shader catalog..."), LogLevel.Info);
+                var count = await Task.Run(() => ShaderCacheShare.Export(dialog.FileName));
+                Ws.Log(L.F($"Shader catalog saved: {count} pipelines in {dialog.FileName}"), LogLevel.Good);
             }
             catch (Exception e)
             {
-                Ws.Log(L.T("Could not save the shader cache: ") + e.Message, LogLevel.Bad);
+                Ws.Log(L.T("Could not export the shader catalog: ") + e.Message, LogLevel.Bad);
             }
         }
 
-        private static void ImportShaderCache()
+        private static async void ImportShaderCache()
         {
             if (Process.GetProcessesByName("bb-probe").Length > 0)
             {
                 Prompt.Tell(L.T("Shader cache"), L.T("Close the game first: it is using the cache."));
                 return;
             }
-            var dialog = new Microsoft.Win32.OpenFileDialog { Title = L.T("Use a shader cache"), Filter = L.T("Shader cache|*.zip|All files|*.*") };
+            var dialog = new Microsoft.Win32.OpenFileDialog { Title = L.T("Add a shader catalog"), Filter = L.T("Shader catalog|*.zip|All files|*.*") };
             if (dialog.ShowDialog() != true) return;
+            bool catalog;
+            try { catalog = ShaderCacheShare.IsCatalog(dialog.FileName); }
+            catch (Exception e)
+            {
+                Prompt.Tell(L.T("Shader cache not used"), L.T("This file doesn't fit: ") + e.Message + ".");
+                return;
+            }
+            if (catalog)
+            {
+                var path = dialog.FileName;
+                var game = GameEnvironment.GameDir(Ws.Settings);
+                Ws.Log(L.T("Adding the shader catalog: its shaders are compiled now, this can take a minute..."), LogLevel.Info);
+                try
+                {
+                    var added = await Task.Run(() => ShaderCacheShare.Merge(path, game));
+                    Ws.Log(L.F($"Shader catalog added: {added} new pipelines; the game builds them at the next start."), LogLevel.Good);
+                }
+                catch (Exception e)
+                {
+                    Prompt.Tell(L.T("Shader catalog not used"), L.T("This file doesn't fit: ") + e.Message + ".");
+                }
+                return;
+            }
             var mine = ShaderCacheShare.Pipelines(Path.Combine(ShaderCacheShare.CacheDir, "CUSA03173"));
             if (mine > 0 && !Prompt.Confirm(L.T("Replace your shader cache?"),
                     L.F($"Yours has {mine} pipelines; it is kept as a backup (user\\cache\\CUSA03173.bak)."), L.T("Replace")))

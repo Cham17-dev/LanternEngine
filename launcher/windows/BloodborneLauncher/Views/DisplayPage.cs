@@ -113,6 +113,10 @@ namespace BloodborneLauncher.Views
             customRow.Visibility = Named(Ini.Get("output_res", "1920x1080")) ? Visibility.Collapsed : Visibility.Visible;
         }
 
+        private void IniSlider(SymbolRegular icon, string title, double min, double max, string key, Panel? into = null,
+            double step = 0.05, double fallback = 1.0) =>
+            SliderRow(icon, title, null, min, max, step, () => ParseDouble(Ini.Get(key, Fmt(fallback)), fallback), v => Ini.Set(key, Fmt(v)), into: into);
+
         public DisplayPage() : base(L.T("Display"), L.T("Resolution, window mode, frame rate and menu language. Applied when the game starts."))
         {
             _monitor.SetResourceReference(StyleProperty, "DefaultComboBoxStyle");
@@ -146,6 +150,47 @@ namespace BloodborneLauncher.Views
             Group(L.T("Frame rate"));
             SettingCombo(SymbolRegular.Gauge24, L.T("Frame rate"), L.T("30, 60, 90, 120 and 144 are the game's frame-rate patches for that rate; Uncapped uses the community uncapped patch"), Choices.FpsModes, "fps_mode");
 
+            // bbport: the FPS counter (was on the Graphics page among the upscaler settings).
+            Group(L.T("FPS counter"));
+            IniToggle(SymbolRegular.DataUsage24, L.T("Show FPS"), L.T("Also in game: Insert or L3 + R3"), "show_fps");
+            IniToggle(SymbolRegular.Wrench24, L.T("Note while shaders build"),
+                L.T("\"Building shaders\" in a corner while the game builds shaders for a place it shows for the first time. Also in game: Insert or L3 + R3"),
+                "compile_note");
+            IniCombo(SymbolRegular.PositionToFront24, L.T("FPS counter position"), null, new Choice[]
+            {
+                new(L.T("Top right"), "0"), new(L.T("Top left"), "1"), new(L.T("Bottom right"), "2"), new(L.T("Bottom left"), "3"), new(L.T("Top centre"), "4"),
+            }, "fps_position");
+            IniSlider(SymbolRegular.TextFontSize24, L.T("FPS counter size"), 0.75, 2.0, "fps_scale");
+            IniCombo(SymbolRegular.Color24, L.T("FPS counter text colour"), L.T("Any colour in game: Insert or L3 + R3 › Other"), new Choice[]
+            {
+                new(L.T("White"), "#FFFFFF"), new(L.T("Yellow"), "#FFD54A"), new(L.T("Green"), "#7CFC8A"), new(L.T("Cyan"), "#6FE3FF"),
+                new(L.T("Red"), "#FF5A5A"), new(L.T("Orange"), "#FFA040"), new(L.T("Pink"), "#FF8AD8"), new(L.T("Black"), "#000000"),
+            }, "fps_text_color");
+            IniSlider(SymbolRegular.Eye24, L.T("FPS counter text opacity"), 0.1, 1.0, "fps_text_opacity", fallback: 1.0);
+            IniCombo(SymbolRegular.ColorBackground24, L.T("FPS counter background"), null, new Choice[]
+            {
+                new(L.T("Dark grey"), "#0F0F0F"), new(L.T("Black"), "#000000"), new(L.T("Dark red"), "#3A0A0A"), new(L.T("Dark blue"), "#0A1A3A"), new(L.T("White"), "#FFFFFF"),
+            }, "fps_bg_color");
+            IniSlider(SymbolRegular.Blur24, L.T("FPS counter background opacity"), 0.0, 1.0, "fps_bg_opacity", fallback: 0.5);
+            IniToggle(SymbolRegular.BorderAll24, L.T("FPS counter border"), null, "fps_border");
+            // What the counter shows (on unless turned off), folded under the switch.
+            var fpsParts = Advanced(L.T("What the FPS counter shows"));
+            foreach (var (icon, key, title) in new[]
+                     {
+                         (SymbolRegular.TopSpeed24, "show_fps_rate", L.T("Frame rate")),
+                         (SymbolRegular.Timer24, "show_fps_frame_time", L.T("Frame time")),
+                         (SymbolRegular.ResizeLarge24, "show_fps_upscaler", L.T("Upscaler")),
+                         (SymbolRegular.DeveloperBoard24, "show_fps_cpu", L.T("CPU usage")),
+                         (SymbolRegular.Gauge24, "show_fps_gpu", L.T("GPU usage")),
+                     })
+            {
+                // CPU and GPU use are off unless chosen (the engine's defaults, bbport_settings.h).
+                var fallback = key is "show_fps_cpu" or "show_fps_gpu" ? "0" : "1";
+                ToggleRow(icon, title, L.T("Shown in the FPS counter"), () => Ini.Get(key, fallback) == "1", v => Ini.Set(key, v ? "1" : "0"), fpsParts);
+                ((System.Windows.FrameworkElement)fpsParts.Children[^1]).Margin = new System.Windows.Thickness(24, 0, 0, 0);
+            }
+
+
             Group("HDR");
             var hdrHint = WindowsHdr.AnyOn()
                 ? L.T("The game's picture on an HDR screen, with brighter highlights. Applied when the game starts")
@@ -156,10 +201,9 @@ namespace BloodborneLauncher.Views
             ComboRow(SymbolRegular.Lightbulb24, L.T("HDR source"),
                 "HDR16: the game's own light in 16 bits, tone mapped by Vanilla+ or PsychoV-30. Native: highlights derived from the game's HDR scene. Expanded: bright SDR pixels expanded towards the peak. Entering or leaving HDR16 requires restarting the game.",
                 Choices.HdrMode, () => Ini.Get("hdr_mode", "native"), v => Ini.Set("hdr_mode", v), changed: RefreshHdrRows);
-            // Defaults, as the engine's: paper white 203 (BT.2408's reference white), the peak
-            // Windows reports for the chosen display (in HDR).
+            // Defaults, as the engine's: paper white 203 (BT.2408's reference white); the peak from
+            // the display (hdr_peak_auto) unless it is set.
             const double DefaultPaperWhite = 203;
-            double DetectedPeak() => DisplayPeak.Default(S.Str("display_device"));
             var paperWhite = SliderRow(SymbolRegular.BrightnessHigh24, L.T("Paper white"), "How bright the game's white is, in nits. Default: 203. Range: 10–500",
                 10, 500, 1, () => ParseDouble(Ini.Get("hdr_paper_white", ""), DefaultPaperWhite),
                 v => Ini.Set("hdr_paper_white", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
@@ -167,18 +211,13 @@ namespace BloodborneLauncher.Views
             if (paperWhite.Parent is Panel paperWhiteRow)
                 paperWhiteRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24, "Reset to 203 nits",
                     (_, _) => paperWhite.Value = DefaultPaperWhite));
-            var detected = DisplayPeak.Nits(S.Str("display_device"));
-            var peakHint = detected > 0
-                ? $"Your display's peak brightness, in nits. Windows reports {detected:0} nits for it: the default. Range: 10–4000"
-                : "Your display's peak brightness, in nits. Windows reports none (is Windows HDR on?): 1000 by default. Range: 10–4000";
-            var peak = SliderRow(SymbolRegular.WeatherSunny24, L.T("Peak brightness"), peakHint,
-                10, 4000, 1, () => ParseDouble(Ini.Get("hdr_peak", ""), DetectedPeak()),
+            ToggleRow(SymbolRegular.Desktop24, L.T("Peak brightness from the display"),
+                L.T("The peak Windows reports for the display the game is on (the Windows HDR Calibration app's, once it has run). Off: the value below"),
+                () => Ini.Get("hdr_peak_auto", "1") != "0", v => Ini.Set("hdr_peak_auto", v ? "1" : "0"));
+            SliderRow(SymbolRegular.WeatherSunny24, L.T("Peak brightness"), L.T("Your display's peak brightness, in nits, when it is not taken from the display. Range: 10–4000"),
+                10, 4000, 10, () => ParseDouble(Ini.Get("hdr_peak", "1000"), 1000),
                 v => Ini.Set("hdr_peak", v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)),
                 format: L.T("0' nits'"), valueWidth: 82);
-            if (peak.Parent is Panel peakRow)
-                peakRow.Children.Add(IconButton(SymbolRegular.ArrowCounterclockwise24,
-                    "Reset to the peak Windows reports for this display (1000 when it reports none)",
-                    (_, _) => peak.Value = Math.Clamp(DetectedPeak(), peak.Minimum, peak.Maximum)));
             // UI brightness in nits, as RenoDX's (48..500, 203 by default), whatever Paper white. An
             // older bbport.ini's hdr_ui_brightness (times paper white) shows converted, as the
             // engine reads it, and goes once this is set.

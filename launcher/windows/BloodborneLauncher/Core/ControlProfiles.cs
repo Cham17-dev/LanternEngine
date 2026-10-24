@@ -9,11 +9,11 @@ namespace BloodborneLauncher.Core
 {
     /// <summary>
     /// Control profiles: named sets of keyboard and mouse bindings, kept as small JSON files in
-    /// %APPDATA%\bbport-launcher\profiles and shared as text: export a file or copy the JSON, paste
+    /// %APPDATA%\Lantern Engine\profiles and shared as text: export a file or copy the JSON, paste
     /// it on any paste site, and someone else imports it from the file or the link.
     ///
     /// {
-    ///   "format": "bbport-controls", "version": 1,
+    ///   "format": "lantern-controls", "version": 1,
     ///   "name": "Mouse combat", "author": "someone", "description": "…",
     ///   "bindings": { "attack": "Mouse1", "roll": "Space", "firearm": "X, Mouse2", … }
     /// }
@@ -24,7 +24,9 @@ namespace BloodborneLauncher.Core
     /// </summary>
     public static class ControlProfiles
     {
-        public const string Format = "bbport-controls";
+        public const string Format = "lantern-controls";
+        /// <summary>The format name of profiles exported before 0.9.37 beta 2 (still read).</summary>
+        private const string OldFormat = "bbport-controls";
         public const int Version = 2;
         private const int MaxBytes = 64 * 1024;
 
@@ -188,7 +190,7 @@ namespace BloodborneLauncher.Core
                 throw new FormatException(L.T("This is not valid JSON: ") + e.Message);
             }
 
-            if ((string?)Str(root, "format") is { } format && format != Format)
+            if ((string?)Str(root, "format") is { } format && format != Format && format != OldFormat)
                 throw new FormatException(L.F($"This is a \"{format}\" file, not a control profile."));
             if (root["bindings"] is not JsonObject bindings)
                 throw new FormatException(L.T("This file has no \"bindings\" section."));

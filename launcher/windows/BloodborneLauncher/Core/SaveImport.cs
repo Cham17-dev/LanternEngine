@@ -57,7 +57,7 @@ namespace BloodborneLauncher.Core
         public static string FolderOfFile(string file)
         {
             if (!file.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) return Path.GetDirectoryName(file)!;
-            var temp = Path.Combine(Path.GetTempPath(), "bbport-save-import-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+            var temp = Path.Combine(Path.GetTempPath(), "lantern-save-import-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
             System.IO.Compression.ZipFile.ExtractToDirectory(file, temp);
             return temp;
         }

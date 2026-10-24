@@ -1,6 +1,8 @@
 using System.IO;
+#if !AVALONIA
 using System.Windows;
 using System.Windows.Controls;
+#endif
 
 namespace BloodborneLauncher.Core
 {
@@ -8,7 +10,7 @@ namespace BloodborneLauncher.Core
     /// Packages since 0.9.30 keep the engine in engine\, so the top of the folder holds only the
     /// launcher, Bloodborne.exe and the player's files. An update copies the new layout over an
     /// older one, which leaves the engine's old top-level folders behind: they are removed once,
-    /// at the next start, behind a window that says so. The player's files (bbport.ini, user, mods, patches,
+    /// at the next start, behind a window that says so. The player's files (lantern.ini, user, mods, patches,
     /// logs, network, engine-assets, fsr4_411) are never touched; the old out\ only held the engine
     /// and files each start makes again.
     /// </summary>
@@ -88,6 +90,14 @@ namespace BloodborneLauncher.Core
             var leftovers = Leftovers(package);
             var failed = new List<string>();
             if (leftovers.Count == 0) return failed;
+#if AVALONIA
+            foreach (var path in leftovers)
+            {
+                try { Remove(path); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { failed.Add(path); }
+            }
+            return failed;
+#else
 
             var bar = new ProgressBar { Height = 6, Minimum = 0, Maximum = leftovers.Count, Margin = new Thickness(0, 14, 0, 0) };
             var window = new Window
@@ -138,6 +148,7 @@ namespace BloodborneLauncher.Core
             window.ShowDialog();
             Application.Current.ShutdownMode = mode;
             return failed;
+#endif
         }
     }
 }

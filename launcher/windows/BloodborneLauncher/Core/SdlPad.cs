@@ -56,9 +56,30 @@ namespace BloodborneLauncher.Core
             if (_loaded || _failed) return _loaded;
             try
             {
+#if AVALONIA
+                // Linux: the engine's own libSDL3 when it ships one, else the system's.
+                IntPtr lib;
+                if (!OperatingSystem.IsWindows())
+                {
+                    var own = Path.Combine(Paths.BinariesDir, "libSDL3.so.0");
+                    if (!(File.Exists(own) && NativeLibrary.TryLoad(own, out lib)) &&
+                        !NativeLibrary.TryLoad("libSDL3.so.0", out lib) && !NativeLibrary.TryLoad("libSDL3.so", out lib))
+                    {
+                        _failed = true;
+                        return false;
+                    }
+                }
+                else
+                {
+                    var dll = Path.Combine(Paths.BinariesDir, "SDL3.dll");
+                    if (!File.Exists(dll)) { _failed = true; return false; }
+                    lib = NativeLibrary.Load(dll);
+                }
+#else
                 var dll = Path.Combine(Paths.BinariesDir, "SDL3.dll");
                 if (!File.Exists(dll)) { _failed = true; return false; }
                 var lib = NativeLibrary.Load(dll);
+#endif
                 T Get<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(lib, name));
                 _setHint = Get<SetHintFn>("SDL_SetHint");
                 _init = Get<InitFn>("SDL_InitSubSystem");

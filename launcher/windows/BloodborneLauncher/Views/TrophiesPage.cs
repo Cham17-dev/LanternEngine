@@ -93,7 +93,7 @@ namespace BloodborneLauncher.Views
             SettingToggle(SymbolRegular.Speaker224, L.T("Play a sound"), null, "trophy_sound");
             SliderRow(SymbolRegular.Speaker124, L.T("Volume"), null, 0, 100, 5, () => S.Int("trophy_volume"),
                 v => S.Set("trophy_volume", (int)v), "0");
-            Add(Card(SymbolRegular.MusicNote224, L.T("Sound file"), L.T("A .wav of your own; empty uses the built-in chime"), Row(
+            Add(Card(SymbolRegular.MusicNote224, L.T("Sound file"), L.T("A sound of your own (WAV, MP3, MP4/M4A); empty uses the built-in chime"), Row(
                 SmallButton(L.T("Choose…"), SymbolRegular.FolderOpen24, (_, _) => ChooseSound()),
                 IconButton(SymbolRegular.ArrowUndo24, L.T("Use the built-in chime"), (_, _) =>
                 {
@@ -188,7 +188,7 @@ namespace BloodborneLauncher.Views
             _support.IsOpen = !reports && !hasLog;
             _support.Title = L.T("This build of the game does not report trophies");
             _support.Message = L.T("Its bb-probe.exe accepts unlocks silently, so nothing can be tracked. A build with trophy hooks ") +
-                               L.T("(for example the Windows release of github.com/pyL1nx/bloodborne_pc) writes trophies.log, and the ") +
+                               L.T("writes trophies.log, and the ") +
                                L.T("launcher picks it up from there.");
         }
 
@@ -222,7 +222,7 @@ namespace BloodborneLauncher.Views
                 var icon = new SymbolIcon { Symbol = SymbolRegular.Trophy24, Filled = true, FontSize = 18, Foreground = GradeBrush(grade) };
                 var value = Text($"{earned} / {all.Count}", "StatValue");
                 value.Margin = new Thickness(8, 0, 0, 0);
-                var label = Text(grade.ToString(), "StatLabel");
+                var label = Text(Trophy.GradeName(grade), "StatLabel");
                 var col = new StackPanel();
                 col.Children.Add(label);
                 col.Children.Add(Row(icon, value));
@@ -253,7 +253,10 @@ namespace BloodborneLauncher.Views
                     ? GradeBrush(trophy.Grade)
                     : (Brush)FindResource("TextFillColorTertiaryBrush");
                 row.Opacity = earned ? 1 : 0.62;
-                row.ToolTip = L.F($"{trophy.Grade} · {trophy.Points} points");
+                // The trophy's own picture from the game dump, grey until earned.
+                if (TrophyIcons.For(S, trophy.Id) is { } picture)
+                    row.SetPicture(picture, 36, grey: !earned);
+                row.ToolTip = L.F($"{Trophy.GradeName(trophy.Grade)} · {trophy.Points} points");
                 _list.Children.Add(row);
             }
             if (_list.Children.Count == 0)
@@ -278,7 +281,7 @@ namespace BloodborneLauncher.Views
 
         private void ChooseSound()
         {
-            var dialog = new Microsoft.Win32.OpenFileDialog { Title = L.T("Trophy sound"), Filter = L.T("WAV sound|*.wav") };
+            var dialog = new Microsoft.Win32.OpenFileDialog { Title = L.T("Trophy sound"), Filter = L.T("Sound files|*.wav;*.mp3;*.mp4;*.m4a;*.aac;*.wma") };
             if (dialog.ShowDialog() != true) return;
             S.Set("trophy_sound_file", dialog.FileName);
             Ws.SaveSoon();

@@ -34,7 +34,8 @@ namespace BloodborneLauncher.Core
             ["fps_mode"] = "60",
             ["draw_pipe"] = "",
             ["readbacks"] = "",
-            ["frame_stats"] = false,
+            // Beta builds: on (Load switches older files once), so crash logs carry the frame stats.
+            ["frame_stats"] = Updater.CurrentBeta > 0,
             ["gpu_profile"] = false,
             ["vk_validation"] = false,
             ["extra_env"] = "",
@@ -54,26 +55,32 @@ namespace BloodborneLauncher.Core
             ["memory_check_off"] = false,
             ["discord_hidden"] = false,
             ["hardware_offered"] = false,
+            ["setup_shown"] = false, // the setup guide opened once (Views/SetupGuide.cs)
             ["cheat_vials_amount"] = 20,
             ["cheat_bullets_amount"] = 20,
             ["update_channel"] = "", // empty: beta builds follow beta, others stable
             ["ui_layout"] = "modern",
+            ["ui_navigation"] = "tabs", // tabs | sidebar (Modern layout; Classic has the sidebar)
             ["ui_theme"] = "default",
             ["ui_theme_colour"] = "#C41E3A",
             ["ui_background"] = "game", // game | custom | none
             ["ui_background_image"] = "",
             ["ui_background_blur"] = "strong", // strong | light | off
-            ["app_icon"] = "auto", // auto | red | blue | j3loo (AppIcon)
+            ["app_icon"] = "auto", // auto | red | blue | j3loo | custom (AppIcon)
+            ["app_icon_image"] = "", // custom: the picture chosen (AppIcon.CustomFile holds it as an icon)
             ["ui_window_buttons"] = "mac", // mac | windows
             ["ui_window_buttons_side"] = "usual", // usual (mac left, windows right) | left | right
             ["fsr4_balanced"] = false,
             ["exp_vram_cleanup"] = true,
-            ["exp_frame_pacing"] = false,
-            ["exp_thread_priority"] = false,
-            ["exp_sleep_spin"] = false,
+            // 0.9.37 beta 4: the dev setup, measured faster (PerfDefaults below switches older files once).
+            ["exp_frame_pacing"] = true,
+            ["exp_thread_priority"] = true,
+            ["exp_sleep_spin"] = true,
             ["exp_async_pipelines"] = true,
-            ["exp_fast_loading"] = false,
-            ["exp_hot_pages"] = false,
+            ["exp_fast_loading"] = true,
+            ["exp_hot_pages"] = true,
+            ["exp_guest_in_place"] = true,
+            ["exp_native_calls"] = true,
             ["exp_sfx_workaround"] = false,
             ["exp_camera_easing"] = false,
             ["borderless_fullscreen"] = false,
@@ -94,7 +101,7 @@ namespace BloodborneLauncher.Core
             ["shader_capture"] = false,
             ["overlay_keys"] = "both",
             ["dlss_preset"] = "k",
-            ["legacy_shaders"] = true, // beta 9.8: the native compiler costs FPS in dense scenes on NVIDIA
+            ["legacy_shaders"] = false, // beta 9.8 made legacy the default; beta 4 the native one again (PerfDefaults)
             ["trophy_notifications"] = true,
             ["trophy_sound"] = true,
             ["trophy_volume"] = 70,
@@ -122,6 +129,11 @@ namespace BloodborneLauncher.Core
                     // GB of 2486 MiB: evictions, re-uploads and tiled write-backs every frame).
                     if (Updater.CurrentBeta > 0 && !saved.ContainsKey("vram_budget_beta_on"))
                         _data["exp_vram_budget"] = true;
+                    // 0.9.37 beta 8: beta builds write the frame statistics into the log, switched
+                    // on once. Ebrietas' device losses were told apart only in the one log that had
+                    // them (the game's GPU range allocator nearly empty); most reports came without.
+                    if (Updater.CurrentBeta > 0 && !saved.ContainsKey("frame_stats_beta_on"))
+                        _data["frame_stats"] = true;
                     // Beta 9.9: occlusion culling off once (9.8 switched it on for everyone; floors
                     // and objects appeared late or flickered). On again only by choice.
                     if (!saved.ContainsKey("occlusion_off_99"))
@@ -131,6 +143,13 @@ namespace BloodborneLauncher.Core
                     // switched on once, the native one stays a choice.
                     if (!saved.ContainsKey("legacy_shaders_default_98"))
                         _data["legacy_shaders"] = true;
+                    // 0.9.37 beta 4: the engine options the dev build ran with, once, over older
+                    // files (beta 3 players ran with half of the engine's own speedups switched off:
+                    // render threads at normal priority, long sleep spins, no precise pacing, every
+                    // memory page watched, 1/3 of the CPU and GPU used on an i7-10700F).
+                    if (!saved.ContainsKey(PerfDefaultsMarker))
+                        foreach (var (key, value) in PerfDefaults)
+                            _data[key] = value;
                     // Older launchers kept the shadNet password in plain text: encrypted now, and
                     // the file rewritten without it.
                     if (Str("online_password") is { Length: > 0 } plain && !Secret.IsProtected(plain))
@@ -146,10 +165,24 @@ namespace BloodborneLauncher.Core
             }
             // Saved with the next change: from then on the player's own choice stays.
             if (Updater.CurrentBeta > 0)
+            {
                 _data["vram_budget_beta_on"] = true;
+                _data["frame_stats_beta_on"] = true;
+            }
             _data["legacy_shaders_default_98"] = true;
             _data["occlusion_off_99"] = true;
+            _data[PerfDefaultsMarker] = true;
         }
+
+        private const string PerfDefaultsMarker = "perf_defaults_b4";
+
+        /// <summary>0.9.37 beta 4's defaults that older settings files are switched to once.</summary>
+        private static readonly (string Key, bool Value)[] PerfDefaults =
+        {
+            ("exp_frame_pacing", true), ("exp_thread_priority", true), ("exp_sleep_spin", true),
+            ("exp_fast_loading", true), ("exp_hot_pages", true), ("exp_guest_in_place", true),
+            ("exp_native_calls", true), ("legacy_shaders", false),
+        };
 
         public void Save()
         {

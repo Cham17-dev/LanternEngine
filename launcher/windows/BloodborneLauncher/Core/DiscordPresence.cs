@@ -101,7 +101,11 @@ namespace BloodborneLauncher.Core
         }
 
         private static readonly object Gate = new();
+#if AVALONIA
+        private static Stream? _pipe; // a named pipe on Windows, a Unix socket elsewhere
+#else
         private static NamedPipeClientStream? _pipe;
+#endif
         private static string _pipeApp = "";  // the app the pipe signed in as
         private static string _wantedApp = LanternApp;
         private static JsonObject? _wanted;   // the activity to show; null: none
@@ -203,7 +207,45 @@ namespace BloodborneLauncher.Core
             }
         }
 
+#if AVALONIA
+        private static Stream? Connect(string app)
+        {
+            if (!OperatingSystem.IsWindows()) return ConnectSocket(app);
+            return ConnectPipe(app);
+        }
+
+        /// <summary>Linux: discord-ipc-0..9 in the runtime folder (the Flatpak and Snap Discords one
+        /// folder below it).</summary>
+        private static Stream? ConnectSocket(string app)
+        {
+            var runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR") is { Length: > 0 } dir ? dir : Path.GetTempPath();
+            foreach (var folder in new[] { runtime, Path.Combine(runtime, "app", "com.discordapp.Discord"), Path.Combine(runtime, "snap.discord") })
+                for (var i = 0; i < 10; ++i)
+                {
+                    var path = Path.Combine(folder, $"discord-ipc-{i}");
+                    if (!File.Exists(path)) continue;
+                    var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.Unix, System.Net.Sockets.SocketType.Stream,
+                        System.Net.Sockets.ProtocolType.Unspecified);
+                    try
+                    {
+                        socket.Connect(new System.Net.Sockets.UnixDomainSocketEndPoint(path));
+                        var stream = new System.Net.Sockets.NetworkStream(socket, ownsSocket: true) { ReadTimeout = 3000 };
+                        Send(stream, 0, new JsonObject { ["v"] = 1, ["client_id"] = app });
+                        Receive(stream); // READY
+                        return stream;
+                    }
+                    catch (Exception)
+                    {
+                        socket.Dispose();
+                    }
+                }
+            return null;
+        }
+
+        private static NamedPipeClientStream? ConnectPipe(string app)
+#else
         private static NamedPipeClientStream? Connect(string app)
+#endif
         {
             for (var i = 0; i < 10; ++i)
             {

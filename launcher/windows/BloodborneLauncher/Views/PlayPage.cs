@@ -68,7 +68,14 @@ namespace BloodborneLauncher.Views
             summary.Child = stack;
             Body.Children.Add(summary);
 
-            _problem = new InfoBar { IsClosable = false, IsOpen = false, Margin = new Thickness(0, 12, 0, 0) };
+            _problem = new InfoBar
+            {
+                IsClosable = false,
+                IsOpen = false,
+                Margin = new Thickness(0, 12, 0, 0),
+                // What is wrong and what to do, step by step.
+                Content = SmallButton(L.T("Open the setup guide"), SymbolRegular.Lightbulb24, (_, _) => SetupGuide.Open()),
+            };
             Body.Children.Add(_problem);
 
             // A package from before this launcher's engine (it updated itself, the engine did not).
@@ -101,6 +108,7 @@ namespace BloodborneLauncher.Views
             // ==================== Game ====================
             Group(L.T("Game"));
             var gameCard = Card(SymbolRegular.Folder24, L.T("Game folder"), "", Row(
+                SmallButton(L.T("Setup guide"), SymbolRegular.Lightbulb24, (_, _) => SetupGuide.Open()),
                 SmallButton(L.T("Browse"), SymbolRegular.FolderOpen24, (_, _) => ChooseGame()),
                 IconButton(SymbolRegular.Open24, L.T("Open in Explorer"), (_, _) => Paths.OpenFolder(GameEnvironment.GameDir(S)))), out _gameHint);
             _gameIcon = gameCard.Icon;
@@ -164,7 +172,7 @@ namespace BloodborneLauncher.Views
                 RefreshBackups();
             };
             Add(Card(SymbolRegular.ArrowSync24, L.T("Save backups"),
-                L.F($"Before every start, when this profile's saves changed. The newest {SaveBackups.Keep} are kept"), Row(
+                L.F($"Before every start and every {SaveBackups.PlayEvery.TotalMinutes:0} minutes while playing, when this profile's saves changed. The newest {SaveBackups.Keep} and {SaveBackups.PlayKeep} from play are kept"), Row(
                 _restoreButton,
                 IconButton(SymbolRegular.Open24, L.T("Open the backups folder"), (_, _) =>
                 {
@@ -415,7 +423,7 @@ namespace BloodborneLauncher.Views
                 var item = new System.Windows.Controls.MenuItem
                 {
                     Header = L.F($"{backup.When:d MMM yyyy, HH:mm}  ·  {backup.Bytes / 1048576.0:0.0} MB") +
-                             (backup.MadeBeforeRestore ? L.T("  ·  before a restore") : ""),
+                             (backup.MadeBeforeRestore ? L.T("  ·  before a restore") : backup.MadeDuringPlay ? L.T("  ·  while playing") : ""),
                 };
                 var chosen = backup;
                 item.Click += (_, _) => RestoreBackup(chosen);

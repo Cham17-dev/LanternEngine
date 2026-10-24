@@ -1,14 +1,18 @@
 ﻿using System.IO;
+#if AVALONIA
+using Avalonia.Threading;
+#else
 using System.Windows.Threading;
+#endif
 
 namespace BloodborneLauncher.Core
 {
     public enum LogLevel { Info, Step, Good, Warn, Bad }
 
     /// <summary>
-    /// The launcher's shared state: settings, bbport.ini, the game process and its output, and the
+    /// The launcher's shared state: settings, lantern.ini, the game process and its output, and the
     /// activity log. Every edit calls SaveSoon, so nothing waits for the window to close and an
-    /// in-game change to bbport.ini is only overwritten by a change made here.
+    /// in-game change to lantern.ini is only overwritten by a change made here.
     /// </summary>
     public sealed class Workspace
     {
@@ -41,6 +45,7 @@ namespace BloodborneLauncher.Core
         public event Action? PortChanged;
 
         private DispatcherTimer? _saveTimer;
+        private DispatcherTimer? _playBackupTimer;
         private bool _iniWarned;
 
         /// <summary>The session being played, then the last one played (null before the first).</summary>
@@ -73,6 +78,10 @@ namespace BloodborneLauncher.Core
             };
             _trophyTimer.Start();
 
+            _playBackupTimer = new DispatcherTimer { Interval = SaveBackups.PlayEvery };
+            _playBackupTimer.Tick += (_, _) => BackUpDuringPlay();
+            _playBackupTimer.Start();
+
             // Output arrives on the reader threads, often thousands of lines at once (the engine's
             // statistics when it exits): it is queued and handed on in batches, ten times a second.
             Game.Output += line => _pendingOutput.Enqueue(line);
@@ -89,6 +98,7 @@ namespace BloodborneLauncher.Core
                     Log(restored == 1 ? L.T("Windows HDR was switched off during the game; turned it back on.")
                                       : L.F($"Windows HDR was switched off on {restored} displays during the game; turned it back on."), LogLevel.Info);
                 _hdrBefore = new();
+                SecureSaves();
                 var stopped = _stopping;
                 _stopping = false;
                 if (Session is { } session)
@@ -144,6 +154,14 @@ namespace BloodborneLauncher.Core
             }
 
             Ini.Load();
+            // The DLSS model moved from the launcher's settings to lantern.ini (dlss_preset), where the
+            // in-game menu changes it live: an older launcher's choice is carried over once.
+            if (Paths.IsPortDir(Paths.PortDir) && Settings.Str("dlss_preset") is { Length: > 0 } dlss && dlss != "k")
+            {
+                Ini.Set("dlss_preset", dlss);
+                Settings.Set("dlss_preset", "k");
+                SaveSoon();
+            }
             _iniWarned = false;
             PortChanged?.Invoke();
         }
@@ -199,7 +217,7 @@ namespace BloodborneLauncher.Core
             foreach (var id in ids)
             {
                 if (!TrophyTracker.ById.TryGetValue(id, out var trophy)) continue;
-                Log(L.F($"Trophy unlocked: {trophy.Name} ({trophy.Grade})"), LogLevel.Good);
+                Log(L.F($"Trophy unlocked: {trophy.Name} ({Trophy.GradeName(trophy.Grade)})"), LogLevel.Good);
                 if (Settings.Bool("trophy_notifications"))
                     Views.TrophyToast.Announce(trophy);
             }
@@ -232,7 +250,7 @@ namespace BloodborneLauncher.Core
                 else if (!_iniWarned)
                 {
                     _iniWarned = true;
-                    Log("bbport.ini not written: the engine folder is not set (Settings › Lantern Engine).", LogLevel.Warn);
+                    Log("lantern.ini not written: the engine folder is not set (Settings › Lantern Engine).", LogLevel.Warn);
                 }
                 Saved?.Invoke();
             }
@@ -245,11 +263,24 @@ namespace BloodborneLauncher.Core
         /// <summary>Windows' HDR state per display when the game started (restored after it exits).</summary>
         private List<WindowsHdr.Display> _hdrBefore = new();
 
+        /// <summary>A safety copy of every profile's saves outside the saves folder (SaveGuard), on a
+        /// worker thread: at each start and when the game exits, whatever Save backups says.</summary>
+        public void SecureSaves()
+        {
+            var root = GameEnvironment.SavesRoot(Settings);
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                if (SaveGuard.Secure(root) > 0)
+                    Log(L.F($"Saves: safety copy made in {SaveGuard.VaultDir}."), LogLevel.Info);
+            });
+        }
+
         public string? StartGame()
         {
             SaveNow();
             OutputLines.Clear();
             OutputCleared?.Invoke();
+            SecureSaves();
             if (Settings.Bool("save_backups"))
             {
                 // Copied on a worker thread: the game takes ~20 s to reach its first save, and a
@@ -295,6 +326,24 @@ namespace BloodborneLauncher.Core
             return null;
         }
 
+        private void BackUpDuringPlay()
+        {
+            if (!Game.Running || !Settings.Bool("save_backups")) return;
+            var settings = Settings;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    if (SaveBackups.CreateDuringPlay(settings) != null)
+                        Log(L.F($"Saves backed up while playing (the newest {SaveBackups.PlayKeep} of these are kept)."), LogLevel.Step);
+                }
+                catch (Exception e)
+                {
+                    Log(L.T("Could not back up the saves: ") + e.Message, LogLevel.Warn);
+                }
+            });
+        }
+
         public async Task StopGameAsync()
         {
             Log(L.T("Stopping the game…"), LogLevel.Step);
@@ -331,11 +380,18 @@ namespace BloodborneLauncher.Core
 
         private static void Dispatch(Action action)
         {
+#if AVALONIA
+            if (Dispatcher.UIThread.CheckAccess())
+                action();
+            else
+                Dispatcher.UIThread.Post(action);
+#else
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
             if (dispatcher == null || dispatcher.CheckAccess())
                 action();
             else
                 dispatcher.BeginInvoke(action);
+#endif
         }
     }
 }

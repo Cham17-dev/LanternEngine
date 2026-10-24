@@ -1,0 +1,4 @@
+# Netlify: the help and FAQ page (faq/index.html), published as it is on every push to main.
+[build]
+  publish = "faq"
+  command = ""

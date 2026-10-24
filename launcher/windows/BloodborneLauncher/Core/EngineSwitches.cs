@@ -54,7 +54,7 @@ namespace BloodborneLauncher.Core
         public const string Diagnostics = "Diagnostics and logs";
         public const string DirectVulkan = "Direct rendering";
 
-        public static readonly string[] Groups = { Graphics, Performance, Input, Sound, Fixes, DirectVulkan };
+        public static readonly string[] Groups = { Graphics, Performance, Input, Sound, Fixes };
 
         // ---------------------------------------------------------------- building the list
 
@@ -128,8 +128,11 @@ namespace BloodborneLauncher.Core
                 L.T("Sets the flag in the game's save that some weapon and player sounds need (without it they never play), before ") +
                 L.T("the game reads the save. Off leaves saves untouched")),
             OnUnless0("BB_OPTISCALER_COMPAT", Fixes, L.T("OptiScaler compatibility"),
-                L.T("Only when OptiScaler is installed: one thread sends the GPU work, and DLSS calls wait for the GPU queue, ") +
-                L.T("so OptiScaler's hooks don't crash. Costs a little FPS. Off: the engine runs as without OptiScaler")),
+                L.T("Only when OptiScaler is installed: DLSS calls wait for the GPU queue, and one thread sends the GPU work while its frame generation is on, ") +
+                L.T("so OptiScaler's hooks don't crash. Costs a little FPS with its frame generation. Off: the engine runs as without OptiScaler")),
+            OnUnless0("BB_EFFECT_FIXES", Fixes, L.T("Ebrietas effect fix"),
+                L.T("Replaces Ebrietas' trail effect with the one Nexus mod 41 uses, made from your own game files: her rock attacks no longer pile up thousands of rocks ") +
+                L.T("(FPS falling from 90 to 40, crashes before beta 8). Off: the game's own effect. A mod that changes these effect files wins")),
             Flag("BB_RED_ZONE_FUNCTIONS", Fixes, L.T("Intel effect crash fix (test)"),
                 L.T("For crashes in effects on Intel 12th-14th gen CPUs (Ebrietas, Witch of Hemwick, One Reborn, the Cainhurst " +
                     "cutscene): the two effect ribbon writers keep their data where Windows can't overwrite it. Every effect stays " +
@@ -142,12 +145,9 @@ namespace BloodborneLauncher.Core
                 L.T("may crash, and the engine's patches and PC menus may not apply")),
 
 
-            // Off by default (beta 9.4): with it on in betas, two players' games stayed on a black
-            // screen before the first frame. Testers: BB_NATIVE_CALLS=verify, BB_GNM_CENSUS and
-            // BB_GNM_OBSERVE in Extra variables.
-            Toggle("BB_NATIVE_CALLS", DirectVulkan, L.T("Direct draw calls"),
-                L.T("Draw calls go straight to the renderer instead of through emulated PS4 GPU commands. Testing only: ") +
-                L.T("turn it off if the game stays on a black screen or something draws wrong"), on: false) with { AlwaysPass = true },
+            // bbport: BB_NATIVE_CALLS was here too (Direct draw calls, passed even at its default):
+            // passed after Engine features > Native draw calls, its 0 turned that setting off for
+            // everyone. That one setting is the switch now (GameEnvironment).
         };
 
         // ---------------------------------------------------------------- values
