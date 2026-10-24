@@ -584,10 +584,10 @@ index 0000000..668262d
 +        *includes, cpp, here / 'main.cpp', '-o', work / 'check')
 +    run(work / 'check')
 diff --git a/gpu/CMakeLists.txt b/gpu/CMakeLists.txt
-index 519779e..e8c9c0c 100644
+index 519779e..8967d01 100644
 --- a/gpu/CMakeLists.txt
 +++ b/gpu/CMakeLists.txt
-@@ -154,6 +154,19 @@ function(add_host_shader FILENAME SHADER_NAME)
+@@ -154,6 +154,22 @@ function(add_host_shader FILENAME SHADER_NAME)
          DEPENDS ${SHADER_SRC}/${FILENAME} VERBATIM)
      set(SHADER_HEADERS ${SHADER_HEADERS} ${OUT} PARENT_SCOPE)
  endfunction()
@@ -596,8 +596,11 @@ index 519779e..e8c9c0c 100644
 +add_host_shader(hdr/bb_display_copy.frag bb_display_copy_frag)
 +add_host_shader(hdr/bb_glow_source.frag bb_glow_source_frag)
 +add_host_shader(hdr/bb_color_grading.frag bb_color_grading_frag)
-+# HDR16's replacements for a game shader whose inputs the GPU interpolates (hdr/bb_inputs.glsl).
++# HDR16's replacements for a game shader whose inputs the GPU interpolates (hdr/bb_inputs.glsl),
++# and the composite's for the native shader compiler's constant buffers (a uniform buffer).
 +add_host_shader(hdr/bb_composite_hdr.frag bb_composite_hdr_hw_frag BB_HW_INTERP=1)
++add_host_shader(hdr/bb_composite_hdr.frag bb_composite_hdr_ubo_frag BB_CB_UBO=1)
++add_host_shader(hdr/bb_composite_hdr.frag bb_composite_hdr_hw_ubo_frag BB_HW_INTERP=1 BB_CB_UBO=1)
 +add_host_shader(hdr/bb_copy.frag bb_copy_hw_frag BB_HW_INTERP=1)
 +add_host_shader(hdr/bb_glow_source.frag bb_glow_source_hw_frag BB_HW_INTERP=1)
 +add_host_shader(hdr/bb_color_grading.frag bb_color_grading_hw_frag BB_HW_INTERP=1)
@@ -630,7 +633,7 @@ index 6e4e29f..3f4388a 100644
  
  } // namespace Shader
 diff --git a/gpu/shadps4/video_core/cache_storage.cpp b/gpu/shadps4/video_core/cache_storage.cpp
-index 5d808b4..95a6287 100644
+index 5d808b4..2ca64d0 100644
 --- a/gpu/shadps4/video_core/cache_storage.cpp
 +++ b/gpu/shadps4/video_core/cache_storage.cpp
 @@ -11,6 +11,7 @@
@@ -641,23 +644,17 @@ index 5d808b4..95a6287 100644
  #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
  
  #include <miniz.h>
-@@ -92,9 +93,14 @@ void DataBase::Open() {
+@@ -92,7 +93,9 @@ void DataBase::Open() {
  
      const auto& game_info = Common::ElfInfo::Instance();
      // bbport: shaders compiled with the tone curve extension (BB_HDR_SCENE_CURVE=1) are kept in a
 -    // cache of their own: turning it on or off never mixes modules with and without it.
 +    // cache of their own: turning it on or off never mixes modules with and without it. HDR16
-+    // (mode 5) too, named after the replacement shaders it holds swapped in (a cache of other
-+    // versions of them gave a black screen).
++    // shares the usual cache: it holds the game's own shaders, HDR16's replacements are swapped
++    // in when they load (vk_pipeline_serialization.cpp LoadPipelineStage).
      const std::string serial = std::string{game_info.GameSerial()} +
--                               (Shader::Native::ToneCurveEnabled() ? "-scene-curve" : "");
-+                               (Shader::Native::ToneCurveEnabled() ? "-scene-curve" : "") +
-+                               (EmulatorSettings.GetHdrTonemapMode() == 5
-+                                    ? "-psychov30-" + Vulkan::HdrChannel::CacheTag()
-+                                    : std::string{});
+                                (Shader::Native::ToneCurveEnabled() ? "-scene-curve" : "");
  
-     using namespace Common::FS;
-     if (EmulatorSettings.IsPipelineCacheArchived()) {
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_color_grading.frag
 new file mode 100644
 index 0000000..6ec8eb6
@@ -1070,10 +1067,10 @@ index 0000000..5bbaf8f
 +#endif // BBPORT_BB_COMPOSITE_GLSL
 diff --git a/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag b/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag
 new file mode 100644
-index 0000000..3525caa
+index 0000000..905c970
 --- /dev/null
 +++ b/gpu/shadps4/video_core/host_shaders/hdr/bb_composite_hdr.frag
-@@ -0,0 +1,469 @@
+@@ -0,0 +1,480 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -1095,6 +1092,9 @@ index 0000000..3525caa
 +#version 450
 +#ifndef BB_HW_INTERP
 +#extension GL_EXT_fragment_shader_barycentric : require
++#endif
++#ifdef BB_CB_UBO
++#extension GL_EXT_scalar_block_layout : require
 +#endif
 +#extension GL_GOOGLE_include_directive : require
 +
@@ -1122,10 +1122,18 @@ index 0000000..3525caa
 +// HDR color plus the game's grain and alpha.
 +layout(constant_id = 25) const bool BB_OUTPUT_DELTA = false;
 +
-+// The game shader's constant buffer (decorations copied from the variant).
++// The game shader's constant buffer (decorations copied from the variant): a storage buffer from
++// the legacy shader compiler (ssbo_N); BB_CB_UBO, a uniform buffer of 16384 dwords with a 4-byte
++// stride from Lantern's native one (ubo_N, Profile::uniform_dword_layout).
++#ifdef BB_CB_UBO
++layout(set = 0, binding = 0, scalar) uniform bb_ssbo_block {
++    uint data[16384];
++} bb_ssbo;
++#else
 +layout(set = 0, binding = 0, std430) readonly buffer bb_ssbo_block {
 +    uint data[];
 +} bb_ssbo;
++#endif
 +
 +// The push constants of every shader bbport recompiles.
 +// The recompiler's push constants (shader_recompiler/resource.h, PushData) at the C++ struct's
@@ -5272,6 +5280,75 @@ index 79993a3..806b337 100644
      };
  
      uses_push_descriptors = binding < instance.MaxPushDescriptors();
+diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.cpp
+index 91ec1d7..37686af 100644
+--- a/gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.cpp
++++ b/gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.cpp
+@@ -19,6 +19,7 @@
+ #include "ffx_vk_fsr3_3_1_5_bridge.h"
+ #include "video_core/host_shaders/frame_gen_compose_comp.h"
+ #include "video_core/host_shaders/frame_gen_depth_comp.h"
++#include "video_core/renderer_vulkan/vk_hdr_channel.h"
+ #include "video_core/renderer_vulkan/vk_instance.h"
+ #include "video_core/renderer_vulkan/vk_scheduler.h"
+ #include "video_core/renderer_vulkan/vk_shader_util.h"
+@@ -151,8 +152,10 @@ void FrameGenerator::CaptureInputs(Scheduler& scheduler, vk::ImageView source_de
+ 
+ void FrameGenerator::CaptureHudless(Scheduler& scheduler, vk::Image image, vk::Format format,
+                                     u32 w, u32 h) {
++    // HDR16 (DLSS Frame Generation): the UI image is the 16-bit chain's, as the copy made for it.
++    const bool hdr16 = HdrChannel::Native16() && !resources_fsr && format == HdrChannel::Native16Format;
+     if (!WantsHudless() || !image ||
+-        (format != vk::Format::eR8G8B8A8Unorm && format != vk::Format::eR8G8B8A8Srgb)) {
++        (format != vk::Format::eR8G8B8A8Unorm && format != vk::Format::eR8G8B8A8Srgb && !hdr16)) {
+         return;
+     }
+     hudless_width = w;
+@@ -235,10 +238,14 @@ std::optional<FrameGenerator::Job> FrameGenerator::Prepare(vk::Extent2D display,
+         why = "HDR output is on (BB_DLSSG_HDR=0)";
+     } else if (other_scaler) {
+         why = "the presenter's FSR 1 scaling is on";
++    } else if (!dlss && HdrChannel::Native16()) {
++        // FSR 3.1 interpolates the 8-bit frame before the HDR encode; HDR16's are 16-bit.
++        why = "HDR16: FSR 3.1 interpolates 8-bit frames (DLSS frame generation works with HDR16)";
+     } else if (view_format != vk::Format::eR8G8B8A8Unorm &&
+                view_format != vk::Format::eR8G8B8A8Srgb &&
+                view_format != vk::Format::eB8G8R8A8Unorm &&
+-               view_format != vk::Format::eB8G8R8A8Srgb) {
++               view_format != vk::Format::eB8G8R8A8Srgb &&
++               !(dlss && HdrChannel::Native16() && view_format == HdrChannel::Native16Format)) {
+         why = "the display buffer is not 8 bits per channel";
+     } else if (input_width != 0 &&
+                ((dlss ? resources_fsr || render_width == 0 : !context) ||
+@@ -560,7 +567,14 @@ bool FrameGenerator::EnsureResources(u32 w, u32 h, u32 rw, u32 rh, bool fsr) {
+             .image = vk::Image(source), .viewType = vk::ImageViewType::e2D, .format = format,
+             .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}}));
+     };
+-    image(hudless_image, vk::Format::eR8G8B8A8Unorm, w, h, ColorUsage, true);
++    // HDR16 with DLSS Frame Generation: the frame without its UI is the 16-bit chain's (values
++    // above the game's white kept), as the frames themselves.
++    const bool hudless16 = !fsr && HdrChannel::Native16();
++    if (hudless16) {
++        image(hudless_image, HdrChannel::Native16Format, w, h, ColorUsage, false);
++    } else {
++        image(hudless_image, vk::Format::eR8G8B8A8Unorm, w, h, ColorUsage, true);
++    }
+     image(generated_image, vk::Format::eR8G8B8A8Unorm, w, h, ColorUsage, true);
+     image(composed_image, vk::Format::eR16G16B16A16Sfloat, w, h,
+           vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage, false);
+@@ -568,8 +582,10 @@ bool FrameGenerator::EnsureResources(u32 w, u32 h, u32 rw, u32 rh, bool fsr) {
+           vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage, false);
+     image(motion_image, vk::Format::eR16G16Sfloat, rw, rh,
+           vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst, false);
+-    hudless_view_unorm = view(hudless_image, vk::Format::eR8G8B8A8Unorm, true);
+-    hudless_view_srgb = view(hudless_image, vk::Format::eR8G8B8A8Srgb, true);
++    hudless_view_unorm = view(hudless_image,
++                              hudless16 ? HdrChannel::Native16Format : vk::Format::eR8G8B8A8Unorm, true);
++    hudless_view_srgb = view(hudless_image,
++                             hudless16 ? HdrChannel::Native16Format : vk::Format::eR8G8B8A8Srgb, true);
+     generated_view_unorm = view(generated_image, vk::Format::eR8G8B8A8Unorm, true);
+     generated_view_srgb = view(generated_image, vk::Format::eR8G8B8A8Srgb, true);
+     composed_view = view(composed_image, vk::Format::eR16G16B16A16Sfloat, false);
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_graphics_pipeline.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
 index 37daab0..6396680 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
@@ -5436,10 +5513,10 @@ index 65fb22f..8e38232 100644
      std::optional<const Shader::Gcn::FetchShaderData> fetch_shader{};
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp
 new file mode 100644
-index 0000000..946ca08
+index 0000000..37bff98
 --- /dev/null
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp
-@@ -0,0 +1,667 @@
+@@ -0,0 +1,651 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -5463,6 +5540,8 @@ index 0000000..946ca08
 +#include "video_core/host_shaders/bb_color_grading_hw_frag.h"
 +#include "video_core/host_shaders/bb_composite_hdr_frag.h"
 +#include "video_core/host_shaders/bb_composite_hdr_hw_frag.h"
++#include "video_core/host_shaders/bb_composite_hdr_hw_ubo_frag.h"
++#include "video_core/host_shaders/bb_composite_hdr_ubo_frag.h"
 +#include "video_core/host_shaders/bb_copy_frag.h"
 +#include "video_core/host_shaders/bb_copy_hw_frag.h"
 +#include "video_core/host_shaders/bb_display_copy_frag.h"
@@ -5643,19 +5722,23 @@ index 0000000..946ca08
 +std::optional<std::vector<u32>> BuildComposite(const TonemapVariant& v, std::span<const u32> game,
 +                                               std::string* why, bool* per_vertex) {
 +    const SpvInterface in = ReadInterface(game);
-+    // The constant buffer: the game shader's only buffer (several ssbo_N aliases share it).
++    // The constant buffer: the game shader's only buffer (several ssbo_N aliases share it): a
++    // storage buffer from the legacy shader compiler, a uniform buffer (ubo_N) from the native one.
 +    std::optional<u32> buffer_index, buffer_binding;
++    bool uniform = false;
 +    for (const auto& [name, ids] : in.ids) {
-+        if (name.rfind("ssbo_", 0) != 0) {
++        const bool is_ubo = name.rfind("ubo_", 0) == 0;
++        if (name.rfind("ssbo_", 0) != 0 && !is_ubo) {
 +            continue;
 +        }
-+        const u32 index = u32(std::strtoul(name.c_str() + 5, nullptr, 10));
-+        if (buffer_index && *buffer_index != index) {
++        const u32 index = u32(std::strtoul(name.c_str() + (is_ubo ? 4 : 5), nullptr, 10));
++        if ((buffer_index && *buffer_index != index) || (buffer_index && uniform != is_ubo)) {
 +            *why = "several buffers";
 +            return std::nullopt;
 +        }
 +        buffer_index = index;
 +        buffer_binding = in.Binding(name);
++        uniform = is_ubo;
 +    }
 +    if (!buffer_index || !buffer_binding) {
 +        *why = "no constant buffer";
@@ -5704,9 +5787,13 @@ index 0000000..946ca08
 +    const auto bloom_loc = std::optional<u32>{bloom_in->location};
 +    const auto vig_loc = std::optional<u32>{vig_in->location};
 +
-+    std::vector<u32> spv = *per_vertex
-+        ? std::vector<u32>(std::begin(BB_COMPOSITE_HDR_FRAG), std::end(BB_COMPOSITE_HDR_FRAG))
-+        : std::vector<u32>(std::begin(BB_COMPOSITE_HDR_HW_FRAG), std::end(BB_COMPOSITE_HDR_HW_FRAG));
++    const auto build = [](std::span<const u32> words) {
++        return std::vector<u32>(words.begin(), words.end());
++    };
++    std::vector<u32> spv = uniform ? (*per_vertex ? build(BB_COMPOSITE_HDR_UBO_FRAG)
++                                                  : build(BB_COMPOSITE_HDR_HW_UBO_FRAG))
++                                   : (*per_vertex ? build(BB_COMPOSITE_HDR_FRAG)
++                                                  : build(BB_COMPOSITE_HDR_HW_FRAG));
 +    const SpvInterface ours = ReadInterface(spv);
 +    const auto it = bindings.begin();
 +    const bool ok =
@@ -5955,32 +6042,6 @@ index 0000000..946ca08
 +    return Native16() && FixedRenderSize().first != 0;
 +}
 +
-+std::string HdrChannel::CacheTag() {
-+    // FNV-1a over bbport's replacement shaders: the shader cache stores them already swapped in,
-+    // so a cache made with other versions of them must not be loaded.
-+    static const std::string tag = [] {
-+        u64 h = 0xcbf29ce484222325ull;
-+        const auto add = [&h](const auto& words) {
-+            for (const u32 w : words) {
-+                h = (h ^ w) * 0x100000001b3ull;
-+            }
-+        };
-+        add(BB_COMPOSITE_HDR_FRAG);
-+        add(BB_GLOW_SOURCE_FRAG);
-+        add(BB_COPY_FRAG);
-+        add(BB_COLOR_GRADING_FRAG);
-+        add(BB_DISPLAY_COPY_FRAG);
-+        // Their builds for inputs the GPU interpolates (Lantern 0.9.37's hardware interpolation
-+        // pass): which build a game shader gets depends on how it was compiled.
-+        add(BB_COMPOSITE_HDR_HW_FRAG);
-+        add(BB_GLOW_SOURCE_HW_FRAG);
-+        add(BB_COPY_HW_FRAG);
-+        add(BB_COLOR_GRADING_HW_FRAG);
-+        return fmt::format("{:08x}", u32(h ^ (h >> 32)));
-+    }();
-+    return tag;
-+}
-+
 +bool HdrChannel::Native16() {
 +    static const bool native =
 +        EmulatorSettings.GetHdrTonemapMode() == 5 && EmulatorSettings.IsHdrAllowed();
@@ -6109,10 +6170,10 @@ index 0000000..946ca08
 +} // namespace Vulkan
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.h b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.h
 new file mode 100644
-index 0000000..327cbeb
+index 0000000..94a05f2
 --- /dev/null
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.h
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,113 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -6158,9 +6219,6 @@ index 0000000..327cbeb
 +    // followed by bbport's, which adds the HDR part (hdr/bb_composite_hdr.frag, BB_OUTPUT_DELTA),
 +    // so the frame carries light above the game's white to the final pass.
 +    static bool Native16();
-+    /// A tag of bbport's replacement shaders (hex): part of the mode 5 shader cache's name, so a
-+    /// cache made with other versions of them is not loaded.
-+    static std::string CacheTag();
 +    /// The in-game menu's 16-bit probe for the chain's passes (bb_hdr.z): 1..5, else 0 (probe 6
 +    /// is the final pass's, set by the presenter).
 +    static u32 ChainProbe();
@@ -6263,7 +6321,7 @@ index 7ebcc08..4b2cc81 100644
  
  class HdrNative {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index fa0f226..0f59b96 100644
+index fa0f226..26b8ffd 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 @@ -11,6 +11,8 @@
@@ -6275,18 +6333,15 @@ index fa0f226..0f59b96 100644
  #include "common/elf_info.h"
  #include "common/io_file.h"
  #include "common/path_util.h"
-@@ -57,7 +59,9 @@ DriverCache::Identity DriverIdentity(const Instance& instance) {
+@@ -56,6 +58,7 @@ DriverCache::Identity DriverIdentity(const Instance& instance) {
+ }
  
  std::filesystem::path DriverCachePath() {
++    // HDR16 shares it with the other modes, as the shader cache (cache_storage.cpp).
      return Common::FS::GetUserPath(Common::FS::PathType::CacheDir) /
--           (std::string{Common::ElfInfo::Instance().GameSerial()} + ".vkcache");
-+           (std::string{Common::ElfInfo::Instance().GameSerial()} +
-+            (HdrChannel::Native16() ? "-psychov30-" + HdrChannel::CacheTag() : std::string{}) +
-+            ".vkcache");
+            (std::string{Common::ElfInfo::Instance().GameSerial()} + ".vkcache");
  }
- } // namespace
- 
-@@ -392,6 +396,9 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
+@@ -392,6 +395,9 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
                               AmdGpu::Liverpool* liverpool_, u32 sparse_page_shift)
      : instance{instance_}, scheduler{scheduler_}, liverpool{liverpool_},
        desc_heap{instance, scheduler.GetWorkSemaphore(), DescriptorHeapSizes} {
@@ -6296,27 +6351,34 @@ index fa0f226..0f59b96 100644
      sel.regs = &liverpool->regs;
      const auto& vk12_props = instance.GetVk12Properties();
      profile = Shader::Profile{
-@@ -458,10 +465,18 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
+@@ -458,6 +464,8 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
          // bbport: native shaders, on unless BB_NATIVE_SHADERS=0 (the launcher's "Legacy shader
          // compiler"). Uniform buffers need the per-buffer offset in the push data (a 64-byte
          // uniform alignment can leave a remainder) and the 64 KiB range the shaders declare.
-+        // PsychoV30 (mode 5): never. Its composite and tonemap replacements take the game
-+        // shader's constant buffer as a storage buffer (vk_hdr_channel.cpp BuildComposite).
++        // HDR16 (mode 5) reads the composite's constant buffer either way (vk_hdr_channel.cpp
++        // BuildComposite); its layout is checked below.
          .uniform_constant_buffers =
              [] {
                  const char* env = std::getenv("BB_NATIVE_SHADERS");
--                return !(env && env[0] == '0');
-+                const bool wanted = !(env && env[0] == '0');
-+                if (wanted && HdrChannel::Native16()) {
-+                    std::printf("Native shaders: off in HDR mode HDR16 (its shaders need the "
-+                                "legacy compiler's constant buffers)\n");
-+                    return false;
-+                }
-+                return wanted;
-             }() &&
-             instance.StorageMinAlignment() > 4 && instance.UniformMinAlignment() <= 256 &&
-             instance.GetPhysicalDevice().getProperties().limits.maxUniformBufferRange >= 65536,
-@@ -510,7 +525,8 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
+@@ -481,6 +489,17 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
+         const char* env = std::getenv("BB_UBO_EXACT");
+         return env && env[0] == '1';
+     }();
++    // HDR16's composite reads a native uniform buffer as dwords, at the offset in the push data
++    // (bb_composite_hdr.frag, BB_CB_UBO); with another layout, the legacy compiler.
++    if (HdrChannel::Native16() && profile.uniform_constant_buffers &&
++        (!profile.uniform_dword_layout || profile.uniform_exact_base)) {
++        std::printf("Native shaders: off in HDR mode HDR16 (BB_UBO_DWORDS=0, BB_UBO_EXACT=1 or no "
++                    "uniform buffer standard layout: its composite reads dwords at the push "
++                    "data's offset)\n");
++        profile.uniform_constant_buffers = false;
++        profile.uniform_dword_layout = false;
++        profile.uniform_exact_base = false;
++    }
+     // Opt-in: measured slower at the test spot (Profile::early_fragment_tests).
+     profile.early_fragment_tests = [] {
+         const char* env = std::getenv("BB_EARLY_Z");
+@@ -510,7 +529,8 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
      profile.flatbuf_storage = profile.uniform_constant_buffers && !switch_on("BB_UBO_FLATBUF");
      // bbport: pixel shader arithmetic the driver may fuse; BB_FS_CONTRACT=0 keeps it unfused.
      profile.fragment_exact_fp = !switch_on("BB_FS_CONTRACT");
@@ -6326,7 +6388,7 @@ index fa0f226..0f59b96 100644
      profile.manual_interpolation_all = profile.needs_manual_interpolation && !switch_on("BB_INTERP_HW");
      if (profile.uniform_constant_buffers) {
          std::printf("Native shaders: constant buffers as uniform buffers (BB_NATIVE_SHADERS=0: "
-@@ -723,6 +739,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
+@@ -723,6 +743,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
          color_buffer.data_format = col_buf.GetDataFmt();
          color_buffer.num_format = col_buf.GetNumberFmt();
          color_buffer.num_conversion = col_buf.GetNumberConversion();
@@ -6343,19 +6405,36 @@ index fa0f226..0f59b96 100644
          color_buffer.export_format = regs.color_export_format.GetFormat(cb);
          color_buffer.swizzle = col_buf.Swizzle();
  
-@@ -995,6 +1021,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
+@@ -995,6 +1025,19 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
      auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, runtime_info, ir_program, binding);
      DumpShader(spv, info.pgm_hash, info.hw_stage, perm_idx, "spv");
  
-+    // Build composite variants from the original interface, then replace only chain passes.
++    // Build composite variants from the original interface, then replace only chain passes. The
++    // cache keeps the game's own shader (`stored`): HDR16 swaps its replacements in again when it
++    // loads it (LoadPipelineStage), so every mode, the shader catalog and bb-shader-lab's
++    // recompiles share one cache.
++    std::vector<u32> stored;
 +    if (info.sw_stage == Shader::SwStage::Fragment && HdrChannel::Native16()) {
 +        HdrChannel::NoteGameShader(info.pgm_hash, spv);
 +        auto replacement = HdrChannel::ChainReplacement(info.pgm_hash, spv);
-+        if (!replacement.empty()) spv = std::move(replacement);
++        if (!replacement.empty()) {
++            stored = std::move(spv);
++            spv = std::move(replacement);
++        }
 +    }
      vk::ShaderModule module;
  
      auto patch = GetShaderPatch(info.pgm_hash, info.hw_stage, perm_idx, "spv");
+@@ -1006,7 +1049,8 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
+         module = CompileSPV(spv, instance.GetDevice());
+     }
+ 
+-    RegisterShaderBinary(std::move(spv), info.pgm_hash, perm_idx);
++    RegisterShaderBinary(stored.empty() ? std::vector<u32>(spv) : std::move(stored), info.pgm_hash,
++                         perm_idx);
+ 
+     const auto name = GetShaderName(info.hw_stage, info.pgm_hash, perm_idx);
+     Vulkan::SetObjectName(instance.GetDevice(), module, name);
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_common.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_common.cpp
 index 29621d5..a979a13 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_common.cpp
@@ -6375,7 +6454,7 @@ index 29621d5..a979a13 100644
      if (uses_tone_curve) {
          const Shader::Native::ToneCurvePush tone = ToneCurveParams();
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_serialization.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
-index 97087c8..28ff543 100644
+index 97087c8..4b6caad 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
 @@ -21,6 +21,7 @@
@@ -6386,19 +6465,24 @@ index 97087c8..28ff543 100644
  #include "video_core/renderer_vulkan/vk_shader_util.h"
  
  namespace Serialization {
-@@ -419,6 +420,10 @@ bool PipelineCache::LoadPipelineStage(Serialization::Archive& ar, size_t stage,
+@@ -419,6 +420,15 @@ bool PipelineCache::LoadPipelineStage(Serialization::Archive& ar, size_t stage,
      }
  
      auto it = program_cache.find(program->info.pgm_hash);
-+    // Cached composites need the same companion preparation as freshly translated shaders.
++    // Cached composites need the same companion preparation as freshly translated shaders, and the
++    // chain passes HDR16's replacements: the cache holds the game's own shaders (CompileModule).
 +    if (HdrChannel::Native16() && program->info.sw_stage == Shader::SwStage::Fragment) {
 +        HdrChannel::NoteGameShader(program->info.pgm_hash, spv);
++        if (auto replacement = HdrChannel::ChainReplacement(program->info.pgm_hash, spv);
++            !replacement.empty()) {
++            spv = std::move(replacement);
++        }
 +    }
      Program* target = it == program_cache.end() ? program.get() : it->second.get();
      vk::ShaderModule module;
      if (perm_idx < target->modules.size() && target->modules[perm_idx].module) {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
-index 96efc90..d116105 100644
+index 96efc90..8afc261 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp
 @@ -1,3 +1,4 @@
@@ -6428,7 +6512,18 @@ index 96efc90..d116105 100644
          .extent = {extent.width, extent.height, 1},
          .mipLevels = 1,
          .arrayLayers = 1,
-@@ -474,7 +479,10 @@ void Presenter::PresentHdr(vk::CommandBuffer cmdbuf, Frame* frame, vk::Extent2D
+@@ -362,7 +367,9 @@ void Presenter::EnsureDlssHdrTargets(vk::Extent2D extent) {
+                 DestroyHdrTarget(hudless);
+             });
+     }
+-    CreateHdrTarget(dlss_hdr_composite, extent, "DLSS-G HUD-less composite");
++    // HDR16: the 16-bit chain's frame without its UI, as the back buffer's composite.
++    CreateHdrTarget(dlss_hdr_composite, extent, "DLSS-G HUD-less composite",
++                    HdrChannel::Native16() ? HdrChannel::Native16Format : vk::Format::eUndefined);
+     CreateHdrTarget(dlss_hdr_hudless, extent, "DLSS-G HUD-less", swapchain.GetHdrFormat().format);
+     dlss_hdr_extent = extent;
+ }
+@@ -474,7 +481,10 @@ void Presenter::PresentHdr(vk::CommandBuffer cmdbuf, Frame* frame, vk::Extent2D
      // real frame's it was interpolated towards (PresentGenerated), or every other frame would
      // fall back to plain SDR.
      const Frame* gain = hdr_gain_source ? hdr_gain_source : frame;
@@ -6440,7 +6535,7 @@ index 96efc90..d116105 100644
      LogHdrState(scrgb, mode, native);
      // BB_HDR_DEBUG=1: the gain as a heat map over a grey picture (hdr_output.frag).
      static const bool debug = [] {
-@@ -488,30 +496,46 @@ void Presenter::PresentHdr(vk::CommandBuffer cmdbuf, Frame* frame, vk::Extent2D
+@@ -488,30 +498,46 @@ void Presenter::PresentHdr(vk::CommandBuffer cmdbuf, Frame* frame, vk::Extent2D
          .paper_white = std::clamp(settings.hdr_paper_white.load(), BbSettings::HdrPaperWhiteMin,
                                    BbSettings::HdrPaperWhiteMax),
          .peak = BbSettings::HdrPeakNits(settings),
@@ -6494,7 +6589,7 @@ index 96efc90..d116105 100644
                                     ? hdr.peak
                                     : std::min(hdr.peak, hdr.paper_white * expand_white);
      swapchain.SetHdrMetadata(hdr.peak, content_peak, hdr.paper_white);
-@@ -527,7 +551,7 @@ void Presenter::PresentHdr(vk::CommandBuffer cmdbuf, Frame* frame, vk::Extent2D
+@@ -527,7 +553,7 @@ void Presenter::PresentHdr(vk::CommandBuffer cmdbuf, Frame* frame, vk::Extent2D
      hdr_pass.Render(cmdbuf, hdr_game.view, overlay ? hdr_overlay.view : hdr_game.view,
                      native ? *gain->hdr_gain->view : hdr_game.view,
                      native ? Layout::eGeneral : Layout::eShaderReadOnlyOptimal,
@@ -6503,7 +6598,19 @@ index 96efc90..d116105 100644
  
      const std::array to_present{
          barrier(swapchain_image, Layout::eColorAttachmentOptimal, Layout::ePresentSrcKHR,
-@@ -597,7 +621,9 @@ void Presenter::LogHdrState(bool scrgb, int mode, bool native_frame) {
+@@ -575,7 +601,10 @@ void Presenter::PresentHdr(vk::CommandBuffer cmdbuf, Frame* frame, vk::Extent2D
+     };
+     barriers(to_encode);
+     auto hudless_hdr = hdr;
+-    hudless_hdr.flags &= ~HostPasses::HdrOutputPass::FlagOverlay;
++    // Without the menu layer; HDR16: no UI to tell from the scene in it (no pre-UI snapshot).
++    hudless_hdr.flags &= ~(HostPasses::HdrOutputPass::FlagOverlay |
++                           HostPasses::HdrOutputPass::FlagSnapshot |
++                           HostPasses::HdrOutputPass::FlagUiMask);
+     hdr_pass.Render(cmdbuf, dlss_hdr_composite.view, dlss_hdr_composite.view,
+                     native ? *frame->hdr_gain->view : dlss_hdr_composite.view,
+                     native ? Layout::eGeneral : Layout::eShaderReadOnlyOptimal,
+@@ -597,7 +626,9 @@ void Presenter::LogHdrState(bool scrgb, int mode, bool native_frame) {
          hdr_native_state = hdr_logged_native = -1;
          std::printf("HDR output: %s, mode %s (%s)\n",
                      scrgb ? "scRGB (FP16)" : "HDR10 (PQ, BT.2020)", BbSettings::HdrModeNames[mode],
@@ -6514,7 +6621,7 @@ index 96efc90..d116105 100644
                          ? "highlights from the game's HDR scene, plain SDR where a frame has none"
                          : "highlights expanded from the SDR picture");
      }
-@@ -639,7 +665,7 @@ void Presenter::RecreateFrame(Frame* frame, u32 width, u32 height) {
+@@ -639,7 +670,7 @@ void Presenter::RecreateFrame(Frame* frame, u32 width, u32 height) {
          vmaDestroyImage(instance.GetAllocator(), frame->image, frame->allocation);
      }
  
@@ -6523,7 +6630,7 @@ index 96efc90..d116105 100644
      const vk::ImageCreateInfo image_info = {
          .flags = vk::ImageCreateFlagBits::eMutableFormat,
          .imageType = vk::ImageType::e2D,
-@@ -775,6 +801,7 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+@@ -775,6 +806,7 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
      // bbport: scaled upscaler presets: the output-size display buffer drawn by the port.
      TemporalUpscaler::Display display{};
      const bool upscaled = rasterizer->GetUpscaler().DisplayOverride(cpu_address, display);
@@ -6531,7 +6638,7 @@ index 96efc90..d116105 100644
      VideoCore::ImageId image_id{};
      if (!upscaled) {
          auto desc = VideoCore::TextureCache::ImageDesc{attribute, cpu_address};
-@@ -783,6 +810,13 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+@@ -783,6 +815,13 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
      }
  
      Frame* frame = GetRenderFrame();
@@ -6545,7 +6652,7 @@ index 96efc90..d116105 100644
      // bbport: native HDR output: the gain map made at this display buffer's display pass (for
      // the frame it holds, a frame earlier in the command stream) goes with the frame to the
      // present thread; the frame's old one, presented (its fence was waited above), goes back.
-@@ -813,9 +847,15 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+@@ -813,9 +852,15 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
          image_view = Check(device.createImageView({
              .image = display.image,
              .viewType = vk::ImageViewType::e2D,
@@ -6564,7 +6671,7 @@ index 96efc90..d116105 100644
              .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
          }));
          draw_scheduler.DeferOperation([device, image_view] { device.destroyImageView(image_view); });
-@@ -857,15 +897,18 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+@@ -857,15 +902,18 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
      pp_settings.srgb_input =
          attribute.attrib.pixel_format == Libraries::VideoOut::PixelFormat::A2R10G10B10Srgb;
  
@@ -6584,7 +6691,7 @@ index 96efc90..d116105 100644
          gen_job = frame_gen->Prepare(image_size, view_info.format, hdr, fsr_settings.enable,
                                       draw_scheduler.CurrentTick());
          if (gen_job && gen_job->present) {
-@@ -938,7 +981,7 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+@@ -938,7 +986,7 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
          }
          const vk::ImageView input = fsr_pass.Render(cmdbuf, image_view, image_size,
                                                      {frame->width, frame->height}, fsr,

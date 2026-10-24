@@ -18,7 +18,10 @@ with tempfile.TemporaryDirectory() as temp:
         file, name, *defines = match[1].split()
         subprocess.run(['glslangValidator', '--target-env', 'vulkan1.3',
                         *['-D' + d for d in defines], str(source / file), '-o', str(out)], check=True)
-        subprocess.run(['spirv-val', '--target-env', 'vulkan1.3', str(out)], check=True)
+        # The native shader compiler's constant buffer: a uniform buffer with std430 strides
+        # (VK_KHR_uniform_buffer_standard_layout, which Lantern requires for it).
+        layout = ['--uniform-buffer-standard-layout'] if 'BB_CB_UBO=1' in defines else []
+        subprocess.run(['spirv-val', '--target-env', 'vulkan1.3', *layout, str(out)], check=True)
         if name == 'bb_composite_hdr_frag':
             reflection = json.loads(subprocess.check_output(['spirv-cross', str(out), '--reflect']))
             members = next(t['members'] for t in reflection['types'].values() if t.get('name') == 'AuxData')

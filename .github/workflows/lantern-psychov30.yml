@@ -129,13 +129,14 @@ jobs:
           bash build.sh
       - name: Apply separate HDR16 patches
         run: python ports/lantern/prepare.py engine-src upstream-lantern
+      # Link-time optimization on, as Lantern's own builds (build.sh's default).
       - name: Build HDR engine and settings tests
         shell: msys2 {0}
         working-directory: engine-src
         env:
-          BB_LTO: 'OFF'
+          BB_LTO: 'ON'
           BB_PGO: 'off'
-          BB_JOBS: '2'
+          BB_JOBS: '4'
         run: |
           export CFLAGS=-Wno-error=unused-but-set-global
           export CXXFLAGS="-include $(cygpath -m "$PWD/gpu/win_compat.h")"

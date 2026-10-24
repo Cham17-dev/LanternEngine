@@ -52,9 +52,10 @@ the launcher, or use *Reset all*.
   to the display's.
 - Changing the HDR source (HDR16, Native, Expanded) needs a game restart; everything in the
   HDR16 menu applies live.
-- Frame generation (FSR 3.1 and DLSS) turns itself off in HDR16: it needs an 8-bit display
-  image, and HDR16's is 16-bit. Lantern's DLSS frame generation works in HDR with Native and
-  Expanded.
+- Frame generation in HDR16: **DLSS** frame generation works (NVIDIA RTX 40/50). FSR 3.1 frame
+  generation turns itself off in HDR16: it interpolates 8-bit frames, and HDR16's are 16-bit.
+- HDR16 uses Lantern's native shader compiler, its shader catalog and the same shader cache as
+  the other modes: switching the HDR source does not rebuild the shaders.
 
 ## Settings
 
@@ -126,12 +127,16 @@ Lantern's `engine/`, applies the patches, builds the engine and launcher, checks
 - LanternEngine `d901fbd2ea4bea114b37c26a2a9278d1e97f7b46` (0.9.37).
 - RenoDX `b6b32f47789ff9d0e640a0e0db6c9421b5397f34` (shader checks).
 
-HDR16 needs a GPU with 176 bytes of Vulkan push constants (checked at startup) and uses the
-legacy shader compiler (the engine turns native shaders off in this mode). Its replacements of
-the game's composite, color table and copies are built twice: one reads the game shader's inputs
-per vertex (fragment-shader barycentrics, the recompiler's exact interpolation on NVIDIA), the
-other as the GPU interpolates them (Lantern 0.9.37's hardware interpolation, AMD, Intel). The
-engine picks one per game shader and says which in the log.
+HDR16 needs a GPU with 176 bytes of Vulkan push constants (checked at startup). Its
+replacements of the game's composite, color table and copies are built for each way the game
+shader can be compiled: inputs read per vertex (fragment-shader barycentrics, the recompiler's
+exact interpolation on NVIDIA) or as the GPU interpolates them (Lantern 0.9.37's hardware
+interpolation, AMD, Intel), and for the composite the constant buffer as a storage buffer
+(legacy compiler) or a uniform buffer (native compiler). The engine picks one per game shader and
+says which in the log. The shader cache holds the game's own shaders; HDR16 swaps its
+replacements in when they load, so all modes, Lantern's shader catalog and its cache recompiles
+(`bb-shader-lab.exe`) share it. With `BB_UBO_DWORDS=0` or `BB_UBO_EXACT=1`, HDR16 keeps the
+legacy compiler.
 
 ## Credits and licenses
 

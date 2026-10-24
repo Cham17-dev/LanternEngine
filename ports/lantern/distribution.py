@@ -94,6 +94,7 @@ def assemble(engine, overlay, destination, cache):
     ini.write_text('\n'.join(lines + [f'{k}={v}' for k, v in defaults.items()]) + '\n', encoding='utf-8')
     required = ['Lantern Engine.exe', 'Bloodborne.exe', 'engine/out/bb-probe.exe', 'engine/out/bb-start.exe',
                 'engine/out/bb-engine-assets.exe', 'engine/out/bb-gpu-capabilities.exe',
+                'engine/out/bb-shader-lab.exe', 'engine/out/gpu-cache.id',
                 'engine/out/nvngx_dlss.dll', 'engine/scripts/run_windows.py',
                 'engine/patches/redzone.json', 'engine/tools/python/python.exe',
                 'licenses/RenoDX-MIT.txt']
