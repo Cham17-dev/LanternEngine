@@ -5384,10 +5384,10 @@ index 65fb22f..8e38232 100644
      std::optional<const Shader::Gcn::FetchShaderData> fetch_shader{};
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp
 new file mode 100644
-index 0000000..db22b9b
+index 0000000..1b85704
 --- /dev/null
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_hdr_channel.cpp
-@@ -0,0 +1,615 @@
+@@ -0,0 +1,619 @@
 +// SPDX-FileCopyrightText: Copyright 2026 bbport
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -5872,6 +5872,10 @@ index 0000000..db22b9b
 +        add(BB_COPY_FRAG);
 +        add(BB_COLOR_GRADING_FRAG);
 +        add(BB_DISPLAY_COPY_FRAG);
++        // How the game's shaders around them are compiled: 1, every input interpolated per vertex
++        // in HDR16 (Lantern 0.9.37's hardware interpolation pass off; a cache made with it on
++        // left the composite in SDR).
++        add(std::array<u32, 1>{1u});
 +        return fmt::format("{:08x}", u32(h ^ (h >> 32)));
 +    }();
 +    return tag;
@@ -6159,7 +6163,7 @@ index 7ebcc08..4b2cc81 100644
  
  class HdrNative {
 diff --git a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
-index fa0f226..e8218c1 100644
+index fa0f226..129fa2a 100644
 --- a/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 +++ b/gpu/shadps4/video_core/renderer_vulkan/vk_pipeline_cache.cpp
 @@ -11,6 +11,8 @@
@@ -6212,7 +6216,22 @@ index fa0f226..e8218c1 100644
              }() &&
              instance.StorageMinAlignment() > 4 && instance.UniformMinAlignment() <= 256 &&
              instance.GetPhysicalDevice().getProperties().limits.maxUniformBufferRange >= 65536,
-@@ -723,6 +738,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
+@@ -510,8 +525,12 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
+     profile.flatbuf_storage = profile.uniform_constant_buffers && !switch_on("BB_UBO_FLATBUF");
+     // bbport: pixel shader arithmetic the driver may fuse; BB_FS_CONTRACT=0 keeps it unfused.
+     profile.fragment_exact_fp = !switch_on("BB_FS_CONTRACT");
+-    // bbport: manual interpolation only where it matters; BB_INTERP_HW=0 for every input.
+-    profile.manual_interpolation_all = profile.needs_manual_interpolation && !switch_on("BB_INTERP_HW");
++    // bbport: manual interpolation only where it matters; BB_INTERP_HW=0 for every input. HDR16
++    // (mode 5) too: its replacements of the composite, the color grading and the copies read the
++    // game shader's inputs per vertex (vk_hdr_channel.cpp), which the hardware interpolation pass
++    // would take away (the composite then stays SDR: "inputs not interpolated per vertex").
++    profile.manual_interpolation_all = profile.needs_manual_interpolation &&
++                                       (!switch_on("BB_INTERP_HW") || HdrChannel::Native16());
+     if (profile.uniform_constant_buffers) {
+         std::printf("Native shaders: constant buffers as uniform buffers (BB_NATIVE_SHADERS=0: "
+                     "legacy), %s, %s, stages: %s (BB_UBO_STAGES), user data in %s "
+@@ -723,6 +742,16 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
          color_buffer.data_format = col_buf.GetDataFmt();
          color_buffer.num_format = col_buf.GetNumberFmt();
          color_buffer.num_conversion = col_buf.GetNumberConversion();
@@ -6229,7 +6248,7 @@ index fa0f226..e8218c1 100644
          color_buffer.export_format = regs.color_export_format.GetFormat(cb);
          color_buffer.swizzle = col_buf.Swizzle();
  
-@@ -995,6 +1020,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
+@@ -995,6 +1024,12 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
      auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, runtime_info, ir_program, binding);
      DumpShader(spv, info.pgm_hash, info.hw_stage, perm_idx, "spv");
  
